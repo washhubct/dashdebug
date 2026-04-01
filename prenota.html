@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prenota Lavaggio - WASH HUB</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --yel: #f5c518; --yel-deep: #e0b416; --bg: #ffffff; --tx: #1a1a1a; --tx2: #5a5a52; --brd: #e0ddd4; }
+        * { box-sizing: border-box; font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; }
+        body { background: transparent; color: var(--tx); padding: 10px; display: flex; justify-content: center; }
+        
+        /* DESIGN MINIMALE E PULITO (Stile sito web) */
+        .widget { width: 100%; max-width: 550px; background: var(--bg); border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); padding: 32px; }
+        
+        .hdr { text-align: center; margin-bottom: 30px; }
+        .hdr h2 { font-size: 22px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+        .hdr p { font-size: 14px; color: var(--tx2); }
+
+        .ff { margin-bottom: 20px; }
+        .ff label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--tx2); margin-bottom: 8px; }
+        
+        /* INPUT & SELECT MINIMALI */
+        .ff input, .ff select { width: 100%; border: 1px solid var(--brd); padding: 14px 16px; border-radius: 6px; font-size: 15px; outline: none; transition: 0.2s; background: #fff; -webkit-appearance: none; color: var(--tx); }
+        .ff input:focus, .ff select:focus { border-color: var(--yel); box-shadow: 0 0 0 3px rgba(245,197,24,0.15); }
+        .ff select { cursor: pointer; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235a5a52' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 16px center; background-size: 16px; }
+
+        /* SLOTS ORARI */
+        .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 10px; margin-top: 10px; }
+        .slot-btn { background: #fff; border: 1px solid var(--brd); border-radius: 6px; padding: 12px 0; font-size: 14px; font-weight: 500; color: var(--tx); cursor: pointer; transition: 0.2s; text-align: center; }
+        .slot-btn:hover:not(:disabled) { border-color: var(--yel); }
+        .slot-btn.selected { background: var(--yel); border-color: var(--yel); color: #1a1a1a; font-weight: 600; }
+        .slot-btn:disabled { background: #fafafa; color: #b0b0b0; border-color: #f0f0f0; cursor: not-allowed; text-decoration: line-through; }
+
+        /* BOTTONE FINALE */
+        .btn-submit { width: 100%; background: var(--yel); border: none; padding: 16px; border-radius: 30px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: 0.2s; color: #1a1a1a; }
+        .btn-submit:hover:not(:disabled) { background: var(--yel-deep); }
+        .btn-submit:disabled { opacity: 0.6; cursor: wait; }
+
+        .success { text-align: center; display: none; padding: 40px 0; }
+        .success-icon { font-size: 50px; margin-bottom: 20px; }
+        
+        #dateSection, #slotSection, #datiSection { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="widget">
+    <div id="bookingScreen">
+        <div class="hdr">
+            <h2>Prenotazione Lavaggio</h2>
+            <p>Seleziona il servizio per visualizzare le disponibilità</p>
+        </div>
+
+        <form id="bookingForm">
+            <div class="ff">
+                <label>1. Servizio richiesto *</label>
+                <select id="pServizio" required>
+                    <option value="" disabled selected>— Scegli un'opzione —</option>
+                    <option value="AUTO Tradizionale">Lavaggio AUTO Tradizionale (Prezzo var.)</option>
+                    <option value="Moto/Scooter">Lavaggio moto/scooter (12 €)</option>
+                    <option value="Performance Intenso">Lavaggio Performance Intenso (29 €)</option>
+                    <option value="Sanificazione Vapore">Smacchiatura e Sanificazione Vapore (Prezzo var.)</option>
+                </select>
+            </div>
+
+            <div class="ff" id="dateSection">
+                <label>2. Data *</label>
+                <input type="date" id="pDate" required>
+            </div>
+
+            <div class="ff" id="slotSection">
+                <label>3. Orario *</label>
+                <div id="slotMsg" style="font-size:13px; color:var(--tx2); margin-bottom:10px;">Verifico disponibilità...⏳</div>
+                <div class="slots" id="slotContainer"></div>
+                <input type="hidden" id="selectedSlot" required>
+            </div>
+
+            <div id="datiSection">
+                <div class="ff" style="margin-top:10px; padding-top:20px; border-top:1px solid #eee;">
+                    <label>4. I tuoi dati</label>
+                    <input type="text" id="pNome" placeholder="Nome e Cognome *" required style="margin-bottom:12px;">
+                    <input type="tel" id="pTel" placeholder="Numero di Telefono *" required style="margin-bottom:12px;">
+                    <input type="text" id="pVettura" placeholder="Modello Vettura *" required style="margin-bottom:12px;">
+                    <input type="text" id="pTarga" placeholder="Targa (Opzionale)" style="text-transform:uppercase;">
+                </div>
+                
+                <button type="submit" class="btn-submit" id="submitBtn">Conferma Prenotazione</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="success" id="successScreen">
+        <div class="success-icon">✅</div>
+        <h2 style="margin-bottom: 10px;">Richiesta Inviata!</h2>
+        <p style="color:var(--tx2); font-size:15px; line-height:1.5;">La tua prenotazione è stata inserita nel nostro sistema gestionale. Ti aspettiamo.</p>
+        <button class="btn-submit" onclick="location.reload()" style="margin-top:30px; background:#f5f5f5; color:#1a1a1a">Nuova prenotazione</button>
+    </div>
+</div>
+
+<script type="module" src="js/prenota.js"></script>
+
+</body>
+</html>

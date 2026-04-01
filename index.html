@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WASH HUB LUNGOMARE — Gestionale</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚗</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f5c518">
+<link rel="apple-touch-icon" href="img/logo.png">
+</head>
+<body>
+
+<div class="login" id="loginScreen">
+<div class="login-box">
+    
+<img src="img/logo.png" alt="WASH HUB Logo" style="width:240px; height:auto; margin:0 auto 15px; display:block; mix-blend-mode: multiply;">
+
+<div class="sub" style="margin-top:14px">Gestionale Aziendale</div>
+<div class="login-field"><label>Email</label><input type="email" id="loginUser" placeholder="Inserisci la tua email" autofocus></div>
+<div class="login-field"><label>Password</label><input type="password" id="loginPass" placeholder="Inserisci password"></div>
+<button class="login-btn">Accedi</button>
+<div class="login-err" id="loginErr"></div>
+</div>
+</div>
+
+<div class="app" id="app">
+
+<aside class="sidebar" id="sidebar">
+<div class="sb-logo" style="justify-content: center; padding: 25px 10px;">
+ <img src="img/logo.png" alt="WASH HUB" style="max-width: 180px; height: auto; mix-blend-mode: multiply;">
+</div>
+<nav class="sb-nav">
+<div class="sb-section">Principale</div>
+<a class="sb-item on" id="nav-cassa"><span class="icon">💶</span>Incasso Giornaliero</a>
+<div class="sb-section">Gestione</div>
+<a class="sb-item" id="nav-abbonamenti"><span class="icon">🅿️</span>Abbonamenti</a>
+<a class="sb-item" id="nav-giornalieri"><span class="icon">🎟️</span>Parcheggio a Ore</a>
+<a class="sb-item" id="nav-prenotazioni"><span class="icon">📋</span>Prenotazioni</a>
+<a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
+<div class="sb-section admin-only">Finanza & Sicurezza</div>
+<a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
+<a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
+<a class="sb-item admin-only" id="nav-cancellazioni"><span class="icon">🗑️</span>Log Cancellazioni</a>
+</nav>
+<div class="sb-footer">
+<div class="sb-user"><div class="sb-avatar" id="sbAvatar">A</div><div class="sb-user-info"><div class="name" id="sbName">Admin</div><div class="role" id="sbRole">Amministratore</div></div></div>
+<button class="sb-logout">Disconnetti</button>
+</div>
+</aside>
+
+<div class="main-area">
+<div class="topbar">
+<h2><button class="mob-toggle">☰</button><span class="icon" id="pageIcon">💶</span><span id="pageTitle">Incasso Giornaliero</span></h2>
+<div class="topbar-r"><div class="dot-live"></div><span class="upd" id="lastUpd">—</span><button class="btn">↻ Aggiorna</button></div>
+</div>
+
+<div class="page-content">
+
+<div class="page show" id="page-cassa">
+    <div class="sec">
+        <div class="sec-hdr">
+            <h3>💶 Incasso Giornaliero & Cassa</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="date" id="cassaData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
+                <button class="btn">Oggi</button>
+            </div>
+        </div>
+        
+        <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
+            <div class="kpi g"><div class="kpi-label">Entrate Contanti</div><div class="kpi-val" id="cassaEntCont">€0</div></div>
+            <div class="kpi b"><div class="kpi-label">Entrate POS</div><div class="kpi-val" id="cassaEntPos">€0</div></div>
+            <div class="kpi a"><div class="kpi-label">Entrate Bonifico</div><div class="kpi-val" id="cassaEntBon">€0</div></div>
+        </div>
+
+        <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:22px">
+            <div class="kpi" style="border-color:var(--blu)"><div class="kpi-label">🧼 Lavaggi</div><div class="kpi-val" id="cassaCatLav" style="color:var(--blu)">€0</div></div>
+            <div class="kpi" style="border-color:var(--amb)"><div class="kpi-label">🪡 Tappezzerie</div><div class="kpi-val" id="cassaCatTap" style="color:var(--amb)">€0</div></div>
+            <div class="kpi" style="border-color:var(--yel)"><div class="kpi-label">🚗 Parcheggio Tot.</div><div class="kpi-val" id="cassaCatPar" style="color:var(--yel)">€0</div></div>
+        </div>
+        
+        <div class="form-panel show" style="background:var(--bg4); margin-bottom:20px">
+            <h3 style="font:600 13px var(--f);margin-bottom:10px">➖ Registra Nuova Uscita (Spesa)</h3>
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="ff" style="flex:1;min-width:180px"><label>Descrizione *</label><input id="uDesc" placeholder="Es: Fornitore, Acqua, Materiale..."></div>
+                <div class="ff" style="width:100px"><label>Importo € *</label><input id="uImp" type="number" step="0.01"></div>
+                <div class="ff" style="width:120px"><label>Metodo *</label><select id="uMod"><option>CONTANTI</option><option>POS</option></select></div>
+                <button class="btn btn-primary" style="height:37px;padding:0 20px">Registra Uscita</button>
+            </div>
+        </div>
+
+        <div class="sec-hdr" style="margin-top:10px; margin-bottom:10px"><h3>📊 Riepilogo Uscite di Giornata</h3></div>
+        <div class="tbl-wrap" style="margin-bottom:20px">
+            <table class="tbl">
+                <thead><tr><th style="width:70px">Orario</th><th>Descrizione Spesa</th><th style="width:100px">Metodo</th><th style="width:90px">Importo</th><th style="width:70px">Azioni</th></tr></thead>
+                <tbody id="uscitaTb"></tbody>
+            </table>
+        </div>
+
+        <div style="margin-top:20px; background:var(--bg3); border:2px solid var(--grn); border-radius:var(--r); padding:20px; text-align:center; box-shadow:0 4px 12px var(--grn1)">
+            <div style="font:600 13px var(--mono); color:var(--tx3); text-transform:uppercase; letter-spacing:1.5px">Fondo Cassa a Fine Turno (Solo Contanti)</div>
+            <div style="font:700 42px var(--f); color:var(--grn); margin-top:8px" id="cassaNetta">€0.00</div>
+            <div style="font:500 12px var(--f); color:var(--tx2); margin-top:4px">Totale Entrate Contanti — Totale Uscite Contanti</div>
+        </div>
+    </div>
+</div>
+
+<div class="page" id="page-dashboard">
+<div class="pbar">
+<div class="date-g"><label>Da</label><input type="date" id="dtFrom"></div>
+<span class="date-sep">→</span>
+<div class="date-g"><label>A</label><input type="date" id="dtTo"></div>
+<div class="q-sep"></div>
+<button class="qbtn">7gg</button>
+<button class="qbtn">30gg</button>
+<button class="qbtn on">3 mesi</button>
+<button class="qbtn">6 mesi</button>
+<button class="qbtn">1 anno</button>
+<button class="qbtn">Tutto</button>
+</div>
+<div class="kpis" id="kpis"></div>
+<div class="charts"><div class="chart-card"><h3>Entrate vs Uscite</h3><canvas id="ch1"></canvas></div><div class="chart-card"><h3>Entrate per Centro di Costo</h3><canvas id="ch2"></canvas></div></div>
+<div class="chat-panel admin-only">
+<div class="chat-hdr"><div class="dot"></div><h4>WASH HUB AI</h4></div>
+<div class="msgs" id="msgs"><div class="msg bot">Ciao! Chiedimi qualsiasi cosa sui dati aziendali. 🚗</div></div>
+<div class="chat-input"><input type="text" id="chatIn" placeholder="Es: Qual è il fatturato di marzo?"><button>➤</button></div>
+</div>
+</div>
+
+<div class="page" id="page-abbonamenti">
+<div class="sec">
+<div class="sec-hdr"><h3>🅿️ Abbonamenti Parcheggio</h3><div style="display:flex;gap:8px"><span class="badge a" id="abbCnt">0</span><button class="btn btn-primary" id="addAbbBtn">+ Nuovo</button></div></div>
+<div class="form-panel" id="abbForm">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="font:600 13px var(--f)" id="abbFTitle">Nuovo Abbonamento</h3><button class="btn">✕</button></div>
+<div class="form-grid">
+<div class="ff"><label>Nome e Cognome *</label><input id="fNome"></div>
+<div class="ff"><label>Numero Cell. *</label><input id="fCell" type="tel"></div>
+<div class="ff"><label>Modello Vettura *</label><input id="fModello"></div>
+<div class="ff"><label>Targa *</label><input id="fTarga" style="text-transform:uppercase"></div>
+<div class="ff"><label>Provenienza</label><input id="fProv"></div>
+<div class="ff"><label>Codice Cancello</label><input id="fCodice" placeholder="NO o codice"></div>
+<div class="ff"><label>Durata *</label><select id="fDurata"><option>1 MESE</option><option>3 MESI</option><option>6 MESI</option><option>1 ANNO</option><option>8 MESI</option></select></div>
+<div class="ff"><label>Importo € *</label><input id="fImporto" type="number" step="1"></div>
+<div class="ff"><label>Inizio Abb. *</label><input id="fInizio" type="date"></div>
+<div class="ff"><label>Scadenza Abb. *</label><input id="fScadenza" type="date"></div>
+<div class="ff"><label>Notte</label><select id="fNotte"><option>SI</option><option>NO</option></select></div>
+<div class="ff"><label>Pagamento</label><select id="fPag"><option value="">—</option><option>SI</option><option>NO</option></select></div>
+<div class="ff"><label>Modalità</label><select id="fMod"><option value="">—</option><option>CONTANTI</option><option>POS</option><option>BONIFICO</option></select></div>
+<div class="ff"><label>Data Pagamento</label><input id="fDataPag" type="date"></div>
+<div class="ff"><label>Chiavi/Codice</label><select id="fChiavi"><option>CODICE</option><option>CHIAVI</option><option value="">—</option></select></div>
+<div class="ff"><label>Note</label><input id="fNote"></div>
+</div>
+<div class="form-actions"><button class="btn btn-primary" id="abbSaveBtn">Salva</button><button class="btn">Annulla</button></div>
+<div class="form-msg" id="abbMsg"></div>
+</div>
+<div class="filters">
+<button class="qbtn on">Tutti</button>
+<button class="qbtn">Pagati</button>
+<button class="qbtn">Non Pagati</button>
+<button class="qbtn">In Scadenza</button>
+<button class="qbtn">Notte</button>
+<input class="search-box" id="abbSrch" placeholder="Cerca nome, targa, veicolo..." style="margin-left:auto">
+</div>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nome</th><th>Veicolo</th><th>Targa</th><th>Cell.</th><th>Durata</th><th>Inizio</th><th>Scadenza</th><th>€</th><th>Notte</th><th>Pag.</th><th>Mod.</th><th>Note</th><th>Azioni</th></tr></thead><tbody id="abbTb"></tbody></table></div>
+</div>
+</div>
+
+<div class="page" id="page-giornalieri">
+<div class="sec">
+<div class="sec-hdr">
+<h3>🎟️ Parcheggio Giornaliero (A Ore)</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<input type="date" id="giornData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
+<button class="btn">Oggi</button>
+</div>
+</div>
+
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:16px">
+<div class="kpi g"><div class="kpi-label">Auto in sosta</div><div class="kpi-val" id="gInSosta">0</div></div>
+<div class="kpi b"><div class="kpi-label">Incasso Contanti</div><div class="kpi-val" id="gIncContanti">€0</div></div>
+<div class="kpi a"><div class="kpi-label">Incasso POS</div><div class="kpi-val" id="gIncPos">€0</div></div>
+</div>
+
+<div class="form-panel show" style="margin-bottom:20px; background:var(--bg4)">
+<h3 style="font:600 13px var(--f);margin-bottom:10px">➕ Nuovo Ingresso</h3>
+<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+<div class="ff" style="flex:1;min-width:140px"><label>Vettura *</label><input id="gVettura" placeholder="Es: Fiat 500"></div>
+<div class="ff" style="width:100px"><label>Targa *</label><input id="gTarga" style="text-transform:uppercase"></div>
+<div class="ff" style="flex:1;min-width:120px"><label>Telefono *</label><input id="gTel" type="tel"></div>
+<div class="ff" style="width:90px"><label>Orario Arrivo *</label><input id="gArrivo" type="time"></div>
+<button class="btn btn-primary" style="height:37px;padding:0 20px">Registra IN</button>
+</div>
+<div class="form-msg" id="gMsg"></div>
+</div>
+
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Ingresso</th><th>Vettura</th><th>Targa</th><th>Telefono</th><th>Uscita</th><th>Costo/Stato</th><th>Pagamento</th><th style="width:120px">Azioni</th></tr></thead>
+<tbody id="giornTb"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="page" id="page-prenotazioni">
+<div class="sec">
+<div class="sec-hdr">
+<h3>📋 Prenotazioni Lavaggio</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<input type="date" id="prenData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
+<button class="btn">Oggi</button>
+<button class="btn">← Ieri</button>
+<button class="btn">Domani →</button>
+</div>
+</div>
+
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:16px">
+<div class="kpi g"><div class="kpi-label">Prenotati</div><div class="kpi-val" id="prenTotCount">0</div></div>
+<div class="kpi b"><div class="kpi-label">Incasso Contanti</div><div class="kpi-val" id="prenIncContanti">€0</div></div>
+<div class="kpi b"><div class="kpi-label">Incasso POS</div><div class="kpi-val" id="prenIncPos">€0</div></div>
+<div class="kpi a"><div class="kpi-label">Sospesi / Da Saldare</div><div class="kpi-val" id="prenSospesi">€0</div></div>
+</div>
+
+<div class="tbl-wrap">
+<table class="tbl" style="white-space:normal">
+<thead><tr><th style="width:70px">Orario</th><th>Nominativo</th><th>Vettura</th><th style="width:80px">Prezzo €</th><th style="width:90px">Pagamento</th><th style="width:90px">Modalità</th><th>Note</th><th style="width:120px">Azioni</th></tr></thead>
+<tbody id="prenTb"></tbody>
+</table>
+</div>
+
+<div class="form-panel show" style="margin-top:14px">
+<h3 style="font:600 13px var(--f);margin-bottom:10px">➕ Aggiungi Prenotazione</h3>
+<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+<div class="ff" style="width:90px"><label>Orario *</label>
+<select id="pOrario">
+  <option value="08:00">08:00</option>
+  <option value="08:30">08:30</option>
+  <option value="09:00">09:00</option>
+  <option value="09:30">09:30</option>
+  <option value="10:00">10:00</option>
+  <option value="10:30">10:30</option>
+  <option value="11:00">11:00</option>
+  <option value="11:30">11:30</option>
+  <option value="12:00">12:00</option>
+  <option value="12:30">12:30</option>
+  <option value="13:00">13:00</option>
+  <option value="13:30">13:30</option>
+  <option value="14:30">14:30</option>
+  <option value="15:00">15:00</option>
+  <option value="15:30">15:30</option>
+  <option value="16:00">16:00</option>
+  <option value="16:30">16:30</option>
+  <option value="17:00">17:00</option>
+  <option value="17:30">17:30</option>
+  <option value="18:00">18:00</option>
+</select>
+</div>
+<div class="ff" style="flex:1;min-width:140px"><label>Nominativo *</label><input id="pCliente" placeholder="Es: Rossi"></div>
+<div class="ff" style="flex:1;min-width:140px"><label>Vettura *</label><input id="pVettura" placeholder="Es: FIAT 500"></div>
+<div class="ff" style="width:80px"><label>Prezzo € *</label><input id="pPrezzo" type="number" step="1"></div>
+<div class="ff" style="width:150px"><label>Note</label><input id="pNote" placeholder="Opzionale"></div>
+<button class="btn btn-primary" style="height:37px;padding:0 20px">Aggiungi</button>
+</div>
+<div class="form-msg" id="prenMsg"></div>
+</div>
+
+<div class="sec-hdr" style="margin-top:32px; border-top: 1px solid var(--brd); padding-top: 24px;">
+  <h3>🪡 Tappezzerie in Lavorazione</h3>
+</div>
+<div class="tbl-wrap">
+  <table class="tbl">
+    <thead><tr><th>Data IN</th><th>Cliente</th><th>Modello</th><th>Targa</th><th style="width:80px">Prezzo €</th><th style="width:140px">Stato</th><th style="width:80px">Azioni</th></tr></thead>
+    <tbody id="tapTb"></tbody>
+  </table>
+</div>
+
+<div class="form-panel show" style="margin-top:14px; background:var(--bg4)">
+  <h3 style="font:600 13px var(--f);margin-bottom:10px">➕ Nuovo Ingresso Tappezzeria</h3>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="ff" style="flex:1;min-width:140px"><label>Cliente *</label><input id="tCliente" placeholder="Es: Mario Rossi"></div>
+    <div class="ff" style="flex:1;min-width:140px"><label>Modello *</label><input id="tModello" placeholder="Es: Audi Q3"></div>
+    <div class="ff" style="width:100px"><label>Targa</label><input id="tTarga" style="text-transform:uppercase"></div>
+    <div class="ff" style="width:80px"><label>Prezzo € *</label><input id="tPrezzo" type="number" step="1"></div>
+    <button class="btn btn-primary" style="height:37px;padding:0 20px">Registra IN</button>
+  </div>
+  <div class="form-msg" id="tapMsg"></div>
+</div>
+
+</div>
+</div>
+
+<div class="page" id="page-sospesi">
+<div class="sec">
+<div class="sec-hdr"><h3>⏳ Sospesi — Registro Crediti per Cliente</h3>
+<div style="display:flex;gap:8px;align-items:center"><span class="badge a" id="sospTotBadge">€0</span></div>
+</div>
+
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
+<div class="kpi a"><div class="kpi-label">Totale Da Incassare</div><div class="kpi-val" id="sospKpiTot">€0</div></div>
+<div class="kpi r"><div class="kpi-label">Clienti Con Sospesi</div><div class="kpi-val" id="sospKpiCli">0</div></div>
+<div class="kpi b"><div class="kpi-label">Lavaggi Aperti</div><div class="kpi-val" id="sospKpiLav">0</div></div>
+</div>
+
+<div class="filters">
+<button class="qbtn on">Aperti</button>
+<button class="qbtn">Pagati/Chiusi</button>
+<input class="search-box" id="sospSrch" placeholder="Cerca cliente o vettura..." style="margin-left:auto">
+</div>
+
+<div id="sospCards"></div>
+</div>
+</div>
+
+<div class="page" id="page-report">
+<div class="sec">
+<div class="sec-hdr"><h3>💰 Report Finanziario</h3>
+<div style="display:flex;gap:8px;align-items:center">
+<div class="date-g"><label>Da</label><input type="date" id="repFrom"></div>
+<span class="date-sep">→</span>
+<div class="date-g"><label>A</label><input type="date" id="repTo"></div>
+</div>
+</div>
+
+<div class="kpis" id="repKpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:18px"></div>
+
+<div class="sec-hdr" style="margin-top:18px;margin-bottom:10px"><h3>📊 Dettaglio Uscite</h3></div>
+<div class="tbl-wrap" style="margin-bottom:18px">
+<table class="tbl"><thead><tr><th>Voce</th><th>Importo</th><th>% su Totale Uscite</th></tr></thead>
+<tbody id="repUscTb"></tbody>
+</table>
+</div>
+
+<div class="sec-hdr" style="margin-bottom:10px"><h3>📊 Dettaglio Entrate per Centro di Costo</h3></div>
+<div class="tbl-wrap">
+<table class="tbl"><thead><tr><th>Centro di Costo</th><th>Entrate</th><th>% su Totale</th></tr></thead>
+<tbody id="repEntTb"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="page" id="page-cancellazioni">
+<div class="sec">
+<div class="sec-hdr"><h3>🗑️ Registro Cancellazioni</h3>
+<button class="btn">↻ Aggiorna</button>
+</div>
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th style="width:130px">Data/Ora</th><th>Operatore</th><th>Sezione</th><th>Dettaglio Record</th><th>Motivazione</th></tr></thead>
+<tbody id="cancTb"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+</div></div></div>
+<div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
+
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>
