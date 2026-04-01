@@ -160,17 +160,21 @@ async function initFirebaseData() {
 
         // Carica dati Prima Nota da Google Sheets (GAS) per Report e Dashboard Analitica
         try {
-            const gasResp = await fetch(CONFIG.GAS_URL + '?action=getPrimaNota');
+            const gasController = new AbortController();
+            const gasTimeout = setTimeout(() => gasController.abort(), 8000);
+            const gasResp = await fetch(CONFIG.GAS_URL + '?action=getPrimaNota', { signal: gasController.signal });
+            clearTimeout(gasTimeout);
             if(gasResp.ok) {
                 const gasData = await gasResp.json();
                 state.rawData = { primaNota: { rows: gasData.rows || gasData.data || gasData || [] } };
-                // Normalizza: se il GAS restituisce un array diretto
                 if(Array.isArray(state.rawData.primaNota.rows) === false) {
                     state.rawData.primaNota.rows = [];
                 }
+            } else {
+                if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
             }
         } catch(gasErr) {
-            console.warn("GAS Prima Nota non disponibile (Report/Dashboard potrebbero essere vuoti):", gasErr);
+            console.warn("GAS Prima Nota non disponibile (Report/Dashboard potrebbero essere vuoti):", gasErr.message);
             if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
         }
 
