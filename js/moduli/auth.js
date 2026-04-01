@@ -15,9 +15,12 @@ export function initAuth() {
             }
             
             // Login confermato (utente ha cliccato Accedi o ha solo ricaricato la pagina)
+            const ADMIN_EMAILS = [
+                'amministrazione@avrlogisticarl.com'
+            ];
             let role = 'user';
             let label = 'Operatore';
-            if (user.email.includes('admin')) {
+            if (ADMIN_EMAILS.includes(user.email.toLowerCase())) {
                 role = 'admin';
                 label = 'Amministratore';
             }
