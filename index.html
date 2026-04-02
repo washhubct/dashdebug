@@ -31,7 +31,10 @@
 
 <div class="app" id="app">
 
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
 <aside class="sidebar" id="sidebar">
+<button class="sb-close" id="sbClose" aria-label="Chiudi menu">✕</button>
 <div class="sb-logo" style="justify-content: center; padding: 25px 10px;">
  <img src="img/logo.png" alt="WASH HUB" style="max-width: 180px; height: auto; mix-blend-mode: multiply;">
 </div>
@@ -64,12 +67,9 @@
 
 <div class="page show" id="page-cassa">
     <div class="sec">
-        <div class="sec-hdr">
-            <h3>💶 Incasso Giornaliero & Cassa</h3>
-            <div style="display:flex;gap:8px;align-items:center">
-                <input type="date" id="cassaData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
-                <button class="btn">Oggi</button>
-            </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+            <input type="date" id="cassaData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
+            <button class="btn">Oggi</button>
         </div>
         
         <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
@@ -94,7 +94,7 @@
             </div>
         </div>
 
-        <div class="sec-hdr" style="margin-top:10px; margin-bottom:10px"><h3>📊 Riepilogo Uscite di Giornata</h3></div>
+        <div style="margin-top:16px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Uscite di Giornata</div>
         <div class="tbl-wrap" style="margin-bottom:20px">
             <table class="tbl">
                 <thead><tr><th style="width:70px">Orario</th><th>Descrizione Spesa</th><th style="width:100px">Metodo</th><th style="width:90px">Importo</th><th style="width:70px">Azioni</th></tr></thead>
@@ -134,7 +134,7 @@
 
 <div class="page" id="page-abbonamenti">
 <div class="sec">
-<div class="sec-hdr"><h3>🅿️ Abbonamenti Parcheggio</h3><div style="display:flex;gap:8px"><span class="badge a" id="abbCnt">0</span><button class="btn btn-primary" id="addAbbBtn">+ Nuovo</button></div></div>
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px"><span class="badge a" id="abbCnt">0</span><button class="btn btn-primary" id="addAbbBtn">+ Nuovo Abbonamento</button></div>
 <div class="form-panel" id="abbForm">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="font:600 13px var(--f)" id="abbFTitle">Nuovo Abbonamento</h3><button class="btn">✕</button></div>
 <div class="form-grid">
@@ -172,12 +172,9 @@
 
 <div class="page" id="page-giornalieri">
 <div class="sec">
-<div class="sec-hdr">
-<h3>🎟️ Parcheggio Giornaliero (A Ore)</h3>
-<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
 <input type="date" id="giornData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
 <button class="btn">Oggi</button>
-</div>
 </div>
 
 <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:16px">
@@ -209,14 +206,11 @@
 
 <div class="page" id="page-prenotazioni">
 <div class="sec">
-<div class="sec-hdr">
-<h3>📋 Prenotazioni Lavaggio</h3>
-<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
 <input type="date" id="prenData" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
 <button class="btn">Oggi</button>
 <button class="btn">← Ieri</button>
 <button class="btn">Domani →</button>
-</div>
 </div>
 
 <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:16px">
@@ -269,8 +263,8 @@
 <div class="form-msg" id="prenMsg"></div>
 </div>
 
-<div class="sec-hdr" style="margin-top:32px; border-top: 1px solid var(--brd); padding-top: 24px;">
-  <h3>🪡 Tappezzerie in Lavorazione</h3>
+<div style="margin-top:32px; border-top: 1px solid var(--brd); padding-top: 20px; margin-bottom:12px; font:600 14px var(--f); color:var(--tx)">
+  🪡 Tappezzerie in Lavorazione
 </div>
 <div class="tbl-wrap">
   <table class="tbl">
@@ -296,9 +290,7 @@
 
 <div class="page" id="page-sospesi">
 <div class="sec">
-<div class="sec-hdr"><h3>⏳ Sospesi — Registro Crediti per Cliente</h3>
-<div style="display:flex;gap:8px;align-items:center"><span class="badge a" id="sospTotBadge">€0</span></div>
-</div>
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px"><span class="badge a" id="sospTotBadge">€0</span></div>
 
 <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px">
 <div class="kpi a"><div class="kpi-label">Totale Da Incassare</div><div class="kpi-val" id="sospKpiTot">€0</div></div>
@@ -311,7 +303,6 @@
 <button class="qbtn">Fatturati</button>
 <button class="qbtn">Pagati/Chiusi</button>
 <input class="search-box" id="sospSrch" placeholder="Cerca cliente o vettura..." style="margin-left:auto">
-<button class="btn" id="btnPulizia2025" style="font-size:10px;padding:4px 12px;border-color:var(--red);color:var(--red)">🧹 Chiudi Sospesi 2025</button>
 </div>
 
 <div id="sospCards"></div>
@@ -320,24 +311,22 @@
 
 <div class="page" id="page-report">
 <div class="sec">
-<div class="sec-hdr"><h3>💰 Report Finanziario</h3>
-<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
 <div class="date-g"><label>Da</label><input type="date" id="repFrom"></div>
 <span class="date-sep">→</span>
 <div class="date-g"><label>A</label><input type="date" id="repTo"></div>
 </div>
-</div>
 
 <div class="kpis" id="repKpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:18px"></div>
 
-<div class="sec-hdr" style="margin-top:18px;margin-bottom:10px"><h3>📊 Dettaglio Uscite</h3></div>
+<div style="margin-top:18px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Dettaglio Uscite</div>
 <div class="tbl-wrap" style="margin-bottom:18px">
 <table class="tbl"><thead><tr><th>Voce</th><th>Importo</th><th>% su Totale Uscite</th></tr></thead>
 <tbody id="repUscTb"></tbody>
 </table>
 </div>
 
-<div class="sec-hdr" style="margin-bottom:10px"><h3>📊 Dettaglio Entrate per Centro di Costo</h3></div>
+<div style="margin-top:14px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Entrate per Centro di Costo</div>
 <div class="tbl-wrap">
 <table class="tbl"><thead><tr><th>Centro di Costo</th><th>Entrate</th><th>% su Totale</th></tr></thead>
 <tbody id="repEntTb"></tbody>
@@ -348,7 +337,7 @@
 
 <div class="page" id="page-cancellazioni">
 <div class="sec">
-<div class="sec-hdr"><h3>🗑️ Registro Cancellazioni</h3>
+<div style="margin-bottom:14px">
 <button class="btn">↻ Aggiorna</button>
 </div>
 <div class="tbl-wrap">
