@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initAbbonamenti();
     initReport();
     initDashDates();
-    initMobileSidebar();
 });
 
 document.addEventListener('authSuccess', () => {
@@ -245,80 +244,6 @@ window.addEventListener('appinstalled', () => {
     console.log('Installazione completata');
 });
 
-// ═══ SIDEBAR MOBILE — overlay, chiudi, swipe ═══
-function initMobileSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-    const closeBtn = document.getElementById('sbClose');
-    const toggle = document.querySelector('.mob-toggle');
-    
-    if (!sidebar || !overlay) return;
-
-    function openSidebar() {
-        sidebar.classList.add('open');
-        overlay.classList.add('show');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeSidebar() {
-        sidebar.classList.remove('open');
-        overlay.classList.remove('show');
-        document.body.style.overflow = '';
-    }
-
-    // Hamburger apre
-    if (toggle) {
-        toggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (sidebar.classList.contains('open')) {
-                closeSidebar();
-            } else {
-                openSidebar();
-            }
-        });
-    }
-
-    // Overlay chiude
-    overlay.addEventListener('click', closeSidebar);
-
-    // Bottone ✕ chiude
-    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-
-    // Click su voce menu chiude sidebar su mobile
-    sidebar.querySelectorAll('.sb-item').forEach(item => {
-        item.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
-                setTimeout(closeSidebar, 150);
-            }
-        });
-    });
-
-    // Swipe left chiude sidebar
-    let touchStartX = 0;
-    let touchStartY = 0;
-    
-    sidebar.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-    }, { passive: true });
-
-    sidebar.addEventListener('touchend', (e) => {
-        const dx = e.changedTouches[0].clientX - touchStartX;
-        const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
-        // Swipe left > 60px e non troppo verticale
-        if (dx < -60 && dy < 100) {
-            closeSidebar();
-        }
-    }, { passive: true });
-
-    // Logout chiude sidebar
-    const logoutBtn = sidebar.querySelector('.sb-logout');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            closeSidebar();
-        });
-    }
-}
 // ═══════════════════════════════════════════════════════════════════
 // AUTO-CHIUSURA GIORNATE — scrive totali in Prima Nota
 // Controlla fino a 7 giorni indietro, solo lun-sab
