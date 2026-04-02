@@ -74,16 +74,37 @@ export function renderReport() {
         }
     });
 
-    // Costo fisso operatore lavaggio: €1.400/mese
+    // Costi fissi mensili automatici
     const mesiNelPeriodo = Math.max(1, Math.round((to - from) / (30 * 864e5)));
+    
+    // Affitto: €1.560/mese (netto, IVA esclusa - partita di giro)
+    const affittoMensile = 1560;
+    const affittoTot = affittoMensile * mesiNelPeriodo;
+    uscByCat['Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = affittoTot;
+    
+    // Operatore fisso: €1.400/mese
     const costoOperatore = 1400 * mesiNelPeriodo;
     uscByCat['Operatore Lavaggio (fisso)'] = costoOperatore;
-
+    
+    // Luce: €1.000/mese media
+    const costoLuce = 1000 * mesiNelPeriodo;
+    uscByCat['Luce (media)'] = costoLuce;
+    
+    // Acqua: €390/mese media
+    const costoAcqua = 390 * mesiNelPeriodo;
+    uscByCat['Acqua (media)'] = costoAcqua;
+    
+    // Assicurazione: €988/anno = €82,33/mese
+    const costoAssicurazione = 82.33 * mesiNelPeriodo;
+    uscByCat['Assicurazione'] = costoAssicurazione;
+    
+    // Consumabili: 3% fatturato lavaggi
     const fatLavaggio = entByCat['LAVAGGIO'] || 0;
     const consumabili = fatLavaggio * 0.03;
     if (consumabili > 0) uscByCat['Prodotti Consumabili (3% Lav.)'] = consumabili;
 
-    const totUscite = totUscitePN + consumabili + costoOperatore;
+    const totCostiFissi = affittoTot + costoOperatore + costoLuce + costoAcqua + costoAssicurazione;
+    const totUscite = totUscitePN + consumabili + totCostiFissi;
     const margine = totEntrate - totUscite;
     const margPct = totEntrate > 0 ? ((margine / totEntrate) * 100).toFixed(1) : '0.0';
 
@@ -91,7 +112,7 @@ export function renderReport() {
     if(repKpis) {
         repKpis.innerHTML = `
             <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(totEntrate)}</div></div>
-            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Incl. consumabili ${fEur(consumabili)}</div></div>
+            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Prima Nota ${fEur(totUscitePN)} + Fissi ${fEur(totCostiFissi)} + Cons. ${fEur(consumabili)}</div></div>
             <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
             <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(totSospesi)}</div></div>`;
     }
