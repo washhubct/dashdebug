@@ -158,23 +158,15 @@ async function initFirebaseData() {
 
         await loadSospesiPagati();
 
-        // Carica dati Prima Nota da Google Sheets (GAS) per Report e Dashboard Analitica
+        // Carica dati Prima Nota da Firebase per Report e Dashboard Analitica
         try {
-            const gasController = new AbortController();
-            const gasTimeout = setTimeout(() => gasController.abort(), 8000);
-            const gasResp = await fetch(CONFIG.GAS_URL + '?action=getPrimaNota', { signal: gasController.signal });
-            clearTimeout(gasTimeout);
-            if(gasResp.ok) {
-                const gasData = await gasResp.json();
-                state.rawData = { primaNota: { rows: gasData.rows || gasData.data || gasData || [] } };
-                if(Array.isArray(state.rawData.primaNota.rows) === false) {
-                    state.rawData.primaNota.rows = [];
-                }
-            } else {
-                if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
-            }
-        } catch(gasErr) {
-            console.warn("GAS Prima Nota non disponibile (Report/Dashboard potrebbero essere vuoti):", gasErr.message);
+            const snapPN = await fsGetDocs(fsCollection(db, "primaNota"));
+            const pnRows = [];
+            snapPN.forEach(docSnap => { pnRows.push(docSnap.data()); });
+            state.rawData = { primaNota: { rows: pnRows } };
+            console.log(`Prima Nota caricata: ${pnRows.length} record`);
+        } catch(pnErr) {
+            console.warn("Prima Nota Firebase non disponibile:", pnErr.message);
             if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
         }
 
