@@ -39,7 +39,8 @@ export function renderReport() {
 
     const from = new Date(fromVal), to = new Date(toVal);
     const rows = state.rawData.primaNota.rows.filter(r => {
-        const d = pDate(r.DATA || r.Data);
+        // Supporta sia dataISO (YYYY-MM-DD) che DATA (DD/MM/YYYY)
+        const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
         return d && d >= from && d <= to;
     });
 
@@ -121,7 +122,7 @@ export function renderDash() {
     
     // 1. Calcolo Entrate e Uscite dalla Prima Nota
     const rows = (state.rawData?.primaNota?.rows || []).filter(r => {
-        const d = pDate(r.DATA || r.Data);
+        const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
         return d && d >= state.dateFrom && d <= state.dateTo;
     });
 
@@ -177,7 +178,7 @@ function renderCharts(rows) {
     months.forEach(m => byM[m] = { ent: 0, usc: 0, lav: 0, par: 0 });
     
     rows.forEach(r => {
-        const dt = pDate(r.DATA || r.Data);
+        const dt = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
         if (!dt) return;
         const mk = gMK(dt);
         if (!byM[mk]) return;
@@ -253,7 +254,7 @@ async function sendChat() {
 
     try {
         const rows = (state.rawData?.primaNota?.rows || []).filter(r => {
-            const d = pDate(r.DATA || r.Data);
+            const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
             return d && d >= state.dateFrom && d <= state.dateTo;
         });
         
