@@ -83,7 +83,7 @@ export function renderAbb() {
 
     if(!rows.length) { tb.innerHTML = '<tr><td colspan="13" class="empty">Nessun risultato</td></tr>'; return; }
     
-    rows.sort((a,b) => { const da = pDate(a['SCADENZA ABBONAMENTO']), db = pDate(b['SCADENZA ABBONAMENTO']); return (da||0) - (db||0); });
+    rows.sort((a,b) => { const da = pDate(a['SCADENZA ABBONAMENTO']), db2 = pDate(b['SCADENZA ABBONAMENTO']); return (da||0) - (db2||0); });
     
     let html = '';
     rows.forEach(r => {
@@ -237,13 +237,11 @@ async function saveAbb() {
 
     try {
         if(isUpdate) {
-            // Aggiorna su Firebase
             await fsUpdateDoc(fsDoc(db, "abbonamenti", state.abbEditId), rec);
             const idx = state.localAbb.findIndex(r => r._id === state.abbEditId);
             if(idx >= 0) { rec._id = state.abbEditId; state.localAbb[idx] = rec; }
             msg.style.color = 'var(--grn)'; msg.textContent = 'Aggiornato!';
         } else {
-            // Salva su Firebase
             const docRef = await fsAddDoc(fsCollection(db, "abbonamenti"), rec);
             rec._id = docRef.id;
             state.localAbb.push(rec);
@@ -257,20 +255,19 @@ async function saveAbb() {
 
     syncAbbToSheet(rec, isUpdate);
     
+    // Scrivi in Prima Nota su Firestore quando pagato
     if(pagamento === 'SI') {
         try {
-            await fetch(CONFIG.GAS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                    action: 'addPrimaNota',
-                    data: {
-                        data: dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT'),
-                        categoria: 'PARCHEGGIO',
-                        descrizione: 'Abbonamento: ' + nome + ' (' + targa + ') - ' + modalita,
-                        entrata: imp
-                    }
-                })
+            const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
+            const dataISO = dataPag || fmtDI(new Date());
+            await fsAddDoc(fsCollection(db, "primaNota"), {
+                DATA: dataPN, dataISO: dataISO,
+                'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
+                'PRIMANOTA CLIENTI/FORNITORI': 'ABBONAMENTO ' + nome + ' (' + targa + ')',
+                Descrizione: 'ABBONAMENTO ' + nome + ' (' + targa + ') - ' + modalita,
+                ENTRATA: imp, Entrata: imp,
+                USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
+                "MODALITA'": modalita, timestamp: Date.now()
             });
         } catch(e) { console.error("Errore salvataggio Prima Nota:", e); }
     }
@@ -301,7 +298,6 @@ async function renewAbb(id) {
     r['SCADENZA ABBONAMENTO'] = d2s(fmtDI(ns));
     r.PAGAMENTO = ''; r["MODALITA'"] = ''; r['DATA PAGAMENTO'] = '';
     
-    // Persisti il rinnovo su Firebase
     try {
         await fsUpdateDoc(fsDoc(db, "abbonamenti", id), {
             'INIZIO ABBONAMENTO': r['INIZIO ABBONAMENTO'],
@@ -324,7 +320,6 @@ async function deleteAbb(id) {
     
     try {
         await logDelete('ABBONAMENTI', `Cliente: ${r['NOME E COGNOME']} - Targa: ${r.TARGA}`, motivazione.trim());
-        // Cancella da Firebase
         await fsDeleteDoc(fsDoc(db, "abbonamenti", id));
         await fetch(CONFIG.GAS_URL, { 
             method: 'POST', 
