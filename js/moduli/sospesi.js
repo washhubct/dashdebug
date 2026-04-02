@@ -448,18 +448,66 @@ function segnaPagatoMese(cliente, mese, mod) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// PULIZIA SOSPESI 2025 — segna tutti i ≤2025 come pagati
+// CLIENTI DA LISTA MICHELA — da NON chiudere, segnare come FATTURATI
+// ════════════════════════════════════════════════════════════════════
+const CLIENTI_MICHELA = [
+    'VECCHIO',
+    'GAETANO',
+    'SERVIZI METR DI CT',
+    'D\'AGATA',
+    'DAGATA',
+    'MARIO NICOTRA',
+    'PARCHEGGIO RAGAZZO SCUOLA BICI',
+    'EGIDIO-X1',
+    'EGIDIO',
+    'LORENZO- MINI COOPER',
+    'LORENZO',
+    'RS MOTORSPORT'
+];
+
+function isClienteMichela(nomeCliente) {
+    if (!nomeCliente) return false;
+    const nome = nomeCliente.toUpperCase().trim();
+    return CLIENTI_MICHELA.some(c => nome.includes(c.toUpperCase()) || c.toUpperCase().includes(nome));
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PULIZIA SOSPESI 2025:
+//   - Clienti lista Michela → FATTURATI (in attesa pagamento)
+//   - Tutti gli altri ≤2025 → PAGATI (chiusura)
 // ════════════════════════════════════════════════════════════════════
 export async function pulisciSospesi2025() {
-    const daChiudere = state.localSosp.filter(s => !s._pagato && isAnno2025oPrima(s.data));
-    if (!daChiudere.length) {
-        alert('Nessun sospeso del 2025 da chiudere.');
+    const tuttiAperti = state.localSosp.filter(s => !s._pagato && !s._fatturato);
+    
+    // Clienti Michela: segna come FATTURATI (qualsiasi data)
+    const daFatturare = tuttiAperti.filter(s => isClienteMichela(s.cliente));
+    // Tutti gli altri con data ≤ 2025: segna come PAGATI
+    const daChiudere = tuttiAperti.filter(s => !isClienteMichela(s.cliente) && isAnno2025oPrima(s.data));
+    
+    if (!daFatturare.length && !daChiudere.length) {
+        alert('Nessun sospeso da elaborare.');
         return;
     }
-    if (!confirm(`Segna come PAGATI ${daChiudere.length} sospesi del 2025 e precedenti?`)) return;
+    
+    const msg = `Operazione pulizia sospesi:\n\n` +
+        `📄 ${daFatturare.length} sospesi clienti Michela → FATTURATI (in attesa pagamento)\n` +
+        `✅ ${daChiudere.length} sospesi altri clienti ≤2025 → PAGATI (chiusura)\n\n` +
+        `Procedere?`;
+    
+    if (!confirm(msg)) return;
 
     const oggi = new Date().toLocaleDateString('it-IT');
-    let count = 0;
+    let countFatt = 0, countPag = 0;
+    
+    // Segna i clienti Michela come FATTURATI
+    for (const s of daFatturare) {
+        s._fatturato = true;
+        s._dataFatt = oggi;
+        await salvaSospesoFirestore(s);
+        countFatt++;
+    }
+    
+    // Segna tutti gli altri ≤2025 come PAGATI
     for (const s of daChiudere) {
         s._pagato = true;
         s._modPag = 'CHIUSURA 2025';
@@ -467,10 +515,10 @@ export async function pulisciSospesi2025() {
         s._fatturato = true;
         s._dataFatt = oggi;
         await salvaSospesoFirestore(s);
-        count++;
+        countPag++;
     }
 
-    alert(`Fatto! ${count} sospesi del 2025 segnati come pagati.`);
+    alert(`Fatto!\n📄 ${countFatt} sospesi segnati FATTURATI (clienti Michela)\n✅ ${countPag} sospesi chiusi come PAGATI`);
     renderSospPage();
     updateSospBadge();
 }
