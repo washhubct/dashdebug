@@ -44,10 +44,11 @@ export function buildSospesiArray() {
     }
 
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
-        entries.filter(e => e.saldo === 'SOSPESO').forEach(e => {
+        entries.forEach(e => {
+            if (e.saldo !== 'SOSPESO' && e.saldo !== 'FATTURATO') return;
             const sid = 'PREN-' + e._pid;
             if (state.localSosp.find(s => s._sid === sid)) return;
-            state.localSosp.push({
+            const obj = {
                 cliente: (e.cliente || 'DA PRENOTAZIONI').toUpperCase(),
                 data: date.split('-').reverse().join('/'),
                 vettura: e.vettura || '',
@@ -55,14 +56,16 @@ export function buildSospesiArray() {
                 note: e.note || '',
                 dataPagamento: '',
                 _sid: sid
-            });
+            };
+            if (e.saldo === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = ''; }
+            state.localSosp.push(obj);
         });
     }
 
-    (state.tapDB || []).filter(t => t.status === 'OUT' && t.pagamento === 'SOSPESO').forEach(t => {
+    (state.tapDB || []).filter(t => t.status === 'OUT' && (t.pagamento === 'SOSPESO' || t.pagamento === 'FATTURATO')).forEach(t => {
         const sid = 'TAP-' + t._id;
         if (state.localSosp.find(s => s._sid === sid)) return;
-        state.localSosp.push({
+        const obj = {
             cliente: (t.cliente || 'DA TAPPEZZERIA').toUpperCase(),
             data: t.dataOut || t.dataIn,
             vettura: 'TAPPEZZERIA ' + (t.modello || ''),
@@ -70,7 +73,9 @@ export function buildSospesiArray() {
             note: 'Tappezzeria',
             dataPagamento: '',
             _sid: sid
-        });
+        };
+        if (t.pagamento === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = ''; }
+        state.localSosp.push(obj);
     });
 
     updateSospBadge();
@@ -87,8 +92,52 @@ function getMeseAnno(dataStr) {
 }
 
 async function salvaSospesoFirestore(sospeso) {
-    if (!sospeso._sid || sospeso._sid.startsWith('PREN-') || sospeso._sid.startsWith('TAP-')) return;
     try {
+        if (!sospeso._sid) return;
+        
+        // Sospeso da PRENOTAZIONE → aggiorna il record prenotazione originale
+        if (sospeso._sid.startsWith('PREN-')) {
+            const prenId = sospeso._sid.replace('PREN-', '');
+            const updateData = {};
+            if (sospeso._pagato) {
+                updateData.saldato = 'SI';
+                updateData.saldo = sospeso._modPag || 'CONTANTI';
+            } else if (sospeso._fatturato) {
+                updateData.saldo = 'FATTURATO';
+            }
+            await fsUpdateDoc(fsDoc(db, 'prenotazioni', prenId), updateData);
+            // Aggiorna anche lo state locale
+            for (const [date, entries] of Object.entries(state.prenDB || {})) {
+                const entry = entries.find(e => e._pid === prenId);
+                if (entry) {
+                    if (sospeso._pagato) { entry.saldato = 'SI'; entry.saldo = sospeso._modPag || 'CONTANTI'; }
+                    else if (sospeso._fatturato) { entry.saldo = 'FATTURATO'; }
+                    break;
+                }
+            }
+            return;
+        }
+        
+        // Sospeso da TAPPEZZERIA → aggiorna il record tappezzeria originale
+        if (sospeso._sid.startsWith('TAP-')) {
+            const tapId = sospeso._sid.replace('TAP-', '');
+            const updateData = {};
+            if (sospeso._pagato) {
+                updateData.pagamento = sospeso._modPag || 'CONTANTI';
+            } else if (sospeso._fatturato) {
+                updateData.pagamento = 'FATTURATO';
+            }
+            await fsUpdateDoc(fsDoc(db, 'tappezzeria', tapId), updateData);
+            // Aggiorna anche lo state locale
+            const tap = (state.tapDB || []).find(t => t._id === tapId);
+            if (tap) {
+                if (sospeso._pagato) tap.pagamento = sospeso._modPag || 'CONTANTI';
+                else if (sospeso._fatturato) tap.pagamento = 'FATTURATO';
+            }
+            return;
+        }
+        
+        // Sospeso nativo Firestore → aggiorna direttamente
         const ref = fsDoc(db, 'sospesi', sospeso._sid);
         const updateData = {};
         if (sospeso._fatturato) {
