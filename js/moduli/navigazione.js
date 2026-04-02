@@ -1,84 +1,113 @@
 import { state } from '../state.js';
 
 export function initNavigazione() {
-    // 1. Creiamo lo sfondo scuro (Overlay) in automatico
-    let overlay = document.getElementById('sidebarOverlay');
-    if(!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'sidebarOverlay';
-        // Stile inline per evitare di farti toccare il CSS
-        overlay.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:99; opacity:0; transition:opacity 0.3s; backdrop-filter:blur(2px);';
-        document.body.appendChild(overlay);
-        
-        // Se clicco nello scuro, si chiude il menu
-        overlay.addEventListener('click', () => {
-            const sidebar = document.getElementById('sidebar');
-            if(sidebar) sidebar.classList.remove('open');
-            overlay.style.opacity = '0';
-            setTimeout(() => overlay.style.display = 'none', 300);
-        });
+    // Usa l'overlay già presente nell'HTML (id="sidebarOverlay")
+    const overlay = document.getElementById('sidebarOverlay');
+    const sidebar = document.getElementById('sidebar');
+    const closeBtn = document.getElementById('sbClose');
+
+    // --- Funzioni apri/chiudi ---
+    function openSidebar() {
+        if (!sidebar) return;
+        sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
     }
 
-    // 2. Bottone Hamburger
-    const mobToggles = document.querySelectorAll('.mob-toggle');
-    mobToggles.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const sidebar = document.getElementById('sidebar');
-            if(sidebar) {
-                sidebar.classList.toggle('open');
-                if(sidebar.classList.contains('open')) {
-                    sidebar.style.boxShadow = '4px 0 24px rgba(0,0,0,0.2)'; // Effetto ombra figo
-                    overlay.style.display = 'block';
-                    setTimeout(() => overlay.style.opacity = '1', 10);
-                } else {
-                    overlay.style.opacity = '0';
-                    setTimeout(() => overlay.style.display = 'none', 300);
-                }
+    function closeSidebar() {
+        if (!sidebar) return;
+        sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('show');
+        document.body.style.overflow = '';
+    }
+
+    // --- Hamburger ---
+    document.querySelectorAll('.mob-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sidebar && sidebar.classList.contains('open')) {
+                closeSidebar();
+            } else {
+                openSidebar();
             }
         });
     });
 
-    // 3. Gestione click sulle voci di menu
-    const navItems = document.querySelectorAll('.sb-item');
-    navItems.forEach(item => {
+    // --- Overlay chiude ---
+    if (overlay) overlay.addEventListener('click', closeSidebar);
+
+    // --- Bottone ✕ chiude ---
+    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+
+    // --- Swipe left chiude ---
+    let touchStartX = 0;
+    let touchStartY = 0;
+    if (sidebar) {
+        sidebar.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        sidebar.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+            if (dx < -60 && dy < 100) closeSidebar();
+        }, { passive: true });
+    }
+
+    // --- Click su voci di menu ---
+    document.querySelectorAll('.sb-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             let pageId = item.getAttribute('data-page');
             if (!pageId) {
-                const idAttr = item.getAttribute('id'); 
-                if(idAttr) pageId = idAttr.replace('nav-', '');
+                const idAttr = item.getAttribute('id');
+                if (idAttr) pageId = idAttr.replace('nav-', '');
             }
             if (pageId) goPage(pageId);
         });
     });
+
+    // --- Logout ---
+    const logoutBtn = sidebar?.querySelector('.sb-logout');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', closeSidebar);
+    }
 }
 
 export function goPage(id) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('show'));
     document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('on'));
-    
+
     const pageTarget = document.getElementById('page-' + id);
-    if(pageTarget) pageTarget.classList.add('show');
-    
+    if (pageTarget) pageTarget.classList.add('show');
+
     const nav = document.getElementById('nav-' + id);
-    if(nav) nav.classList.add('on');
-    
-    const titles = { cassa: ['💶','Incasso Giornaliero'], dashboard: ['📈','Dashboard Analitica'], abbonamenti: ['🅿️','Abbonamenti'], giornalieri: ['🎟️','Parcheggio a Ore'], prenotazioni: ['📋','Prenotazioni'], sospesi: ['⏳','Sospesi'], report: ['💰','Report Finanziario'], cancellazioni: ['🗑️','Registro Cancellazioni'] };
-    const t = titles[id] || ['',''];
-    
+    if (nav) nav.classList.add('on');
+
+    const titles = {
+        cassa: ['💶', 'Incasso Giornaliero'],
+        dashboard: ['📈', 'Dashboard Analitica'],
+        abbonamenti: ['🅿️', 'Abbonamenti'],
+        giornalieri: ['🎟️', 'Parcheggio a Ore'],
+        prenotazioni: ['📋', 'Prenotazioni'],
+        sospesi: ['⏳', 'Sospesi'],
+        report: ['💰', 'Report Finanziario'],
+        cancellazioni: ['🗑️', 'Registro Cancellazioni']
+    };
+    const t = titles[id] || ['', ''];
+
     const pIcon = document.getElementById('pageIcon');
     const pTitle = document.getElementById('pageTitle');
-    if(pIcon) pIcon.textContent = t[0];
-    if(pTitle) pTitle.textContent = t[1];
-    
-    // Chiudi il menu mobile e l'overlay quando si cambia pagina
+    if (pIcon) pIcon.textContent = t[0];
+    if (pTitle) pTitle.textContent = t[1];
+
+    // Chiudi sidebar mobile
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
-    if(sidebar) sidebar.classList.remove('open');
-    if(overlay) {
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.style.display = 'none', 300);
-    }
-    
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('show');
+    document.body.style.overflow = '';
+
     document.dispatchEvent(new CustomEvent('pageChanged', { detail: { pageId: id } }));
 }
