@@ -40,24 +40,21 @@ export function renderCassa() {
     if(!dStr) return;
     const dIta = dStr.split('-').reverse().join('/');
     
-    // Contatori per Metodo
     let eC = 0, eP = 0, eB = 0;
-    // Contatori per Categoria (Novità)
     let cLav = 0, cTap = 0, cPar = 0;
     
-    // 1. Somma da Prenotazioni (Lavaggi)
+    // 1. Prenotazioni (Lavaggi)
     (state.prenDB[dStr] || []).forEach(p => {
         if(p.saldato === 'SI') {
             let imp = pNum(p.prezzo);
             if(p.saldo === 'CONTANTI') eC += imp;
             else if(p.saldo === 'POS') eP += imp;
             else if(p.saldo === 'BONIFICO') eB += imp;
-            
-            cLav += imp; // Categoria Lavaggi
+            cLav += imp;
         }
     });
 
-    // 2. Somma da Tappezzeria
+    // 2. Tappezzeria
     state.tapDB.forEach(t => {
         if(t.status === 'OUT' && t.dataOut === dIta) {
             let imp = pNum(t.prezzo);
@@ -65,24 +62,22 @@ export function renderCassa() {
             if(mod === 'CONTANTI') eC += imp;
             else if(mod === 'POS') eP += imp;
             else if(mod === 'BONIFICO') eB += imp;
-            
-            cTap += imp; // Categoria Tappezzerie
+            cTap += imp;
         }
     });
 
-    // 3. Somma da Giornalieri (Parcheggio Ore)
+    // 3. Giornalieri (Parcheggio Ore)
     state.giornDB.forEach(g => {
         if(g.status === 'OUT' && g.dataOut === dStr) {
             let imp = pNum(g.prezzoFinale);
             if(g.pagamento === 'CONTANTI') eC += imp;
             else if(g.pagamento === 'POS') eP += imp;
             else if(g.pagamento === 'BONIFICO') eB += imp;
-            
-            cPar += imp; // Categoria Parcheggio
+            cPar += imp;
         }
     });
 
-    // 4. Somma da Abbonamenti (Parcheggio Abbonati)
+    // 4. Abbonamenti (Parcheggio Abbonati)
     state.localAbb.forEach(a => {
         if(a.PAGAMENTO === 'SI' && a['DATA PAGAMENTO'] === dIta) {
             let imp = pNum(a.IMPORTO);
@@ -90,12 +85,11 @@ export function renderCassa() {
             if(mod === 'CONTANTI') eC += imp;
             else if(mod === 'POS') eP += imp;
             else if(mod === 'BONIFICO') eB += imp;
-            
-            cPar += imp; // Categoria Parcheggio
+            cPar += imp;
         }
     });
 
-    // 5. Somma da Sospesi Saldati (Attribuzione intelligente alla categoria)
+    // 5. Sospesi Saldati
     state.localSosp.forEach(s => {
         if(s._pagato && s._dataPag === dIta) {
             let imp = pNum(s.importo);
@@ -103,14 +97,12 @@ export function renderCassa() {
             if(mod === 'CONTANTI') eC += imp;
             else if(mod === 'POS') eP += imp;
             else if(mod === 'BONIFICO' || mod === 'FATTURA') eB += imp;
-
-            // Capiamo se era un Lavaggio o una Tappezzeria dall'ID
             if(s._sid && s._sid.startsWith('PREN-')) cLav += imp;
             else if(s._sid && s._sid.startsWith('TAP-')) cTap += imp;
         }
     });
 
-    // --- Calcolo Uscite ---
+    // --- Uscite ---
     let uC = 0;
     let uHtml = '';
     let uList = state.usciteDB.filter(u => u.data === dStr);
@@ -126,16 +118,12 @@ export function renderCassa() {
         });
     }
 
-    // Aggiornamento DOM
     if(document.getElementById('cassaEntCont')) document.getElementById('cassaEntCont').textContent = fEur(eC);
     if(document.getElementById('cassaEntPos')) document.getElementById('cassaEntPos').textContent = fEur(eP);
     if(document.getElementById('cassaEntBon')) document.getElementById('cassaEntBon').textContent = fEur(eB);
-    
-    // Nuovi ID Categoria
     if(document.getElementById('cassaCatLav')) document.getElementById('cassaCatLav').textContent = fEur(cLav);
     if(document.getElementById('cassaCatTap')) document.getElementById('cassaCatTap').textContent = fEur(cTap);
     if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cPar);
-
     if(document.getElementById('uscitaTb')) document.getElementById('uscitaTb').innerHTML = uHtml;
     if(document.getElementById('cassaNetta')) document.getElementById('cassaNetta').textContent = fEur(eC - uC);
 }
@@ -152,6 +140,22 @@ async function addUscita() {
         const ref = await fsAddDoc(fsCollection(db, "uscite"), obj);
         obj._id = ref.id;
         state.usciteDB.push(obj);
+        
+        // Scrivi uscita in Prima Nota
+        try {
+            const dIta = dStr.split('-').reverse().join('/');
+            await fsAddDoc(fsCollection(db, "primaNota"), {
+                DATA: dIta, dataISO: dStr,
+                'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE',
+                'PRIMANOTA CLIENTI/FORNITORI': desc,
+                Descrizione: desc,
+                ENTRATA: 0, Entrata: 0,
+                USCITE: obj.importo, Uscite: obj.importo,
+                SOSPESO: 0, Sospeso: 0,
+                "MODALITA'": mod, timestamp: Date.now()
+            });
+        } catch(e) { console.warn("Errore Prima Nota uscita:", e); }
+        
         document.getElementById('uDesc').value = ''; document.getElementById('uImp').value = '';
         renderCassa();
     } catch(e) { alert("Errore Cloud"); }
