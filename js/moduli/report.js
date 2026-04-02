@@ -147,12 +147,32 @@ export function renderDash() {
         });
     }
 
-    // 3. Stampa dei 3 KPI nella Dashboard
+    // 3. Calcolo Costo Lavoro dalle Presenze Dipendenti
+    let costoLavoro = 0;
+    let dettaglioDip = {};
+    if (state.presenzeDB) {
+        state.presenzeDB.forEach(p => {
+            const d = p.dataISO ? new Date(p.dataISO) : pDate(p.data);
+            if (d && d >= state.dateFrom && d <= state.dateTo) {
+                costoLavoro += pNum(p.costoTotale);
+                if (p.dettaglio) {
+                    for (const [nome, val] of Object.entries(p.dettaglio)) {
+                        dettaglioDip[nome] = (dettaglioDip[nome] || 0) + pNum(val);
+                    }
+                }
+            }
+        });
+    }
+
+    // 4. Stampa dei KPI nella Dashboard
     const kpisEl = document.getElementById('kpis');
     if(kpisEl) {
+        let dipDetail = Object.entries(dettaglioDip).sort((a,b) => b[1] - a[1]).map(([n,v]) => `${n}: \u20AC${v.toLocaleString('it-IT')}`).join(' | ');
+        
         kpisEl.innerHTML = `
             <div class="kpi g"><div class="kpi-label">Entrate Gestionali (Periodo)</div><div class="kpi-val">${fEur(ent)}</div></div>
             <div class="kpi r"><div class="kpi-label">Uscite Gestionali (Periodo)</div><div class="kpi-val">${fEur(usc)}</div></div>
+            <div class="kpi" style="border-color:var(--red)"><div class="kpi-label">\uD83D\uDC77 Costo Lavoro (Periodo)</div><div class="kpi-val" style="color:var(--red)">${fEur(costoLavoro)}</div><div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dipDetail || 'Nessun dato presenze'}</div></div>
             <div class="kpi a"><div class="kpi-label">Sospesi Aperti (Periodo)</div><div class="kpi-val">${fEur(sospesiApertiPeriodo)}</div><div class="kpi-sub">Credito da incassare</div></div>
         `;
     }
