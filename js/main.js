@@ -54,7 +54,7 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'cassa') renderCassa();
     if(id === 'giornalieri') renderGiornalieri();
     if(id === 'prenotazioni') { renderPren(); renderTap(); }
-    if(id === 'sospesi') renderSospPage();
+    if(id === 'sospesi') { buildSospesiArray(); renderSospPage(); }
     if(id === 'cancellazioni') renderCancellazioni();
 });
 
