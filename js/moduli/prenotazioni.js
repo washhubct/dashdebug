@@ -9,9 +9,7 @@ const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:
 export function initPrenotazioni() {
     const prenData = document.getElementById('prenData');
     if (prenData) {
-        // FIX ANTIPROIETTILE: Se la data è vuota all'avvio, forziamo "Oggi"
         if (!prenData.value) prenData.value = fmtDI(new Date());
-
         prenData.addEventListener('change', renderPren);
         const btns = prenData.parentElement.querySelectorAll('button');
         btns.forEach(btn => {
@@ -28,7 +26,6 @@ export function initPrenotazioni() {
     const addPrenBtn = document.querySelector('#page-prenotazioni .form-panel.show:not([style*="bg4"]) .btn-primary');
     if (addPrenBtn) addPrenBtn.addEventListener('click', addPren);
 
-    // Tappezzeria: cerchiamo il bottone "Registra IN" nel secondo form-panel
     const allPanels = document.querySelectorAll('#page-prenotazioni .form-panel');
     allPanels.forEach(panel => {
         const h3 = panel.querySelector('h3');
@@ -42,16 +39,10 @@ export function initPrenotazioni() {
     document.getElementById('tapTb')?.addEventListener('click', handleTapActions);
 }
 
-// FIX: Ora spostare i giorni non genera più errori se il campo è vuoto
 function moveDate(days) {
     const prenData = document.getElementById('prenData');
     let d = new Date(prenData.value);
-    
-    // Se la data calcolata non è valida (NaN), usiamo la data di oggi in automatico
-    if (isNaN(d.getTime())) {
-        d = new Date();
-    }
-    
+    if (isNaN(d.getTime())) d = new Date();
     d.setDate(d.getDate() + days);
     prenData.value = fmtDI(d);
     renderPren();
@@ -278,9 +269,27 @@ async function toggleTap(id) {
         if (t.status === 'IN') {
             const mod = prompt("Metodo pagamento (CONTANTI, POS, SOSPESO)?", "CONTANTI");
             if (!mod) return;
+            const modUp = mod.toUpperCase();
             const dataOut = new Date().toLocaleDateString('it-IT');
-            await fsUpdateDoc(fsDoc(db, "tappezzeria", id), { status: 'OUT', pagamento: mod.toUpperCase(), dataOut: dataOut });
-            t.status = 'OUT'; t.pagamento = mod.toUpperCase(); t.dataOut = dataOut;
+            const dataISO = fmtDI(new Date());
+            await fsUpdateDoc(fsDoc(db, "tappezzeria", id), { status: 'OUT', pagamento: modUp, dataOut: dataOut });
+            t.status = 'OUT'; t.pagamento = modUp; t.dataOut = dataOut;
+            
+            // Scrivi in Prima Nota se non è sospeso
+            if (modUp !== 'SOSPESO') {
+                try {
+                    const imp = parseFloat(t.prezzo) || 0;
+                    await fsAddDoc(fsCollection(db, "primaNota"), {
+                        DATA: dataOut, dataISO: dataISO,
+                        'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO',
+                        'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
+                        Descrizione: 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
+                        ENTRATA: imp, Entrata: imp,
+                        USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
+                        "MODALITA'": modUp, timestamp: Date.now()
+                    });
+                } catch(e) { console.warn("Errore Prima Nota tappezzeria:", e); }
+            }
         } else {
             await fsUpdateDoc(fsDoc(db, "tappezzeria", id), { status: 'IN', pagamento: '', dataOut: '' });
             t.status = 'IN'; t.pagamento = ''; t.dataOut = '';
