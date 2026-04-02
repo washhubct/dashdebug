@@ -5,8 +5,7 @@ import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db } from '../firebase-conf
 
 // ─── CARICA STATO SOSPESI DA FIRESTORE ───────────────────────────
 export async function loadSospesiPagati() {
-    // Lo stato (_pagato, _fatturato, _modPag, _dataPag, _dataFatt) è ora nei documenti Firestore stessi
-    // Non serve più localStorage — i campi vengono letti direttamente dal documento
+    // Lo stato (_pagato, _fatturato, _modPag, _dataPag, _dataFatt) è nei documenti Firestore
 }
 
 let _sospesiInitialized = false;
@@ -17,7 +16,6 @@ export function initSospesi() {
     if (_sospesiInitialized) return;
     _sospesiInitialized = true;
 
-    // Filtri: Aperti | Fatturati | Pagati
     const filterBtns = document.querySelectorAll('#page-sospesi .qbtn');
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -35,7 +33,7 @@ export function initSospesi() {
     if (sospSrch) sospSrch.addEventListener('input', renderSospPage);
 }
 
-// ─── RACCOGLIE TUTTI I SOSPESI (Firebase + Prenotazioni + Tappezzeria) ───
+// ─── RACCOGLIE TUTTI I SOSPESI ───
 export function buildSospesiArray() {
     const firebaseSosp = state.localSosp.filter(s => s._sid && !s._sid.startsWith('PREN-') && !s._sid.startsWith('TAP-'));
 
@@ -45,11 +43,10 @@ export function buildSospesiArray() {
         state.localSosp = [...(state.storicoSospesi || [])];
     }
 
-    // Aggiungi sospesi da prenotazioni lavaggio
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         entries.filter(e => e.saldo === 'SOSPESO').forEach(e => {
             const sid = 'PREN-' + e._pid;
-            if (state.localSosp.find(s => s._sid === sid)) return; // evita duplicati
+            if (state.localSosp.find(s => s._sid === sid)) return;
             state.localSosp.push({
                 cliente: (e.cliente || 'DA PRENOTAZIONI').toUpperCase(),
                 data: date.split('-').reverse().join('/'),
@@ -62,7 +59,6 @@ export function buildSospesiArray() {
         });
     }
 
-    // Aggiungi sospesi da tappezzeria
     (state.tapDB || []).filter(t => t.status === 'OUT' && t.pagamento === 'SOSPESO').forEach(t => {
         const sid = 'TAP-' + t._id;
         if (state.localSosp.find(s => s._sid === sid)) return;
@@ -80,7 +76,7 @@ export function buildSospesiArray() {
     updateSospBadge();
 }
 
-// ─── HELPER: Estrai mese/anno da una data stringa ───
+// ─── HELPERS ───
 function getMeseAnno(dataStr) {
     if (!dataStr) return 'Senza data';
     const d = pDate(dataStr);
@@ -90,17 +86,7 @@ function getMeseAnno(dataStr) {
     return `${mesi[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// ─── HELPER: Check se data è nel 2025 o prima ───
-function isAnno2025oPrima(dataStr) {
-    if (!dataStr) return false;
-    const d = pDate(dataStr);
-    if (!d || isNaN(d.getTime())) return false;
-    return d.getFullYear() <= 2025;
-}
-
-// ─── SALVA STATO SINGOLO SOSPESO SU FIRESTORE ───
 async function salvaSospesoFirestore(sospeso) {
-    // Solo i sospesi con un vero ID Firestore (non PREN- o TAP-)
     if (!sospeso._sid || sospeso._sid.startsWith('PREN-') || sospeso._sid.startsWith('TAP-')) return;
     try {
         const ref = fsDoc(db, 'sospesi', sospeso._sid);
@@ -120,7 +106,6 @@ async function salvaSospesoFirestore(sospeso) {
     }
 }
 
-// ─── SCRIVI INCASSO IN PRIMA NOTA (quando Michela segna "Pagato") ───
 async function scriviPrimaNota(cliente, totale, mod, meseRif) {
     try {
         await fsAddDoc(fsCollection(db, 'primaNota'), {
@@ -133,7 +118,6 @@ async function scriviPrimaNota(cliente, totale, mod, meseRif) {
             centro: 'Lavaggio',
             timestamp: Date.now()
         });
-        console.log(`Prima Nota: incasso €${totale} da ${cliente} (${mod})`);
     } catch (e) {
         console.error('Errore scrittura Prima Nota:', e);
     }
@@ -153,12 +137,11 @@ export function updateSospBadge() {
     }
 }
 
-// ─── RENDER PAGINA SOSPESI ───────────────────────────────────────
+// ─── RENDER PAGINA SOSPESI ───
 export function renderSospPage() {
     const srch = (document.getElementById('sospSrch')?.value || '').toLowerCase();
     const filter = state.sospFilter || 'aperti';
 
-    // Calcola KPI sempre sugli aperti (non fatturati, non pagati)
     const aperti = state.localSosp.filter(s => !s._pagato && !s._fatturato);
     const fatturati = state.localSosp.filter(s => s._fatturato && !s._pagato);
     const totDaInc = aperti.reduce((s, r) => s + r.importo, 0) + fatturati.reduce((s, r) => s + r.importo, 0);
@@ -173,17 +156,11 @@ export function renderSospPage() {
     if (kpiLav) kpiLav.textContent = aperti.length + fatturati.length;
     if (totBadge) totBadge.textContent = fEur(totDaInc);
 
-    // Filtra in base al tab attivo
     let items;
-    if (filter === 'fatturati') {
-        items = fatturati;
-    } else if (filter === 'pagati') {
-        items = state.localSosp.filter(s => s._pagato);
-    } else {
-        items = aperti;
-    }
+    if (filter === 'fatturati') items = fatturati;
+    else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato);
+    else items = aperti;
 
-    // Applica ricerca
     if (srch) {
         items = items.filter(s =>
             (s.cliente || '').toLowerCase().includes(srch) ||
@@ -191,7 +168,6 @@ export function renderSospPage() {
         );
     }
 
-    // Raggruppa per cliente
     const byClient = {};
     items.forEach(s => {
         if (!byClient[s.cliente]) byClient[s.cliente] = { records: [], total: 0 };
@@ -213,51 +189,35 @@ export function renderSospPage() {
         .map(([cliente, data]) => {
             const rows = data.records.sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0));
 
-            // --- BOTTONI HEADER PER CLIENTE ---
             let btnClienteHtml = '';
             if (filter === 'aperti') {
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap">
-                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px">💵 Salda Tutto Contanti</button>
-                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px">💳 Salda Tutto POS</button>
-                    <button class="btn btn-fatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;border-color:var(--amb);color:var(--amb)">📄 Segna Fatturato</button>
+                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px" title="Salda TUTTI i sospesi di questo cliente in CONTANTI e registra l'incasso">💵 Salda Tutto Contanti</button>
+                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px" title="Salda TUTTI i sospesi di questo cliente con POS e registra l'incasso">💳 Salda Tutto POS</button>
+                    <button class="btn btn-fatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;border-color:var(--amb);color:var(--amb)" title="Segna TUTTI come FATTURATI — restano in attesa di pagamento nella tab Fatturati">📄 Segna Fatturato</button>
                 </div>`;
             } else if (filter === 'fatturati') {
-                // Raggruppa per mese per i fatturati
                 const mesi = {};
-                rows.forEach(r => {
-                    const m = getMeseAnno(r.data);
-                    if (!mesi[m]) mesi[m] = 0;
-                    mesi[m] += r.importo;
-                });
+                rows.forEach(r => { const m = getMeseAnno(r.data); if (!mesi[m]) mesi[m] = 0; mesi[m] += r.importo; });
                 const mesiInfo = Object.entries(mesi).map(([m, t]) => `${m}: ${fEur(t)}`).join(' · ');
-
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">✅ Pagato Contanti</button>
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">✅ Pagato POS</button>
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="BONIFICO" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">✅ Pagato Bonifico</button>
+                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO in contanti — registra incasso in Prima Nota">✅ Pagato Contanti</button>
+                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO con POS — registra incasso in Prima Nota">✅ Pagato POS</button>
+                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="BONIFICO" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO con bonifico — registra incasso in Prima Nota">✅ Pagato Bonifico</button>
                     <span style="font:400 10px var(--mono);color:var(--tx2);margin-left:auto">${mesiInfo}</span>
                 </div>`;
             }
 
-            // --- RIGHE TABELLA ---
             let trHtml = '';
             if (filter === 'fatturati') {
-                // Raggruppa le righe per mese
                 const byMese = {};
-                rows.forEach(r => {
-                    const m = getMeseAnno(r.data);
-                    if (!byMese[m]) byMese[m] = [];
-                    byMese[m].push(r);
-                });
-
+                rows.forEach(r => { const m = getMeseAnno(r.data); if (!byMese[m]) byMese[m] = []; byMese[m].push(r); });
                 for (const [mese, recs] of Object.entries(byMese)) {
                     const totMese = recs.reduce((s, r) => s + r.importo, 0);
                     trHtml += `<tr style="background:var(--amb1)">
-                        <td colspan="4" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">
-                            📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}
-                        </td>
+                        <td colspan="4" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}</td>
                         <td style="text-align:right;padding-right:10px">
-                            <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" data-mod="BONIFICO" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">✅ Pagato</button>
+                            <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" data-mod="BONIFICO" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Conferma pagamento solo per ${mese}">✅ Pagato</button>
                         </td>
                     </tr>`;
                     recs.forEach(r => {
@@ -276,11 +236,10 @@ export function renderSospPage() {
                     if (filter === 'pagati') {
                         azioniHtml = `<td><span class="badge g">${r._modPag || 'SI'}</span><br><span style="font:400 9px var(--mono);color:var(--tx3)">${r._dataPag || ''}</span></td>`;
                     } else {
-                        // Aperti
                         azioniHtml = `<td style="white-space:nowrap">
-                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Contanti">💵</button>
-                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="POS" title="POS">💳</button>
-                            <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna Fatturato" style="color:var(--amb)">📄</button>
+                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Segna PAGATO in contanti — registra subito l'incasso">💵</button>
+                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="POS" title="Segna PAGATO con POS — registra subito l'incasso">💳</button>
+                            <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna FATTURATO — resta in attesa di pagamento" style="color:var(--amb)">📄</button>
                         </td>`;
                     }
                     trHtml += `<tr>
@@ -309,27 +268,21 @@ export function renderSospPage() {
         }).join('');
 
     // ─── EVENT LISTENERS ───
-    // Salda singolo (aperto → pagato direttamente)
     container.querySelectorAll('.btn-salda-singolo').forEach(btn => {
         btn.addEventListener('click', () => saldaSingolo(btn.dataset.sid, btn.dataset.mod));
     });
-    // Salda tutto cliente (aperto → pagato)
     container.querySelectorAll('.btn-salda-cli').forEach(btn => {
         btn.addEventListener('click', () => saldaCliente(btn.dataset.cli, btn.dataset.mod));
     });
-    // Segna fatturato singolo
     container.querySelectorAll('.btn-fatt-singolo').forEach(btn => {
         btn.addEventListener('click', () => segnaFatturatoSingolo(btn.dataset.sid));
     });
-    // Segna fatturato tutto il cliente
     container.querySelectorAll('.btn-fatt-cli').forEach(btn => {
         btn.addEventListener('click', () => segnaFatturatoCliente(btn.dataset.cli));
     });
-    // Segna pagato tutto il cliente (da tab fatturati)
     container.querySelectorAll('.btn-pagato-cli').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoCliente(btn.dataset.cli, btn.dataset.mod));
     });
-    // Segna pagato per mese (da tab fatturati)
     container.querySelectorAll('.btn-pagato-mese').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoMese(btn.dataset.cli, btn.dataset.mese, btn.dataset.mod));
     });
@@ -339,7 +292,6 @@ export function renderSospPage() {
 // AZIONI
 // ════════════════════════════════════════════════════════════════════
 
-// --- SALDA SINGOLO (Aperto → Pagato diretto, per contanti/POS) ---
 function saldaSingolo(sid, mod) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
@@ -353,7 +305,6 @@ function saldaSingolo(sid, mod) {
     renderCassa();
 }
 
-// --- SALDA TUTTO CLIENTE (Aperto → Pagato diretto) ---
 function saldaCliente(cliente, mod) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
@@ -361,21 +312,18 @@ function saldaCliente(cliente, mod) {
 
     const oggi = new Date().toLocaleDateString('it-IT');
     const totale = aperti.reduce((s, r) => s + r.importo, 0);
-
     aperti.forEach(s => {
         s._pagato = true;
         s._modPag = mod;
         s._dataPag = oggi;
         salvaSospesoFirestore(s);
     });
-
     scriviPrimaNota(cliente, totale, mod, 'Saldo completo');
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-// --- SEGNA FATTURATO SINGOLO (Aperto → Fatturato) ---
 function segnaFatturatoSingolo(sid) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
@@ -386,7 +334,6 @@ function segnaFatturatoSingolo(sid) {
     updateSospBadge();
 }
 
-// --- SEGNA FATTURATO TUTTO CLIENTE (Aperto → Fatturato) ---
 function segnaFatturatoCliente(cliente) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
@@ -398,12 +345,10 @@ function segnaFatturatoCliente(cliente) {
         s._dataFatt = oggi;
         salvaSospesoFirestore(s);
     });
-
     renderSospPage();
     updateSospBadge();
 }
 
-// --- SEGNA PAGATO TUTTO CLIENTE (Fatturato → Pagato, Michela) ---
 function segnaPagatoCliente(cliente, mod) {
     const fatturati = state.localSosp.filter(s => s.cliente === cliente && s._fatturato && !s._pagato);
     if (!fatturati.length) return;
@@ -417,14 +362,12 @@ function segnaPagatoCliente(cliente, mod) {
         s._dataPag = oggi;
         salvaSospesoFirestore(s);
     });
-
     scriviPrimaNota(cliente, totale, mod, 'Fatture saldate');
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-// --- SEGNA PAGATO PER MESE (Fatturato → Pagato, singolo mese) ---
 function segnaPagatoMese(cliente, mese, mod) {
     const items = state.localSosp.filter(s =>
         s.cliente === cliente && s._fatturato && !s._pagato && getMeseAnno(s.data) === mese
@@ -440,85 +383,8 @@ function segnaPagatoMese(cliente, mese, mod) {
         s._dataPag = oggi;
         salvaSospesoFirestore(s);
     });
-
     scriviPrimaNota(cliente, totale, mod, mese);
     renderSospPage();
     updateSospBadge();
     renderCassa();
-}
-
-// ════════════════════════════════════════════════════════════════════
-// CLIENTI DA LISTA MICHELA — da NON chiudere, segnare come FATTURATI
-// ════════════════════════════════════════════════════════════════════
-const CLIENTI_MICHELA = [
-    'VECCHIO',
-    'GAETANO',
-    'SERVIZI METR DI CT',
-    'D\'AGATA',
-    'DAGATA',
-    'MARIO NICOTRA',
-    'PARCHEGGIO RAGAZZO SCUOLA BICI',
-    'EGIDIO-X1',
-    'EGIDIO',
-    'LORENZO- MINI COOPER',
-    'LORENZO',
-    'RS MOTORSPORT'
-];
-
-function isClienteMichela(nomeCliente) {
-    if (!nomeCliente) return false;
-    const nome = nomeCliente.toUpperCase().trim();
-    return CLIENTI_MICHELA.some(c => nome.includes(c.toUpperCase()) || c.toUpperCase().includes(nome));
-}
-
-// ════════════════════════════════════════════════════════════════════
-// PULIZIA SOSPESI 2025:
-//   - Clienti lista Michela → FATTURATI (in attesa pagamento)
-//   - Tutti gli altri ≤2025 → PAGATI (chiusura)
-// ════════════════════════════════════════════════════════════════════
-export async function pulisciSospesi2025() {
-    const tuttiAperti = state.localSosp.filter(s => !s._pagato && !s._fatturato);
-    
-    // Clienti Michela: segna come FATTURATI (qualsiasi data)
-    const daFatturare = tuttiAperti.filter(s => isClienteMichela(s.cliente));
-    // Tutti gli altri con data ≤ 2025: segna come PAGATI
-    const daChiudere = tuttiAperti.filter(s => !isClienteMichela(s.cliente) && isAnno2025oPrima(s.data));
-    
-    if (!daFatturare.length && !daChiudere.length) {
-        alert('Nessun sospeso da elaborare.');
-        return;
-    }
-    
-    const msg = `Operazione pulizia sospesi:\n\n` +
-        `📄 ${daFatturare.length} sospesi clienti Michela → FATTURATI (in attesa pagamento)\n` +
-        `✅ ${daChiudere.length} sospesi altri clienti ≤2025 → PAGATI (chiusura)\n\n` +
-        `Procedere?`;
-    
-    if (!confirm(msg)) return;
-
-    const oggi = new Date().toLocaleDateString('it-IT');
-    let countFatt = 0, countPag = 0;
-    
-    // Segna i clienti Michela come FATTURATI
-    for (const s of daFatturare) {
-        s._fatturato = true;
-        s._dataFatt = oggi;
-        await salvaSospesoFirestore(s);
-        countFatt++;
-    }
-    
-    // Segna tutti gli altri ≤2025 come PAGATI
-    for (const s of daChiudere) {
-        s._pagato = true;
-        s._modPag = 'CHIUSURA 2025';
-        s._dataPag = oggi;
-        s._fatturato = true;
-        s._dataFatt = oggi;
-        await salvaSospesoFirestore(s);
-        countPag++;
-    }
-
-    alert(`Fatto!\n📄 ${countFatt} sospesi segnati FATTURATI (clienti Michela)\n✅ ${countPag} sospesi chiusi come PAGATI`);
-    renderSospPage();
-    updateSospBadge();
 }
