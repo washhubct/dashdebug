@@ -5,7 +5,6 @@ let ch1 = null;
 let ch2 = null;
 
 export function initReport() {
-    // Inizializza Date Report Finanziario
     const n = new Date();
     const repFrom = document.getElementById('repFrom');
     const repTo = document.getElementById('repTo');
@@ -16,44 +15,103 @@ export function initReport() {
     if(repFrom) repFrom.addEventListener('change', renderReport);
     if(repTo) repTo.addEventListener('change', renderReport);
 
-    // Inizializza Chat AI
     const chatIn = document.getElementById('chatIn');
     const chatBtn = document.querySelector('.chat-input button');
-    
-    if(chatIn) {
-        chatIn.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') sendChat();
-        });
-    }
-    if(chatBtn) {
-        chatBtn.addEventListener('click', sendChat);
-    }
+    if(chatIn) chatIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+    if(chatBtn) chatBtn.addEventListener('click', sendChat);
 }
 
+// ─── HELPER: estrai data da un record Prima Nota (compatibile con tutti i formati) ───
+function getDataRecord(r) {
+    // Formato Firestore nuovo: campo "data" con "DD/MM/YYYY" o "dataISO" con "YYYY-MM-DD"
+    // Formato vecchio Google Sheets: campo "DATA" o "Data"
+    if (r.dataISO) return new Date(r.dataISO);
+    const raw = r.data || r.DATA || r.Data || '';
+    if (!raw) return null;
+    // Se è già un Date object
+    if (raw instanceof Date) return raw;
+    // Se è stringa ISO "YYYY-MM-DD"
+    if (typeof raw === 'string' && raw.match(/^\d{4}-\d{2}-\d{2}/)) return new Date(raw);
+    // Altrimenti prova pDate (DD/MM/YYYY)
+    return pDate(raw);
+}
+
+// ─── HELPER: estrai importo entrata da un record ───
+function getEntrata(r) {
+    return pNum(r.importo && r.tipo === 'ENTRATA' ? r.importo : (r.ENTRATA || r.Entrata || 0));
+}
+
+// ─── HELPER: estrai importo uscita da un record ───
+function getUscita(r) {
+    // Nuovo formato: tipo === 'USCITA' con campo importo
+    if (r.tipo === 'USCITA' && r.importo) return pNum(r.importo);
+    return pNum(r.USCITE || r.Uscite || r.USCITA || 0);
+}
+
+// ─── HELPER: estrai sospeso da un record ───
+function getSospeso(r) {
+    return pNum(r.SOSPESO || r.Sospeso || 0);
+}
+
+// ─── HELPER: estrai centro di costo da un record ───
+function getCentroCosto(r) {
+    return String(r.centro || r['CENTRO DI COSTO'] || r.Categoria || r.categoria || 'Altro').trim();
+}
+
+// ─── HELPER: estrai descrizione da un record ───
+function getDescrizione(r) {
+    return String(r.descrizione || r['PRIMANOTA CLIENTI/FORNITORI'] || r.Descrizione || '').toUpperCase();
+}
+
+// ─── HELPER: crea data fine giornata (23:59:59) per filtro inclusivo ───
+function endOfDay(dateStr) {
+    const d = new Date(dateStr);
+    d.setHours(23, 59, 59, 999);
+    return d;
+}
+
+// ─── HELPER: crea data inizio giornata (00:00:00) ───
+function startOfDay(dateStr) {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+// ─── FILTRA RIGHE PER PERIODO ───
+function filtraRighePeriodo(fromVal, toVal) {
+    if (!state.rawData?.primaNota?.rows) return [];
+    const from = startOfDay(fromVal);
+    const to = endOfDay(toVal);
+    return state.rawData.primaNota.rows.filter(r => {
+        const d = getDataRecord(r);
+        return d && d >= from && d <= to;
+    });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// REPORT FINANZIARIO
+// ════════════════════════════════════════════════════════════════════
 export function renderReport() {
     if (state.currentUser?.role !== 'admin') return;
     
     const fromVal = document.getElementById('repFrom')?.value;
     const toVal = document.getElementById('repTo')?.value;
-    if (!fromVal || !toVal || !state.rawData?.primaNota?.rows) return;
+    if (!fromVal || !toVal) return;
 
-    const from = new Date(fromVal), to = new Date(toVal);
-    const rows = state.rawData.primaNota.rows.filter(r => {
-        // Supporta sia dataISO (YYYY-MM-DD) che DATA (DD/MM/YYYY)
-        const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
-        return d && d >= from && d <= to;
-    });
+    const from = startOfDay(fromVal);
+    const to = endOfDay(toVal);
+    const rows = filtraRighePeriodo(fromVal, toVal);
 
     let totEntrate = 0, totUscitePN = 0, totSospesi = 0;
     let entByCat = {};
     let uscByCat = {};
 
     rows.forEach(r => {
-        const ent = pNum(r.ENTRATA || r.Entrata);
-        const usc = pNum(r.USCITE || r.Uscite || r.USCITA);
-        const sosp = pNum(r.SOSPESO || r.Sospeso);
-        const cc = String(r['CENTRO DI COSTO'] || r.Categoria || 'Altro').trim();
-        const desc = String(r['PRIMANOTA CLIENTI/FORNITORI'] || r.Descrizione || '').toUpperCase();
+        const ent = getEntrata(r);
+        const usc = getUscita(r);
+        const sosp = getSospeso(r);
+        const cc = getCentroCosto(r);
+        const desc = getDescrizione(r);
 
         totEntrate += ent;
         totUscitePN += usc;
@@ -62,7 +120,6 @@ export function renderReport() {
         if (ent > 0) { entByCat[cc] = (entByCat[cc] || 0) + ent; }
         if (usc > 0) {
             let cat = 'Altre Uscite';
-            // Riconosciamo pagamenti dipendenti con più keyword
             const isDipendente = desc.includes('STIPEND') || desc.includes('PAGAMENT') || desc.includes('RAGAZZI') || desc.includes('ACCONTO') || 
                 desc.includes('SONY') || desc.includes('PARAM') || desc.includes('HAPPY') || desc.includes('SHENTER') || 
                 desc.includes('MENTA') || desc.includes('CUMAR') || desc.includes('XXX') || desc.includes('SURI');
@@ -74,32 +131,25 @@ export function renderReport() {
         }
     });
 
-    // Costi fissi mensili automatici
+    // Costi fissi mensili
     const mesiNelPeriodo = Math.max(1, Math.round((to - from) / (30 * 864e5)));
     
-    // Affitto: €1.560/mese (netto, IVA esclusa - partita di giro)
-    const affittoMensile = 1560;
-    const affittoTot = affittoMensile * mesiNelPeriodo;
+    const affittoTot = 1560 * mesiNelPeriodo;
     uscByCat['Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = affittoTot;
     
-    // Operatore fisso: €1.400/mese
     const costoOperatore = 1400 * mesiNelPeriodo;
     uscByCat['Operatore Lavaggio (fisso)'] = costoOperatore;
     
-    // Luce: €1.000/mese media
     const costoLuce = 1000 * mesiNelPeriodo;
     uscByCat['Luce (media)'] = costoLuce;
     
-    // Acqua: €390/mese media
     const costoAcqua = 390 * mesiNelPeriodo;
     uscByCat['Acqua (media)'] = costoAcqua;
     
-    // Assicurazione: €988/anno = €82,33/mese
     const costoAssicurazione = 82.33 * mesiNelPeriodo;
     uscByCat['Assicurazione'] = costoAssicurazione;
     
-    // Consumabili: 3% fatturato lavaggi
-    const fatLavaggio = entByCat['LAVAGGIO'] || 0;
+    const fatLavaggio = entByCat['LAVAGGIO'] || entByCat['Lavaggio'] || 0;
     const consumabili = fatLavaggio * 0.03;
     if (consumabili > 0) uscByCat['Prodotti Consumabili (3% Lav.)'] = consumabili;
 
@@ -147,43 +197,46 @@ export function renderReport() {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════
+// DASHBOARD ANALITICA
+// ════════════════════════════════════════════════════════════════════
 export function renderDash() {
     if (!state.rawData || state.currentUser?.role !== 'admin') return;
     
-    // 1. Calcolo Entrate e Uscite dalla Prima Nota
+    const from = startOfDay(fmtDI(state.dateFrom));
+    const to = endOfDay(fmtDI(state.dateTo));
+    
     const rows = (state.rawData?.primaNota?.rows || []).filter(r => {
-        const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
-        return d && d >= state.dateFrom && d <= state.dateTo;
+        const d = getDataRecord(r);
+        return d && d >= from && d <= to;
     });
 
     let ent = 0, usc = 0;
     rows.forEach(r => {
-        ent += pNum(r.ENTRATA || r.Entrata);
-        usc += pNum(r.USCITE || r.Uscite || r.USCITA);
+        ent += getEntrata(r);
+        usc += getUscita(r);
     });
 
-    // 2. NUOVO CALCOLO: Sospesi ancora aperti generati nel periodo selezionato
+    // Sospesi aperti nel periodo
     let sospesiApertiPeriodo = 0;
     if (state.localSosp) {
         state.localSosp.forEach(s => {
-            // Controlliamo solo quelli NON pagati
             if (!s._pagato) {
                 const dSosp = pDate(s.data);
-                // Se la data rientra nel range della dashboard, lo sommiamo
-                if (dSosp && dSosp >= state.dateFrom && dSosp <= state.dateTo) {
+                if (dSosp && dSosp >= from && dSosp <= to) {
                     sospesiApertiPeriodo += pNum(s.importo);
                 }
             }
         });
     }
 
-    // 3. Calcolo Costo Lavoro dalle Presenze Dipendenti
+    // Costo Lavoro
     let costoLavoro = 0;
     let dettaglioDip = {};
     if (state.presenzeDB) {
         state.presenzeDB.forEach(p => {
             const d = p.dataISO ? new Date(p.dataISO) : pDate(p.data);
-            if (d && d >= state.dateFrom && d <= state.dateTo) {
+            if (d && d >= from && d <= to) {
                 costoLavoro += pNum(p.costoTotale);
                 if (p.dettaglio) {
                     for (const [nome, val] of Object.entries(p.dettaglio)) {
@@ -194,7 +247,6 @@ export function renderDash() {
         });
     }
 
-    // 4. Stampa dei KPI nella Dashboard
     const kpisEl = document.getElementById('kpis');
     if(kpisEl) {
         let dipDetail = Object.entries(dettaglioDip).sort((a,b) => b[1] - a[1]).map(([n,v]) => `${n}: \u20AC${v.toLocaleString('it-IT')}`).join(' | ');
@@ -209,6 +261,7 @@ export function renderDash() {
 
     renderCharts(rows);
 }
+
 function renderCharts(rows) {
     const months = [];
     const d = new Date(state.dateFrom.getFullYear(), state.dateFrom.getMonth(), 1);
@@ -228,12 +281,12 @@ function renderCharts(rows) {
     months.forEach(m => byM[m] = { ent: 0, usc: 0, lav: 0, par: 0 });
     
     rows.forEach(r => {
-        const dt = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
+        const dt = getDataRecord(r);
         if (!dt) return;
         const mk = gMK(dt);
         if (!byM[mk]) return;
-        const e = pNum(r.ENTRATA || r.Entrata), u = pNum(r.USCITE || r.Uscite || r.USCITA);
-        const cc = String(r['CENTRO DI COSTO'] || r.Categoria || '').toUpperCase();
+        const e = getEntrata(r), u = getUscita(r);
+        const cc = getCentroCosto(r).toUpperCase();
         
         byM[mk].ent += e;
         byM[mk].usc += u;
@@ -303,15 +356,12 @@ async function sendChat() {
     msgs.scrollTop = msgs.scrollHeight;
 
     try {
-        const rows = (state.rawData?.primaNota?.rows || []).filter(r => {
-            const d = r.dataISO ? new Date(r.dataISO) : pDate(r.DATA || r.Data);
-            return d && d >= state.dateFrom && d <= state.dateTo;
-        });
+        const rows = filtraRighePeriodo(fmtDI(state.dateFrom), fmtDI(state.dateTo));
         
         let ent = 0, usc = 0;
         rows.forEach(r => {
-            ent += pNum(r.ENTRATA || r.Entrata);
-            usc += pNum(r.USCITE || r.Uscite || r.USCITA);
+            ent += getEntrata(r);
+            usc += getUscita(r);
         });
 
         const ctx = `Dati WASH HUB:\n- Entrate: €${ent.toFixed(2)}\n- Uscite: €${usc.toFixed(2)}\n- Margine: €${(ent - usc).toFixed(2)}\n- Abbonati: ${state.localAbb.length}\n- Sospesi aperti: ${state.localSosp.filter(s => !s._pagato).length}\n\nDomanda: ${text}`;
