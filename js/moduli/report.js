@@ -62,7 +62,11 @@ export function renderReport() {
         if (ent > 0) { entByCat[cc] = (entByCat[cc] || 0) + ent; }
         if (usc > 0) {
             let cat = 'Altre Uscite';
-            if (desc.includes('STIPEND') || desc.includes('PAGAMENT') || desc.includes('RAGAZZI')) cat = 'Personale Lavaggio';
+            // Riconosciamo pagamenti dipendenti con più keyword
+            const isDipendente = desc.includes('STIPEND') || desc.includes('PAGAMENT') || desc.includes('RAGAZZI') || desc.includes('ACCONTO') || 
+                desc.includes('SONY') || desc.includes('PARAM') || desc.includes('HAPPY') || desc.includes('SHENTER') || 
+                desc.includes('MENTA') || desc.includes('CUMAR') || desc.includes('XXX') || desc.includes('SURI');
+            if (isDipendente) cat = 'Personale Lavaggio';
             else if (desc.includes('FORNITOR')) cat = 'Fornitori';
             else if (desc.includes('UTENZ')) cat = 'Utenze';
             else if (desc.includes('MANUTENZ')) cat = 'Manutenzione';
@@ -70,11 +74,16 @@ export function renderReport() {
         }
     });
 
+    // Costo fisso operatore lavaggio: €1.400/mese
+    const mesiNelPeriodo = Math.max(1, Math.round((to - from) / (30 * 864e5)));
+    const costoOperatore = 1400 * mesiNelPeriodo;
+    uscByCat['Operatore Lavaggio (fisso)'] = costoOperatore;
+
     const fatLavaggio = entByCat['LAVAGGIO'] || 0;
     const consumabili = fatLavaggio * 0.03;
     if (consumabili > 0) uscByCat['Prodotti Consumabili (3% Lav.)'] = consumabili;
 
-    const totUscite = totUscitePN + consumabili;
+    const totUscite = totUscitePN + consumabili + costoOperatore;
     const margine = totEntrate - totUscite;
     const margPct = totEntrate > 0 ? ((margine / totEntrate) * 100).toFixed(1) : '0.0';
 
