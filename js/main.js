@@ -10,7 +10,7 @@ import { initLog, renderCancellazioni } from './moduli/log.js';
 import { initGiornalieri, renderGiornalieri } from './moduli/giornalieri.js';
 import { initPrenotazioni, renderPren, renderTap } from './moduli/prenotazioni.js';
 import { initAbbonamenti, renderAbb } from './moduli/abbonamenti.js';
-import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati, pulisciSospesi2025 } from './moduli/sospesi.js';
+import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } from './moduli/sospesi.js';
 import { initReport, renderReport, renderDash } from './moduli/report.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -205,13 +205,6 @@ async function initFirebaseData() {
     
     if(!document.querySelector('.page.show') || document.querySelector('.page.show').id === 'page-dashboard') {
         goPage('cassa');
-    }
-
-    // Binding bottone pulizia sospesi 2025
-    const btnPulizia = document.getElementById('btnPulizia2025');
-    if (btnPulizia && !btnPulizia._bound) {
-        btnPulizia._bound = true;
-        btnPulizia.addEventListener('click', () => pulisciSospesi2025());
     }
 }
 
