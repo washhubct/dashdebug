@@ -170,6 +170,16 @@ async function initFirebaseData() {
             if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
         }
 
+        // Carica Presenze Dipendenti per Dashboard Analitica (costo lavoro)
+        try {
+            const snapPres = await fsGetDocs(fsCollection(db, "presenzeDipendenti"));
+            state.presenzeDB = [];
+            snapPres.forEach(docSnap => { state.presenzeDB.push(docSnap.data()); });
+            console.log(`Presenze caricate: ${state.presenzeDB.length} record`);
+        } catch(presErr) {
+            console.warn("Presenze non disponibili:", presErr.message);
+        }
+
         if (upd) upd.textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
     } catch(e) { 
