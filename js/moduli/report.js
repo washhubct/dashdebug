@@ -178,8 +178,8 @@ function calcolaDatiOperativi(fromStr, toStr) {
         costoPersonale, dettaglioDip,
         costiFissi, consumabili,
         // Margine
-        margine: fatturato - usciteTot - costiFissi.totale - consumabili,
-        marginePct: fatturato > 0 ? ((fatturato - usciteTot - costiFissi.totale - consumabili) / fatturato * 100).toFixed(1) : '0.0',
+        margine: fatturato - usciteTot - costiFissi.totale - consumabili - costoPersonale,
+        marginePct: fatturato > 0 ? ((fatturato - usciteTot - costiFissi.totale - consumabili - costoPersonale) / fatturato * 100).toFixed(1) : '0.0',
         // Per grafici
         from, to
     };
