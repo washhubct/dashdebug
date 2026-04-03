@@ -43,11 +43,19 @@ export function buildSospesiArray() {
         state.localSosp = [...(state.storicoSospesi || [])];
     }
 
+    // Raccogli gli origineSid già presenti nei record Firestore (sospesi pagati/fatturati da PREN-/TAP-)
+    const originiGiaPresenti = new Set();
+    state.localSosp.forEach(s => {
+        if (s.origineSid) originiGiaPresenti.add(s.origineSid);
+    });
+
+    // Aggiungi sospesi da prenotazioni (solo se non già salvati come record storico)
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         entries.forEach(e => {
             if (e.saldo !== 'SOSPESO' && e.saldo !== 'FATTURATO') return;
             const sid = 'PREN-' + e._pid;
             if (state.localSosp.find(s => s._sid === sid)) return;
+            if (originiGiaPresenti.has(sid)) return; // già salvato come record storico
             const obj = {
                 cliente: (e.cliente || 'DA PRENOTAZIONI').toUpperCase(),
                 data: date.split('-').reverse().join('/'),
@@ -62,9 +70,11 @@ export function buildSospesiArray() {
         });
     }
 
+    // Aggiungi sospesi da tappezzeria (solo se non già salvati come record storico)
     (state.tapDB || []).filter(t => t.status === 'OUT' && (t.pagamento === 'SOSPESO' || t.pagamento === 'FATTURATO')).forEach(t => {
         const sid = 'TAP-' + t._id;
         if (state.localSosp.find(s => s._sid === sid)) return;
+        if (originiGiaPresenti.has(sid)) return;
         const obj = {
             cliente: (t.cliente || 'DA TAPPEZZERIA').toUpperCase(),
             data: t.dataOut || t.dataIn,
@@ -95,7 +105,7 @@ async function salvaSospesoFirestore(sospeso) {
     try {
         if (!sospeso._sid) return;
         
-        // Sospeso da PRENOTAZIONE → aggiorna il record prenotazione originale
+        // Sospeso da PRENOTAZIONE → aggiorna prenotazione + salva storico in collezione sospesi
         if (sospeso._sid.startsWith('PREN-')) {
             const prenId = sospeso._sid.replace('PREN-', '');
             const updateData = {};
@@ -106,7 +116,7 @@ async function salvaSospesoFirestore(sospeso) {
                 updateData.saldo = 'FATTURATO';
             }
             await fsUpdateDoc(fsDoc(db, 'prenotazioni', prenId), updateData);
-            // Aggiorna anche lo state locale
+            // Aggiorna state locale
             for (const [date, entries] of Object.entries(state.prenDB || {})) {
                 const entry = entries.find(e => e._pid === prenId);
                 if (entry) {
@@ -115,10 +125,12 @@ async function salvaSospesoFirestore(sospeso) {
                     break;
                 }
             }
+            // Salva record storico in collezione sospesi per tracciabilità e cassa
+            await salvaSospesoStorico(sospeso);
             return;
         }
         
-        // Sospeso da TAPPEZZERIA → aggiorna il record tappezzeria originale
+        // Sospeso da TAPPEZZERIA → aggiorna tappezzeria + salva storico
         if (sospeso._sid.startsWith('TAP-')) {
             const tapId = sospeso._sid.replace('TAP-', '');
             const updateData = {};
@@ -128,12 +140,13 @@ async function salvaSospesoFirestore(sospeso) {
                 updateData.pagamento = 'FATTURATO';
             }
             await fsUpdateDoc(fsDoc(db, 'tappezzeria', tapId), updateData);
-            // Aggiorna anche lo state locale
             const tap = (state.tapDB || []).find(t => t._id === tapId);
             if (tap) {
                 if (sospeso._pagato) tap.pagamento = sospeso._modPag || 'CONTANTI';
                 else if (sospeso._fatturato) tap.pagamento = 'FATTURATO';
             }
+            // Salva record storico
+            await salvaSospesoStorico(sospeso);
             return;
         }
         
@@ -152,6 +165,32 @@ async function salvaSospesoFirestore(sospeso) {
         await fsUpdateDoc(ref, updateData);
     } catch (e) {
         console.warn('Errore salvataggio sospeso Firestore:', sospeso._sid, e.message);
+    }
+}
+
+// Salva un record storico nella collezione sospesi per PREN- e TAP-
+// Così il pagamento è tracciabile, compare nei Pagati e nella Cassa
+async function salvaSospesoStorico(sospeso) {
+    try {
+        const record = {
+            cliente: sospeso.cliente || '',
+            data: sospeso.data || '',
+            vettura: sospeso.vettura || '',
+            importo: sospeso.importo || 0,
+            note: sospeso.note || '',
+            origineSid: sospeso._sid,
+            pagato: !!sospeso._pagato,
+            modPagamento: sospeso._modPag || '',
+            dataPagamento: sospeso._dataPag || '',
+            fatturato: !!sospeso._fatturato,
+            dataFattura: sospeso._dataFatt || '',
+            timestamp: Date.now()
+        };
+        const ref = await fsAddDoc(fsCollection(db, 'sospesi'), record);
+        // Aggiorna il _sid locale per puntare al nuovo record Firestore
+        sospeso._sid = ref.id;
+    } catch (e) {
+        console.warn('Errore salvataggio storico sospeso:', e.message);
     }
 }
 
