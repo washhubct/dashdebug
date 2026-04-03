@@ -284,6 +284,7 @@ function editAbb(id) {
 async function renewAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
     const dur = r['DURATA ABB.'] || '1 MESE'; 
+    const imp = pNum(r.IMPORTO);
     const old = pDate(r['SCADENZA ABBONAMENTO']); if(!old) return;
     
     const ns = new Date(old);
@@ -293,22 +294,57 @@ async function renewAbb(id) {
     else if(dur.includes('3')) ns.setMonth(ns.getMonth() + 3);
     else ns.setMonth(ns.getMonth() + 1);
     
-    if(!confirm(`Rinnovare ${r['NOME E COGNOME']}?\n\nNuovo: ${d2s(fmtDI(old))} → ${d2s(fmtDI(ns))}`)) return;
+    if(!confirm(`Rinnovare ${r['NOME E COGNOME']}?\n\nPeriodo: ${d2s(fmtDI(old))} → ${d2s(fmtDI(ns))}\nImporto: €${imp}\nDurata: ${dur}`)) return;
+    
+    // Chiedi se ha già pagato
+    const pagato = confirm(`${r['NOME E COGNOME']} ha già PAGATO il rinnovo di €${imp}?`);
+    
+    let modalita = '';
+    let dataPag = '';
+    if (pagato) {
+        modalita = prompt('Modalità pagamento (CONTANTI, POS, BONIFICO):', 'CONTANTI');
+        if (modalita === null) return;
+        modalita = modalita.trim().toUpperCase();
+        if (!['CONTANTI', 'POS', 'BONIFICO'].includes(modalita)) modalita = 'CONTANTI';
+        dataPag = new Date().toLocaleDateString('it-IT');
+    }
     
     r['INIZIO ABBONAMENTO'] = d2s(fmtDI(old));
     r['SCADENZA ABBONAMENTO'] = d2s(fmtDI(ns));
-    r.PAGAMENTO = ''; r["MODALITA'"] = ''; r['DATA PAGAMENTO'] = '';
+    r.PAGAMENTO = pagato ? 'SI' : '';
+    r["MODALITA'"] = modalita;
+    r['DATA PAGAMENTO'] = dataPag;
     
     try {
         await setDoc(fsDoc(db, "abbonamenti", id), {
             'INIZIO ABBONAMENTO': r['INIZIO ABBONAMENTO'],
             'SCADENZA ABBONAMENTO': r['SCADENZA ABBONAMENTO'],
-            'PAGAMENTO': '', "MODALITA'": '', 'DATA PAGAMENTO': ''
+            'PAGAMENTO': r.PAGAMENTO,
+            "MODALITA'": r["MODALITA'"],
+            'DATA PAGAMENTO': r['DATA PAGAMENTO']
         }, { merge: true });
     } catch(e) { console.error("Errore rinnovo Firebase:", e); }
     
+    // Se pagato, scrivi in Prima Nota
+    if (pagato && imp > 0) {
+        try {
+            const nome = r['NOME E COGNOME'] || '';
+            const targa = r.TARGA || '';
+            await fsAddDoc(fsCollection(db, "primaNota"), {
+                DATA: dataPag, dataISO: fmtDI(new Date()),
+                'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
+                'PRIMANOTA CLIENTI/FORNITORI': 'RINNOVO ABB. ' + nome + ' (' + targa + ')',
+                Descrizione: 'RINNOVO ABB. ' + nome + ' (' + targa + ') - ' + modalita,
+                ENTRATA: imp, Entrata: imp,
+                USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
+                "MODALITA'": modalita, timestamp: Date.now()
+            });
+        } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
+    }
+    
     syncAbbToSheet(r, true);
     renderAbb();
+    renderCassa();
 }
 
 async function deleteAbb(id) {
