@@ -12,6 +12,7 @@ import { initPrenotazioni, renderPren, renderTap } from './moduli/prenotazioni.j
 import { initAbbonamenti, renderAbb } from './moduli/abbonamenti.js';
 import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } from './moduli/sospesi.js';
 import { initReport, renderReport, renderDash } from './moduli/report.js';
+import { initPresenze, renderPresenze } from './moduli/presenze.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -22,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPrenotazioni();
     initAbbonamenti();
     initReport();
+    initPresenze();
     initDashDates();
 });
 
@@ -54,6 +56,7 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'giornalieri') renderGiornalieri();
     if(id === 'prenotazioni') { renderPren(); renderTap(); }
     if(id === 'sospesi') { buildSospesiArray(); renderSospPage(); }
+    if(id === 'presenze') renderPresenze();
     if(id === 'cancellazioni') renderCancellazioni();
 });
 
