@@ -209,8 +209,8 @@ export function renderDash() {
             </div>
             <div class="kpi a">
                 <div class="kpi-label">Sospesi da Incassare</div>
-                <div class="kpi-val">${fEur(d.sospesiAperti)}</div>
-                <div class="kpi-sub">${d.numSospesi} lavaggi in sospeso</div>
+                <div class="kpi-val">${fEur(d.sospesiAperti + d.lavSospesi + d.tapSospesi)}</div>
+                <div class="kpi-sub">${d.numSospesi} in attesa</div>
             </div>
             <div class="kpi" style="border-color:var(--tx2)">
                 <div class="kpi-label">Lavaggi Effettuati</div>
@@ -432,50 +432,52 @@ export function renderReport() {
     const toVal = document.getElementById('repTo')?.value;
     if (!fromVal || !toVal) return;
 
-    // Usa dati operativi per il report
     const d = calcolaDatiOperativi(fromVal, toVal);
+
+    // Totale uscite COMPLETO (incluso personale)
+    const totUscite = d.usciteTot + d.costiFissi.totale + d.consumabili + d.costoPersonale;
+    const margine = d.fatturato - totUscite;
+    const margPct = d.fatturato > 0 ? ((margine / d.fatturato) * 100).toFixed(1) : '0.0';
+
+    // Sospesi totali (tutti quelli aperti, non solo un tipo)
+    const sospesiTotali = d.sospesiAperti + d.lavSospesi + d.tapSospesi;
 
     const repKpis = document.getElementById('repKpis');
     if (repKpis) {
-        const totUscite = d.usciteTot + d.costiFissi.totale + d.consumabili;
-        const margine = d.fatturato - totUscite;
-        const margPct = d.fatturato > 0 ? ((margine / d.fatturato) * 100).toFixed(1) : '0.0';
-
         repKpis.innerHTML = `
-            <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(d.fatturato)}</div></div>
-            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Operative ${fEur(d.usciteTot)} + Fissi ${fEur(d.costiFissi.totale)} + Cons. ${fEur(d.consumabili)}</div></div>
+            <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(d.fatturato)}</div><div class="kpi-sub">Periodo: ${d.costiFissi.giorni} giorni</div></div>
+            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Personale ${fEur(d.costoPersonale)} + Fissi ${fEur(d.costiFissi.totale)} + Operative ${fEur(d.usciteTot)} + Cons. ${fEur(d.consumabili)}</div></div>
             <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
-            <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(d.sospesiAperti + d.lavSospesi + d.tapSospesi)}</div></div>`;
+            <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(sospesiTotali)}</div><div class="kpi-sub">${d.numSospesi} in attesa</div></div>`;
     }
 
-    // Dettaglio uscite
+    // Dettaglio uscite CON personale
     const uscByCat = {};
-    uscByCat['Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = d.costiFissi.affitto;
-    uscByCat['Operatore Lavaggio (fisso)'] = d.costiFissi.operatore;
-    uscByCat['Luce (media)'] = d.costiFissi.luce;
-    uscByCat['Acqua (media)'] = d.costiFissi.acqua;
-    uscByCat['Assicurazione'] = d.costiFissi.assicurazione;
-    if (d.consumabili > 0) uscByCat['Prodotti Consumabili (3% Lav.)'] = d.consumabili;
-    if (d.usciteTot > 0) uscByCat['Spese Operative'] = d.usciteTot;
+    if (d.costoPersonale > 0) uscByCat['👷 Personale Lavaggio'] = d.costoPersonale;
+    uscByCat['🏠 Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = d.costiFissi.affitto;
+    uscByCat['👤 Operatore Lavaggio (fisso)'] = d.costiFissi.operatore;
+    uscByCat['💡 Luce (media)'] = d.costiFissi.luce;
+    uscByCat['💧 Acqua (media)'] = d.costiFissi.acqua;
+    uscByCat['🛡️ Assicurazione'] = d.costiFissi.assicurazione;
+    if (d.consumabili > 0) uscByCat['🧴 Consumabili (3% Lav.)'] = d.consumabili;
+    if (d.usciteTot > 0) uscByCat['📦 Spese Operative'] = d.usciteTot;
 
-    const totUscite = d.usciteTot + d.costiFissi.totale + d.consumabili;
     const uscEntries = Object.entries(uscByCat).sort((a, b) => b[1] - a[1]);
     const tbUsc = document.getElementById('repUscTb');
     if (tbUsc) {
         tbUsc.innerHTML = uscEntries.map(([cat, val]) => {
             const pct = totUscite > 0 ? ((val / totUscite) * 100).toFixed(1) : '0';
-            const isCalc = cat.includes('Consumabili');
-            return `<tr><td>${isCalc ? '<span class="badge b">AUTO</span> ' : ''}<strong>${esc(cat)}</strong></td><td style="font-weight:600">${fEur(val)}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:${Math.min(pct, 100)}%;height:6px;background:var(--red);border-radius:3px;min-width:2px"></div><span style="font:400 11px var(--mono);color:var(--tx2)">${pct}%</span></div></td></tr>`;
+            return `<tr><td><strong>${esc(cat)}</strong></td><td style="font-weight:600">${fEur(val)}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:${Math.min(pct, 100)}%;height:6px;background:var(--red);border-radius:3px;min-width:2px"></div><span style="font:400 11px var(--mono);color:var(--tx2)">${pct}%</span></div></td></tr>`;
         }).join('');
-        tbUsc.innerHTML += `<tr style="background:var(--bg4)"><td><strong>TOTALE USCITE</strong></td><td style="font-weight:700">${fEur(totUscite)}</td><td></td></tr>`;
+        tbUsc.innerHTML += `<tr style="background:var(--bg4)"><td><strong>TOTALE USCITE</strong></td><td style="font-weight:700">${fEur(totUscite)}</td><td style="font:400 10px var(--mono);color:var(--tx3)">Pro-rata ${d.costiFissi.giorni}gg</td></tr>`;
     }
 
     // Dettaglio entrate per categoria
     const entByCat = {};
-    if (d.fatLavaggio > 0) entByCat['LAVAGGIO'] = d.fatLavaggio;
-    if (d.fatTappezzeria > 0) entByCat['TAPPEZZERIA'] = d.fatTappezzeria;
-    if (d.fatParchAbb > 0) entByCat['PARCHEGGIO ABBONAMENTI'] = d.fatParchAbb;
-    if (d.fatParchOre > 0) entByCat['PARCHEGGIO AD ORE'] = d.fatParchOre;
+    if (d.fatLavaggio > 0) entByCat['🧼 LAVAGGIO'] = d.fatLavaggio;
+    if (d.fatTappezzeria > 0) entByCat['🪡 TAPPEZZERIA'] = d.fatTappezzeria;
+    if (d.fatParchAbb > 0) entByCat['🅿️ PARCHEGGIO ABBONAMENTI'] = d.fatParchAbb;
+    if (d.fatParchOre > 0) entByCat['🎟️ PARCHEGGIO AD ORE'] = d.fatParchOre;
 
     const entEntries = Object.entries(entByCat).sort((a, b) => b[1] - a[1]);
     const tbEnt = document.getElementById('repEntTb');
