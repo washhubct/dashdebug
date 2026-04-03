@@ -3,6 +3,38 @@ import { db, fsCollection, fsGetDocs, fsAddDoc } from './firebase-config.js';
 const SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 const MAX_AUTO_PER_SLOT = 1;
 
+// ─── GIORNI DI CHIUSURA ───
+const GIORNI_CHIUSI = [
+    '2026-04-06',  // Pasquetta
+    '2026-05-01',  // Festa dei Lavoratori
+    '2026-06-02',  // Festa della Repubblica
+];
+
+// Carica chiusure extra da Firestore (se esistono)
+let chiusureFirestore = [];
+async function caricaChiusure() {
+    try {
+        const snap = await fsGetDocs(fsCollection(db, 'chiusure'));
+        snap.forEach(doc => {
+            const d = doc.data();
+            if (d.data) chiusureFirestore.push(d.data);
+        });
+    } catch (e) {
+        // Collezione non esiste ancora, va bene
+    }
+}
+
+function isGiornoChiuso(dateStr) {
+    // Check hardcoded
+    if (GIORNI_CHIUSI.includes(dateStr)) return true;
+    // Check Firestore
+    if (chiusureFirestore.includes(dateStr)) return true;
+    // Check domenica
+    const d = new Date(dateStr);
+    if (d.getDay() === 0) return true;
+    return false;
+}
+
 const servizioInput = document.getElementById('pServizio');
 const dateSection = document.getElementById('dateSection');
 const dateInput = document.getElementById('pDate');
@@ -17,6 +49,9 @@ const submitBtn = document.getElementById('submitBtn');
 const today = new Date();
 const localToday = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 dateInput.min = localToday;
+
+// Carica chiusure all'avvio
+caricaChiusure();
 
 // Step 1: Sceglie il servizio -> Mostra la data
 servizioInput.addEventListener('change', () => {
@@ -33,6 +68,15 @@ dateInput.addEventListener('change', async () => {
     
     slotSection.style.display = 'block';
     slotContainer.innerHTML = '';
+
+    // Controlla se è giorno chiuso
+    if (isGiornoChiuso(selectedDate)) {
+        slotMsg.textContent = '🚫 Siamo chiusi in questa data. Seleziona un altro giorno.';
+        slotMsg.style.color = '#d43333';
+        return;
+    }
+
+    slotMsg.style.color = '';
     slotMsg.textContent = 'Verifico disponibilità in tempo reale... ⏳';
 
     try {
@@ -77,7 +121,6 @@ dateInput.addEventListener('change', async () => {
                     btn.classList.add('selected');
                     selectedSlotInput.value = slot;
                     
-                    // Step 3: Sceglie l'orario -> Mostra il form finale
                     datiSection.style.display = 'block';
                 });
             }
@@ -104,7 +147,6 @@ form.addEventListener('submit', async (e) => {
     
     if(!serv || !date || !slot || !nome || !tel || !vettura) return;
 
-    // Impacchettiamo le nuove info in modo chiaro per la Dashboard
     let noteText = `[WEB] Servizio: ${serv} | Tel: ${tel}`;
     if(targa) noteText += ` | Targa: ${targa}`;
 
