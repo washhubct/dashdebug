@@ -46,6 +46,7 @@
 <a class="sb-item" id="nav-giornalieri"><span class="icon">🎟️</span>Parcheggio a Ore</a>
 <a class="sb-item" id="nav-prenotazioni"><span class="icon">📋</span>Prenotazioni</a>
 <a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
+<a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
 <div class="sb-section admin-only">Finanza & Sicurezza</div>
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
@@ -323,6 +324,51 @@
 </div>
 
 <div id="sospCards"></div>
+</div>
+</div>
+
+<div class="page" id="page-presenze">
+<div class="sec">
+
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+<button class="btn" id="prezSetPrev">← Sett. Prec.</button>
+<span style="font:600 14px var(--f);color:var(--tx)" id="prezWeekLabel">Settimana</span>
+<button class="btn" id="prezSetNext">Sett. Succ. →</button>
+<button class="btn" style="margin-left:auto" id="prezOggi">Questa Settimana</button>
+</div>
+
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:16px">
+<div class="kpi r"><div class="kpi-label">Costo Settimana</div><div class="kpi-val" id="prezKpiSett">€0</div></div>
+<div class="kpi r"><div class="kpi-label">Costo Mese Corrente</div><div class="kpi-val" id="prezKpiMese">€0</div></div>
+<div class="kpi" style="border-color:var(--tx2)"><div class="kpi-label">Giorni Lavorati (Sett.)</div><div class="kpi-val" id="prezKpiGiorni">0</div></div>
+</div>
+
+<div class="tbl-wrap" style="margin-bottom:16px">
+<table class="tbl" id="prezTable">
+<thead id="prezTHead"></thead>
+<tbody id="prezTBody"></tbody>
+<tfoot id="prezTFoot"></tfoot>
+</table>
+</div>
+
+<div class="form-panel show" style="background:var(--bg4)">
+<h3 style="font:600 13px var(--f);margin-bottom:10px">➕ Registra Presenze Giornata</h3>
+<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+<div class="ff" style="width:130px"><label>Data *</label><input type="date" id="prezData"></div>
+<div id="prezInputFields" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+<button class="btn btn-primary" style="height:37px;padding:0 20px" id="prezSaveBtn">Salva</button>
+</div>
+<div class="form-msg" id="prezMsg"></div>
+</div>
+
+<div style="margin-top:20px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Riepilogo Mensile per Dipendente</div>
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Dipendente</th><th>Modalità</th><th>Giorni</th><th>Totale Mese</th></tr></thead>
+<tbody id="prezRiepilogoTb"></tbody>
+</table>
+</div>
+
 </div>
 </div>
 
