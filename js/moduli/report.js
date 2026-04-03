@@ -140,14 +140,15 @@ function calcolaDatiOperativi(fromStr, toStr) {
         }
     });
 
-    // --- COSTI FISSI ---
-    const mesi = Math.max(1, Math.round((to - from) / (30 * 864e5)));
+    // --- COSTI FISSI (pro-rata giornaliero) ---
+    const giorniPeriodo = Math.max(1, Math.round((to - from) / 864e5));
     const costiFissi = {
-        affitto: 1560 * mesi,
-        operatore: 1400 * mesi,
-        luce: 1000 * mesi,
-        acqua: 390 * mesi,
-        assicurazione: 82.33 * mesi,
+        affitto: Math.round((1560 / 30) * giorniPeriodo * 100) / 100,
+        operatore: Math.round((1400 / 30) * giorniPeriodo * 100) / 100,
+        luce: Math.round((1000 / 30) * giorniPeriodo * 100) / 100,
+        acqua: Math.round((390 / 30) * giorniPeriodo * 100) / 100,
+        assicurazione: Math.round((82.33 / 30) * giorniPeriodo * 100) / 100,
+        giorni: giorniPeriodo,
         totale: 0
     };
     costiFissi.totale = costiFissi.affitto + costiFissi.operatore + costiFissi.luce + costiFissi.acqua + costiFissi.assicurazione;
@@ -260,7 +261,7 @@ export function renderDash() {
             <div class="kpi r">
                 <div class="kpi-label">🏠 Costi Fissi</div>
                 <div class="kpi-val">${fEur(d.costiFissi.totale)}</div>
-                <div class="kpi-sub">Affitto + Utenze + Assic.</div>
+                <div class="kpi-sub">Pro-rata ${d.costiFissi.giorni}gg su 30</div>
             </div>
             <div class="kpi r">
                 <div class="kpi-label">📦 Altre Uscite</div>
