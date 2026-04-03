@@ -210,8 +210,11 @@ async function initFirebaseData() {
         goPage('cassa');
     }
 
-    // Chiusura automatica giornate precedenti (lun-sab, dopo le 20:00)
+    // Chiusura automatica giornate precedenti (lun-sab)
     await autoChiusuraGiornate();
+    
+    // Timer: controlla ogni minuto se sono le 20:00 per chiudere la giornata corrente
+    avviaTimerChiusura();
 }
 
 let deferredPrompt;
@@ -352,5 +355,127 @@ async function autoChiusuraGiornate() {
         }
     } catch (e) {
         console.warn('Errore auto-chiusura giornate:', e.message);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TIMER CHIUSURA GIORNATA ALLE 20:00
+// Controlla ogni minuto — se sono le 20:00+ e oggi non è stata
+// chiusa, chiude la giornata corrente
+// ═══════════════════════════════════════════════════════════════════
+let chiusuraOggiEseguita = false;
+
+function avviaTimerChiusura() {
+    // Controlla subito se sono già passate le 20:00
+    checkChiusuraOre20();
+    // Poi controlla ogni 60 secondi
+    setInterval(checkChiusuraOre20, 60000);
+}
+
+async function checkChiusuraOre20() {
+    if (chiusuraOggiEseguita) return;
+    
+    const now = new Date();
+    const ora = now.getHours();
+    const giorno = now.getDay(); // 0=dom
+    
+    // Solo lun-sab (1-6) e dopo le 20:00
+    if (giorno === 0 || ora < 20) return;
+    
+    const oggi = fmtDI(now);
+    
+    // Verifica se già chiusa
+    try {
+        const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
+        let giaChiusa = false;
+        snapChiuse.forEach(docSnap => {
+            if (docSnap.data().data === oggi) giaChiusa = true;
+        });
+        
+        if (giaChiusa) {
+            chiusuraOggiEseguita = true;
+            return;
+        }
+        
+        // Chiudi la giornata di oggi
+        const dIta = oggi.split('-').reverse().join('/');
+        
+        // Lavaggi
+        const prenOggi = state.prenDB[oggi] || [];
+        let lavContanti = 0, lavPos = 0;
+        prenOggi.forEach(p => {
+            if (p.saldato === 'SI') {
+                const imp = parseFloat(p.prezzo) || 0;
+                if (p.saldo === 'CONTANTI') lavContanti += imp;
+                else if (p.saldo === 'POS') lavPos += imp;
+            }
+        });
+
+        // Tappezzeria
+        let tapContanti = 0, tapPos = 0;
+        state.tapDB.forEach(t => {
+            if (t.status === 'OUT' && t.dataOut === dIta && t.pagamento !== 'SOSPESO') {
+                const imp = parseFloat(t.prezzo) || 0;
+                const mod = (t.pagamento || '').toUpperCase();
+                if (mod === 'CONTANTI') tapContanti += imp;
+                else if (mod === 'POS') tapPos += imp;
+            }
+        });
+
+        // Parcheggio ad ore
+        let parContanti = 0, parPos = 0;
+        state.giornDB.forEach(g => {
+            if (g.status === 'OUT' && g.dataOut === oggi) {
+                const imp = parseFloat(g.prezzoFinale) || 0;
+                if (g.pagamento === 'CONTANTI') parContanti += imp;
+                else if (g.pagamento === 'POS') parPos += imp;
+            }
+        });
+
+        // Uscite
+        let uscContanti = 0, uscPos = 0;
+        state.usciteDB.filter(u => u.data === oggi).forEach(u => {
+            const imp = parseFloat(u.importo) || 0;
+            if (u.metodo === 'CONTANTI') uscContanti += imp;
+            else if (u.metodo === 'POS') uscPos += imp;
+        });
+
+        const totLav = lavContanti + lavPos + tapContanti + tapPos;
+        const totPar = parContanti + parPos;
+        const totUsc = uscContanti + uscPos;
+
+        if (totLav === 0 && totPar === 0 && totUsc === 0) {
+            await fsAddDoc(fsCollection(db, "giornateChiuse"), { data: oggi, timestamp: Date.now(), note: 'Nessun movimento' });
+            chiusuraOggiEseguita = true;
+            return;
+        }
+
+        // Scrivi in Prima Nota
+        const righe = [];
+        if (lavContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO CASH', Descrizione: 'INCASSO CASH', ENTRATA: lavContanti, Entrata: lavContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
+        if (lavPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO POS', Descrizione: 'INCASSO POS', ENTRATA: lavPos, Entrata: lavPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
+        if (tapContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA CASH', Descrizione: 'TAPPEZZERIA CASH', ENTRATA: tapContanti, Entrata: tapContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
+        if (tapPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA POS', Descrizione: 'TAPPEZZERIA POS', ENTRATA: tapPos, Entrata: tapPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
+        if (parContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE CASH', ENTRATA: parContanti, Entrata: parContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
+        if (parPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE POS', ENTRATA: parPos, Entrata: parPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
+        if (uscContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
+        if (uscPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
+
+        for (const riga of righe) {
+            await fsAddDoc(fsCollection(db, "primaNota"), riga);
+        }
+
+        await fsAddDoc(fsCollection(db, "giornateChiuse"), {
+            data: oggi, timestamp: Date.now(),
+            lavContanti, lavPos, tapContanti, tapPos,
+            parContanti, parPos, uscContanti, uscPos,
+            totaleEntrate: totLav + totPar, totaleUscite: totUsc
+        });
+
+        chiusuraOggiEseguita = true;
+        console.log(`✅ Giornata ${dIta} chiusa alle 20:00 — Lav: €${totLav} | Par: €${totPar} | Usc: €${totUsc}`);
+        
+    } catch (e) {
+        console.warn('Errore chiusura ore 20:', e.message);
     }
 }
