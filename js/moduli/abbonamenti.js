@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { setDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { state, CONFIG } from '../state.js';
 import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
@@ -237,7 +238,7 @@ async function saveAbb() {
 
     try {
         if(isUpdate) {
-            await fsUpdateDoc(fsDoc(db, "abbonamenti", state.abbEditId), rec);
+            await setDoc(fsDoc(db, "abbonamenti", state.abbEditId), rec, { merge: true });
             const idx = state.localAbb.findIndex(r => r._id === state.abbEditId);
             if(idx >= 0) { rec._id = state.abbEditId; state.localAbb[idx] = rec; }
             msg.style.color = 'var(--grn)'; msg.textContent = 'Aggiornato!';
@@ -299,11 +300,11 @@ async function renewAbb(id) {
     r.PAGAMENTO = ''; r["MODALITA'"] = ''; r['DATA PAGAMENTO'] = '';
     
     try {
-        await fsUpdateDoc(fsDoc(db, "abbonamenti", id), {
+        await setDoc(fsDoc(db, "abbonamenti", id), {
             'INIZIO ABBONAMENTO': r['INIZIO ABBONAMENTO'],
             'SCADENZA ABBONAMENTO': r['SCADENZA ABBONAMENTO'],
             'PAGAMENTO': '', "MODALITA'": '', 'DATA PAGAMENTO': ''
-        });
+        }, { merge: true });
     } catch(e) { console.error("Errore rinnovo Firebase:", e); }
     
     syncAbbToSheet(r, true);
