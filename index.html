@@ -123,8 +123,25 @@
 <button class="qbtn">1 anno</button>
 <button class="qbtn">Tutto</button>
 </div>
-<div class="kpis" id="kpis"></div>
-<div class="charts"><div class="chart-card"><h3>Entrate vs Uscite</h3><canvas id="ch1"></canvas></div><div class="chart-card"><h3>Entrate per Centro di Costo</h3><canvas id="ch2"></canvas></div></div>
+
+<!-- KPI Principali -->
+<div class="kpis" id="dashKpiMain" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px"></div>
+
+<!-- Fatturato per Categoria -->
+<div style="margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:1px">Fatturato per Categoria</div>
+<div class="kpis" id="dashKpiCat" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px"></div>
+
+<!-- Uscite -->
+<div style="margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:1px">Uscite & Costi</div>
+<div class="kpis" id="dashKpiUsc" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:20px"></div>
+
+<!-- Grafici -->
+<div class="charts">
+<div class="chart-card"><h3>Andamento Mensile Fatturato</h3><canvas id="ch1"></canvas></div>
+<div class="chart-card"><h3>Distribuzione per Categoria</h3><canvas id="ch2"></canvas></div>
+</div>
+
+<!-- Chat AI -->
 <div class="chat-panel admin-only">
 <div class="chat-hdr"><div class="dot"></div><h4>WASH HUB AI</h4></div>
 <div class="msgs" id="msgs"><div class="msg bot">Ciao! Chiedimi qualsiasi cosa sui dati aziendali. 🚗</div></div>
