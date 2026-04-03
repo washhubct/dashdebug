@@ -92,6 +92,7 @@ export function goPage(id) {
         giornalieri: ['🎟️', 'Parcheggio a Ore'],
         prenotazioni: ['📋', 'Prenotazioni'],
         sospesi: ['⏳', 'Sospesi'],
+        presenze: ['👷', 'Presenze Dipendenti'],
         report: ['💰', 'Report Finanziario'],
         cancellazioni: ['🗑️', 'Registro Cancellazioni']
     };
