@@ -1,7 +1,16 @@
 import { state } from '../state.js';
-import { fEur, esc, pDate } from '../utils.js';
+import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db } from '../firebase-config.js';
+
+// Helper: data italiana con zero padding (DD/MM/YYYY) — consistente con cassa.js
+function oggiIta() {
+    const n = new Date();
+    const dd = String(n.getDate()).padStart(2, '0');
+    const mm = String(n.getMonth() + 1).padStart(2, '0');
+    const yyyy = n.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
 
 // ─── CARICA STATO SOSPESI DA FIRESTORE ───────────────────────────
 export async function loadSospesiPagati() {
@@ -380,83 +389,83 @@ export function renderSospPage() {
 // AZIONI
 // ════════════════════════════════════════════════════════════════════
 
-function saldaSingolo(sid, mod) {
+async function saldaSingolo(sid, mod) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
     r._pagato = true;
     r._modPag = mod;
-    r._dataPag = new Date().toLocaleDateString('it-IT');
-    salvaSospesoFirestore(r);
-    scriviPrimaNota(r.cliente, r.importo, mod, getMeseAnno(r.data));
+    r._dataPag = oggiIta();
+    await salvaSospesoFirestore(r);
+    await scriviPrimaNota(r.cliente, r.importo, mod, getMeseAnno(r.data));
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-function saldaCliente(cliente, mod) {
+async function saldaCliente(cliente, mod) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
     if (!confirm(`Saldare ${aperti.length} sospesi di ${cliente} come ${mod}?\nTotale: ${fEur(aperti.reduce((s, r) => s + r.importo, 0))}`)) return;
 
-    const oggi = new Date().toLocaleDateString('it-IT');
+    const oggi = oggiIta();
     const totale = aperti.reduce((s, r) => s + r.importo, 0);
-    aperti.forEach(s => {
+    for (const s of aperti) {
         s._pagato = true;
         s._modPag = mod;
         s._dataPag = oggi;
-        salvaSospesoFirestore(s);
-    });
-    scriviPrimaNota(cliente, totale, mod, 'Saldo completo');
+        await salvaSospesoFirestore(s);
+    }
+    await scriviPrimaNota(cliente, totale, mod, 'Saldo completo');
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-function segnaFatturatoSingolo(sid) {
+async function segnaFatturatoSingolo(sid) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
     r._fatturato = true;
-    r._dataFatt = new Date().toLocaleDateString('it-IT');
-    salvaSospesoFirestore(r);
+    r._dataFatt = oggiIta();
+    await salvaSospesoFirestore(r);
     renderSospPage();
     updateSospBadge();
 }
 
-function segnaFatturatoCliente(cliente) {
+async function segnaFatturatoCliente(cliente) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
     if (!confirm(`Segnare come FATTURATI tutti i ${aperti.length} sospesi di ${cliente}?`)) return;
 
-    const oggi = new Date().toLocaleDateString('it-IT');
-    aperti.forEach(s => {
+    const oggi = oggiIta();
+    for (const s of aperti) {
         s._fatturato = true;
         s._dataFatt = oggi;
-        salvaSospesoFirestore(s);
-    });
+        await salvaSospesoFirestore(s);
+    }
     renderSospPage();
     updateSospBadge();
 }
 
-function segnaPagatoCliente(cliente, mod) {
+async function segnaPagatoCliente(cliente, mod) {
     const fatturati = state.localSosp.filter(s => s.cliente === cliente && s._fatturato && !s._pagato);
     if (!fatturati.length) return;
     const totale = fatturati.reduce((s, r) => s + r.importo, 0);
     if (!confirm(`Confermi PAGAMENTO di ${fatturati.length} sospesi fatturati di ${cliente}?\nTotale: ${fEur(totale)} — Metodo: ${mod}`)) return;
 
-    const oggi = new Date().toLocaleDateString('it-IT');
-    fatturati.forEach(s => {
+    const oggi = oggiIta();
+    for (const s of fatturati) {
         s._pagato = true;
         s._modPag = mod;
         s._dataPag = oggi;
-        salvaSospesoFirestore(s);
-    });
-    scriviPrimaNota(cliente, totale, mod, 'Fatture saldate');
+        await salvaSospesoFirestore(s);
+    }
+    await scriviPrimaNota(cliente, totale, mod, 'Fatture saldate');
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-function segnaPagatoMese(cliente, mese, mod) {
+async function segnaPagatoMese(cliente, mese, mod) {
     const items = state.localSosp.filter(s =>
         s.cliente === cliente && s._fatturato && !s._pagato && getMeseAnno(s.data) === mese
     );
@@ -464,14 +473,14 @@ function segnaPagatoMese(cliente, mese, mod) {
     const totale = items.reduce((s, r) => s + r.importo, 0);
     if (!confirm(`Confermi PAGAMENTO sospesi ${cliente} di ${mese}?\n${items.length} lavaggi — ${fEur(totale)} — ${mod}`)) return;
 
-    const oggi = new Date().toLocaleDateString('it-IT');
-    items.forEach(s => {
+    const oggi = oggiIta();
+    for (const s of items) {
         s._pagato = true;
         s._modPag = mod;
         s._dataPag = oggi;
-        salvaSospesoFirestore(s);
-    });
-    scriviPrimaNota(cliente, totale, mod, mese);
+        await salvaSospesoFirestore(s);
+    }
+    await scriviPrimaNota(cliente, totale, mod, mese);
     renderSospPage();
     updateSospBadge();
     renderCassa();
