@@ -13,6 +13,7 @@ import { initAbbonamenti, renderAbb } from './moduli/abbonamenti.js';
 import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } from './moduli/sospesi.js';
 import { initReport, renderReport, renderDash } from './moduli/report.js';
 import { initPresenze, renderPresenze } from './moduli/presenze.js';
+import { initClienti, caricaClienti, renderClienti } from './moduli/clienti.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -24,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAbbonamenti();
     initReport();
     initPresenze();
+    initClienti();
     initDashDates();
 });
 
@@ -57,6 +59,7 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'prenotazioni') { renderPren(); renderTap(); }
     if(id === 'sospesi') { buildSospesiArray(); renderSospPage(); }
     if(id === 'presenze') renderPresenze();
+    if(id === 'clienti') renderClienti();
     if(id === 'cancellazioni') renderCancellazioni();
 });
 
@@ -185,6 +188,9 @@ async function initFirebaseData() {
         } catch(presErr) {
             console.warn("Presenze non disponibili:", presErr.message);
         }
+
+        // Carica Clienti CRM
+        await caricaClienti();
 
         if (upd) upd.textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
