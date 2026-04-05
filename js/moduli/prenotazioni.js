@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
+import { autoSalvaCliente } from './clienti.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -146,6 +147,11 @@ async function addPren() {
         obj._pid = ref.id;
         if (!state.prenDB[date]) state.prenDB[date] = [];
         state.prenDB[date].push(obj);
+        
+        // Auto-salva cliente nel CRM
+        const telNote = (obj.note || '').match(/Tel:\s*(\S+)/);
+        autoSalvaCliente(obj.cliente, obj.vettura, '', telNote ? telNote[1] : '');
+        
         renderPren();
         ['pCliente','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
     } catch(e) { console.error(e); }
@@ -249,6 +255,10 @@ async function addTap() {
         const ref = await fsAddDoc(fsCollection(db, "tappezzeria"), obj);
         obj._id = ref.id;
         state.tapDB.push(obj);
+        
+        // Auto-salva cliente nel CRM
+        autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
+        
         renderTap();
         ['tCliente','tModello','tTarga','tPrezzo'].forEach(id => document.getElementById(id).value = '');
         if(msg) { msg.style.color = 'var(--grn)'; msg.textContent = 'Tappezzeria registrata!'; setTimeout(() => msg.textContent = '', 2000); }
