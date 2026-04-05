@@ -47,6 +47,7 @@
 <a class="sb-item" id="nav-prenotazioni"><span class="icon">📋</span>Prenotazioni</a>
 <a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
 <a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
+<a class="sb-item" id="nav-clienti"><span class="icon">👥</span>Clienti / CRM</a>
 <div class="sb-section admin-only">Finanza & Sicurezza</div>
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
@@ -363,6 +364,41 @@
 </table>
 </div>
 
+</div>
+</div>
+
+<div class="page" id="page-clienti">
+<div class="sec">
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+<span class="badge b" id="clientiCnt">0 clienti</span>
+<button class="btn btn-primary" id="addClienteBtn">+ Nuovo Cliente</button>
+<input class="search-box" id="clienteSrch" placeholder="Cerca nome, telefono, vettura..." style="margin-left:auto">
+</div>
+
+<div class="form-panel" id="clienteForm">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+<h3 style="font:600 13px var(--f)" id="clienteFTitle">Nuovo Cliente</h3>
+<button class="btn" id="clienteAnnullaBtn">✕</button>
+</div>
+<div class="form-grid">
+<div class="ff"><label>Nome e Cognome *</label><input id="cNome" style="text-transform:uppercase" placeholder="Es: MARIO ROSSI"></div>
+<div class="ff"><label>Telefono</label><input id="cTel" type="tel" placeholder="Es: 333 1234567"></div>
+<div class="ff"><label>Prezzo VIP € (facoltativo)</label><input id="cPrezzoVip" type="number" step="1" placeholder="Prezzo speciale per questo cliente"></div>
+<div class="ff"><label>Note</label><input id="cNote" placeholder="Opzionale"></div>
+</div>
+<div style="margin-top:12px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">Vetture del Cliente</div>
+<div id="vettureContainer"></div>
+<button class="btn" id="addVetturaBtn" style="margin-top:6px;font-size:11px">+ Aggiungi Vettura</button>
+<div class="form-actions" style="margin-top:14px"><button class="btn btn-primary" id="clienteSaveBtn">Salva</button></div>
+<div class="form-msg" id="clienteMsg"></div>
+</div>
+
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Cliente</th><th>Telefono</th><th>Vetture</th><th style="text-align:center">Lavaggi</th><th>Ultima Visita</th><th>Spesa Tot.</th><th style="width:80px">Azioni</th></tr></thead>
+<tbody id="clientiTb"></tbody>
+</table>
+</div>
 </div>
 </div>
 
