@@ -261,6 +261,14 @@ function initAutocompletamento() {
         ).slice(0, 6);
     }, onSelectCliente);
 
+    // Campo telefono prenotazioni (cerca anche per numero)
+    setupAutocomplete('pTelefono', (query) => {
+        return clientiDB.filter(c =>
+            (c.telefono || '').includes(query) ||
+            (c.nome || '').toLowerCase().includes(query)
+        ).slice(0, 6);
+    }, onSelectCliente);
+
     // Campo cliente tappezzeria
     setupAutocomplete('tCliente', (query) => {
         return clientiDB.filter(c =>
@@ -356,11 +364,9 @@ function onSelectCliente(cliente) {
         }
     }
 
-    // Note con telefono se presente
-    const inputNote = document.getElementById('pNote');
-    if (inputNote && cliente.telefono && !inputNote.value) {
-        inputNote.value = 'Tel: ' + cliente.telefono;
-    }
+    // Autocompila telefono
+    const inputTel = document.getElementById('pTelefono');
+    if (inputTel && cliente.telefono) inputTel.value = cliente.telefono;
 }
 
 // ─── SELEZIONE CLIENTE → AUTOCOMPILA TAPPEZZERIA ───
