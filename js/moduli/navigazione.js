@@ -93,6 +93,7 @@ export function goPage(id) {
         prenotazioni: ['📋', 'Prenotazioni'],
         sospesi: ['⏳', 'Sospesi'],
         presenze: ['👷', 'Presenze Dipendenti'],
+        clienti: ['👥', 'Clienti / CRM'],
         report: ['💰', 'Report Finanziario'],
         cancellazioni: ['🗑️', 'Registro Cancellazioni']
     };
