@@ -42,6 +42,7 @@ export function renderCassa() {
     
     let eC = 0, eP = 0, eB = 0;
     let cLav = 0, cTap = 0, cPar = 0;
+    let sospGiorno = 0;
     
     // 1. Prenotazioni (Lavaggi)
     (state.prenDB[dStr] || []).forEach(p => {
@@ -51,6 +52,8 @@ export function renderCassa() {
             else if(p.saldo === 'POS') eP += imp;
             else if(p.saldo === 'BONIFICO') eB += imp;
             cLav += imp;
+        } else if(p.saldo === 'SOSPESO') {
+            sospGiorno += pNum(p.prezzo);
         }
     });
 
@@ -59,10 +62,14 @@ export function renderCassa() {
         if(t.status === 'OUT' && t.dataOut === dIta) {
             let imp = pNum(t.prezzo);
             let mod = (t.pagamento || '').toUpperCase();
-            if(mod === 'CONTANTI') eC += imp;
-            else if(mod === 'POS') eP += imp;
-            else if(mod === 'BONIFICO') eB += imp;
-            cTap += imp;
+            if(mod === 'SOSPESO' || mod === 'FATTURATO') {
+                sospGiorno += imp;
+            } else {
+                if(mod === 'CONTANTI') eC += imp;
+                else if(mod === 'POS') eP += imp;
+                else if(mod === 'BONIFICO') eB += imp;
+                cTap += imp;
+            }
         }
     });
 
@@ -89,7 +96,7 @@ export function renderCassa() {
         }
     });
 
-    // 5. Sospesi Saldati
+    // 5. Sospesi Saldati (pagati oggi)
     state.localSosp.forEach(s => {
         if(s._pagato && s._dataPag === dIta) {
             let imp = pNum(s.importo);
@@ -120,7 +127,7 @@ export function renderCassa() {
 
     if(document.getElementById('cassaEntCont')) document.getElementById('cassaEntCont').textContent = fEur(eC);
     if(document.getElementById('cassaEntPos')) document.getElementById('cassaEntPos').textContent = fEur(eP);
-    if(document.getElementById('cassaEntBon')) document.getElementById('cassaEntBon').textContent = fEur(eB);
+    if(document.getElementById('cassaSospGiorno')) document.getElementById('cassaSospGiorno').textContent = fEur(sospGiorno);
     if(document.getElementById('cassaCatLav')) document.getElementById('cassaCatLav').textContent = fEur(cLav);
     if(document.getElementById('cassaCatTap')) document.getElementById('cassaCatTap').textContent = fEur(cTap);
     if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cPar);
