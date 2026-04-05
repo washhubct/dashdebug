@@ -131,16 +131,18 @@ async function handlePrenActions(e) {
 
 async function addPren() {
     const date = document.getElementById('prenData').value;
+    const telefono = document.getElementById('pTelefono')?.value.trim() || '';
     const obj = {
         dataPren: date,
         orario: document.getElementById('pOrario').value,
         cliente: document.getElementById('pCliente').value.trim().toUpperCase(),
+        telefono: telefono,
         vettura: document.getElementById('pVettura').value.trim().toUpperCase(),
         prezzo: document.getElementById('pPrezzo').value.trim(),
         note: document.getElementById('pNote').value.trim(),
         saldo: '', saldato: ''
     };
-    if (!obj.cliente || !obj.vettura || !obj.prezzo) return alert("Compila i campi obbligatori!");
+    if (!obj.cliente || !obj.vettura || !obj.prezzo || !obj.telefono) return alert("Compila i campi obbligatori (Nominativo, Telefono, Vettura, Prezzo)!");
 
     try {
         const ref = await fsAddDoc(fsCollection(db, "prenotazioni"), obj);
@@ -148,12 +150,11 @@ async function addPren() {
         if (!state.prenDB[date]) state.prenDB[date] = [];
         state.prenDB[date].push(obj);
         
-        // Auto-salva cliente nel CRM
-        const telNote = (obj.note || '').match(/Tel:\s*(\S+)/);
-        autoSalvaCliente(obj.cliente, obj.vettura, '', telNote ? telNote[1] : '');
+        // Auto-salva cliente nel CRM con telefono
+        autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
         
         renderPren();
-        ['pCliente','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
+        ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
     } catch(e) { console.error(e); }
 }
 
