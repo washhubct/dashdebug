@@ -46,14 +46,14 @@ export function renderCassa() {
     
     // 1. Prenotazioni (Lavaggi)
     (state.prenDB[dStr] || []).forEach(p => {
-        if(p.saldato === 'SI') {
+        if(p.saldo === 'SOSPESO') {
+            sospGiorno += pNum(p.prezzo);
+        } else if(p.saldato === 'SI') {
             let imp = pNum(p.prezzo);
             if(p.saldo === 'CONTANTI') eC += imp;
             else if(p.saldo === 'POS') eP += imp;
             else if(p.saldo === 'BONIFICO') eB += imp;
             cLav += imp;
-        } else if(p.saldo === 'SOSPESO') {
-            sospGiorno += pNum(p.prezzo);
         }
     });
 
