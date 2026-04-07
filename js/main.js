@@ -1,4 +1,4 @@
-// DELIVERY HUB v2 — Main App with month-filtered queries + cache
+// DELIVERY HUB v2 — Main App (no cache per consegne)
 
 var CACHE_KEY = 'dhub_';
 
@@ -16,7 +16,6 @@ async function loadAllData() {
     }
 }
 
-// Carica consegne SOLO per il mese selezionato
 async function loadConsegnePerMese() {
     var mese = state.meseCorrente;
     if (!mese) {
@@ -25,26 +24,6 @@ async function loadConsegnePerMese() {
         mese = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
     }
 
-    // Controlla cache per questo mese
-    var cacheKey = CACHE_KEY + 'cons_' + mese;
-    var cacheTimeKey = CACHE_KEY + 'cons_time_' + mese;
-    var cacheTime = localStorage.getItem(cacheTimeKey);
-    var lastSync = await getLastSyncTimestamp();
-    var cacheValid = cacheTime && lastSync && parseInt(cacheTime) > lastSync;
-
-    if (cacheValid) {
-        try {
-            var cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
-            state.consegne = cached.map(function(c) {
-                if (c.data && typeof c.data === 'string') c.data = new Date(c.data);
-                return c;
-            });
-            console.log('Cache mese ' + mese + ': ' + state.consegne.length + ' consegne');
-            return;
-        } catch(e) { /* fallback to Firestore */ }
-    }
-
-    // Carica da Firestore filtrato per mese
     try {
         var snap = await db.collection('consegne')
             .where('mese', '==', mese)
@@ -56,51 +35,10 @@ async function loadConsegnePerMese() {
             return d;
         });
         console.log('Firestore mese ' + mese + ': ' + state.consegne.length + ' consegne');
-
-        // Salva in cache (solo campi essenziali per risparmiare spazio)
-        try {
-            var cacheData = state.consegne.map(function(c) {
-                return {
-                    filiale: c.filiale,
-                    data: c.data instanceof Date ? c.data.toISOString() : c.data,
-                    mese: c.mese,
-                    area: c.area,
-                    importo: c.importo,
-                    driver: c.driver,
-                    fascia: c.fascia,
-                    fonte: c.fonte,
-                    consegnata: c.consegnata
-                };
-            });
-            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-            localStorage.setItem(cacheTimeKey, String(Date.now()));
-        } catch(e) { console.warn('Cache save error:', e.message); }
     } catch (e) {
         console.warn('Consegne load:', e);
-        // Fallback cache
-        try {
-            var cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
-            state.consegne = cached.map(function(c) {
-                if (c.data && typeof c.data === 'string') c.data = new Date(c.data);
-                return c;
-            });
-            console.log('Fallback cache: ' + state.consegne.length);
-        } catch(e2) { state.consegne = []; }
+        state.consegne = [];
     }
-}
-
-async function getLastSyncTimestamp() {
-    try {
-        var snap = await db.collection('syncLogs')
-            .orderBy('timestamp', 'desc')
-            .limit(1)
-            .get();
-        if (!snap.empty) {
-            var ts = snap.docs[0].data().timestamp;
-            return new Date(ts).getTime();
-        }
-    } catch (e) {}
-    return 0;
 }
 
 async function loadFiliali() {
@@ -163,13 +101,15 @@ async function loadDanni() {
     }
 }
 
-// Forza refresh da Firestore
-async function forceRefresh() {
-    toast('Aggiornamento...', 'info');
-    clearCache();
-    await loadAllData();
+async function onMeseChange() {
+    state.meseCorrente = document.getElementById('meseSelector').value;
+    await loadConsegnePerMese();
     refreshCurrentModule();
-    toast('Dati aggiornati!', 'success');
+}
+
+function forceRefresh() {
+    clearCache();
+    location.reload();
 }
 
 function clearCache() {
