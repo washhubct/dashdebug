@@ -222,20 +222,54 @@ async function editPren(date, pid) {
 export function renderTap() {
     const tb = document.getElementById('tapTb');
     if (!tb) return;
+
+    const inLav = state.tapDB.filter(t => t.status === 'IN');
+    const oggi = new Date().toLocaleDateString('it-IT');
+    const outOggi = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === oggi);
+
     let html = '';
-    const sorted = [...state.tapDB].sort((a,b) => (a.status === 'IN' ? -1 : 1));
-    sorted.forEach(t => {
-        const isOut = t.status === 'OUT';
-        html += `<tr ${isOut ? 'style="opacity:0.6"' : ''}>
-            <td>${t.dataIn}</td>
-            <td><strong>${esc(t.cliente)}</strong></td>
-            <td>${esc(t.modello)}</td>
-            <td>${esc(t.targa)}</td>
-            <td style="font-weight:600">€${pNum(t.prezzo)}</td>
-            <td><span class="badge ${isOut ? 'r' : 'g'} status-tap" style="cursor:pointer" data-id="${t._id}">${t.status} ${isOut ? '('+t.pagamento+')' : '(In lav.)'}</span></td>
-            <td><button class="act-btn del del-tap" data-id="${t._id}">✕</button></td></tr>`;
-    });
-    tb.innerHTML = html || '<tr><td colspan="7" class="empty">Nessuna tappezzeria</td></tr>';
+    if (inLav.length === 0) {
+        html = '<tr><td colspan="7" class="empty">Nessuna tappezzeria in lavorazione</td></tr>';
+    } else {
+        inLav.forEach(t => {
+            html += `<tr>
+                <td>${t.dataIn}</td>
+                <td><strong>${esc(t.cliente)}</strong></td>
+                <td>${esc(t.modello)}</td>
+                <td>${esc(t.targa)}</td>
+                <td style="font-weight:600">€${pNum(t.prezzo)}</td>
+                <td><span class="badge g status-tap" style="cursor:pointer" data-id="${t._id}">IN (In lav.)</span></td>
+                <td><button class="act-btn del del-tap" data-id="${t._id}">✕</button></td></tr>`;
+        });
+    }
+    tb.innerHTML = html;
+
+    // Sezione completate oggi
+    let outSection = document.getElementById('tapOutSection');
+    if (!outSection) {
+        outSection = document.createElement('div');
+        outSection.id = 'tapOutSection';
+        tb.closest('.tbl-wrap')?.after(outSection);
+    }
+
+    if (outOggi.length > 0) {
+        let outHtml = `<div style="margin-top:14px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">✅ Completate Oggi</div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data IN</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Pagamento</th></tr></thead><tbody>`;
+        outOggi.forEach(t => {
+            outHtml += `<tr style="opacity:0.6">
+                <td>${t.dataIn}</td>
+                <td>${esc(t.cliente)}</td>
+                <td>${esc(t.modello)}</td>
+                <td>${esc(t.targa)}</td>
+                <td style="font-weight:600">€${pNum(t.prezzo)}</td>
+                <td><span class="badge ${t.pagamento === 'SOSPESO' ? 'a' : 'b'}">${t.pagamento || '—'}</span></td>
+            </tr>`;
+        });
+        outHtml += '</tbody></table></div>';
+        outSection.innerHTML = outHtml;
+    } else {
+        outSection.innerHTML = '';
+    }
 }
 
 async function addTap() {
