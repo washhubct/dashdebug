@@ -1,0 +1,135 @@
+rules_version = '2';
+
+// ═══════════════════════════════════════════════════════════════════
+// WASHHUB DASHBOARD — Firestore Security Rules
+// Project: dashboard-washhub
+//
+// Modello di autorizzazione:
+//   • admin    → amministrazione@avrlogisticarl.com (vede tutto)
+//   • operator → qualsiasi altro utente autenticato
+//                (R/W operativo, niente analitica/storico primaNota, niente log)
+//   • pubblico → non autenticato (solo form prenotazione su prenota.html)
+// ═══════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+             && request.auth.token.email != null
+             && request.auth.token.email.lower() == 'amministrazione@avrlogisticarl.com';
+    }
+
+    function isOperator() {
+      return isSignedIn() && !isAdmin();
+    }
+
+    // Timestamp (ms epoch) dell'inizio della giornata corrente (00:00:00 UTC).
+    // Usato per limitare la lettura di primaNota all'operatore al giorno attuale.
+    // NOTA: è UTC-based, per fuso Italia c'è scarto di ~1-2h ai limiti di mezzanotte.
+    function startOfDayMs() {
+      return request.time.toMillis()
+             - (request.time.hours() * 3600000)
+             - (request.time.minutes() * 60000)
+             - (request.time.seconds() * 1000);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // COLLEZIONI OPERATIVE — operator e admin hanno R/W completo
+    // ═══════════════════════════════════════════════════════════
+    match /abbonamenti/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /tappezzeria/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /clienti/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /sospesi/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /giornalieri/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /uscite/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /presenzeDipendenti/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /giornateChiuse/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRENOTAZIONI — accesso pubblico per form prenota.html
+    // TODO: migliorare privacy usando query filtrate e/o collezione
+    // aggregata "slotOccupati" (oggi il form pubblico legge tutto).
+    // ═══════════════════════════════════════════════════════════
+    match /prenotazioni/{doc} {
+      allow read: if true;
+      // Chiunque può creare una prenotazione dal form pubblico.
+      // Update/delete: solo utenti autenticati (operator + admin).
+      allow create: if true;
+      allow update, delete: if isSignedIn();
+    }
+
+    // Giorni di chiusura straordinari — letti dal form pubblico
+    match /chiusure/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIMA NOTA — admin tutto, operator: crea sempre, legge solo oggi
+    // ═══════════════════════════════════════════════════════════
+    match /primaNota/{doc} {
+      // Operator crea nuove righe (incassi) sempre
+      allow create: if isSignedIn();
+
+      // Operator legge solo le righe del giorno corrente.
+      // Admin legge tutto.
+      // Richiede che il documento abbia il campo numerico "timestamp" in ms.
+      allow read: if isAdmin()
+                     || (
+                       isOperator()
+                       && resource.data.timestamp is int
+                       && resource.data.timestamp >= startOfDayMs()
+                     );
+
+      // Update/delete solo admin (immutabilità della cassa dopo il giorno)
+      allow update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // LOG CANCELLAZIONI — admin-only in lettura
+    // L'operator può CREARE log (es. quando cancella una riga) ma
+    // non deve sapere che esistono: read/update/delete bloccati.
+    // ═══════════════════════════════════════════════════════════
+    match /cancellazioni/{doc} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEFAULT DENY — qualsiasi altra collezione resta chiusa
+    // Aggiungere regole esplicite per nuove collezioni.
+    // ═══════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
