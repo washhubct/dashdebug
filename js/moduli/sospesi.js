@@ -181,13 +181,16 @@ async function salvaSospesoFirestore(sospeso) {
 // Così il pagamento è tracciabile, compare nei Pagati e nella Cassa
 async function salvaSospesoStorico(sospeso) {
     try {
+        // Salva il sid originale (PREN-xxx / TAP-xxx) PRIMA di sovrascrivere _sid,
+        // così buildSospesiArray() può deduplicare via originiGiaPresenti.
+        const originalSid = sospeso._sid;
         const record = {
             cliente: sospeso.cliente || '',
             data: sospeso.data || '',
             vettura: sospeso.vettura || '',
             importo: sospeso.importo || 0,
             note: sospeso.note || '',
-            origineSid: sospeso._sid,
+            origineSid: originalSid,
             pagato: !!sospeso._pagato,
             modPagamento: sospeso._modPag || '',
             dataPagamento: sospeso._dataPag || '',
@@ -197,6 +200,8 @@ async function salvaSospesoStorico(sospeso) {
         };
         const ref = await fsAddDoc(fsCollection(db, 'sospesi'), record);
         // Aggiorna il _sid locale per puntare al nuovo record Firestore
+        // e mantieni origineSid per la deduplicazione in buildSospesiArray()
+        sospeso.origineSid = originalSid;
         sospeso._sid = ref.id;
     } catch (e) {
         console.warn('Errore salvataggio storico sospeso:', e.message);

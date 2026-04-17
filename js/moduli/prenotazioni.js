@@ -112,6 +112,7 @@ export function renderPren() {
 async function handlePrenActions(e) {
     const btn = e.target.closest('button');
     if (!btn) return;
+    if (btn.disabled) return;
     const id = btn.dataset.id;
     const date = document.getElementById('prenData').value;
 
@@ -119,30 +120,36 @@ async function handlePrenActions(e) {
         document.getElementById('pOrario').value = btn.dataset.slot;
         document.getElementById('pCliente').focus();
     } else if (btn.classList.contains('pay-btn')) {
-        markPaid(date, id, btn.dataset.mod);
+        btn.disabled = true;
+        try { await markPaid(date, id, btn.dataset.mod); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('undo-pay')) {
-        unmarkPaid(date, id);
+        btn.disabled = true;
+        try { await unmarkPaid(date, id); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('del-pren')) {
-        delPren(date, id);
+        await delPren(date, id);
     } else if (btn.classList.contains('edit-pren')) {
-        editPren(date, id);
+        await editPren(date, id);
     }
 }
 
 async function addPren() {
     const date = document.getElementById('prenData').value;
     const telefono = document.getElementById('pTelefono')?.value.trim() || '';
+    const prezzoRaw = document.getElementById('pPrezzo').value.trim();
     const obj = {
         dataPren: date,
         orario: document.getElementById('pOrario').value,
         cliente: document.getElementById('pCliente').value.trim().toUpperCase(),
         telefono: telefono,
         vettura: document.getElementById('pVettura').value.trim().toUpperCase(),
-        prezzo: document.getElementById('pPrezzo').value.trim(),
+        prezzo: prezzoRaw,
         note: document.getElementById('pNote').value.trim(),
         saldo: '', saldato: ''
     };
     if (!obj.cliente || !obj.vettura || !obj.prezzo || !obj.telefono) return alert("Compila i campi obbligatori (Nominativo, Telefono, Vettura, Prezzo)!");
+    // Validazione numerica prezzo (accetta sia "25" sia "25,50" sia "25.50")
+    const prezzoNum = parseFloat(prezzoRaw.replace(',', '.'));
+    if (isNaN(prezzoNum) || prezzoNum < 0) return alert("⚠️ Prezzo non valido! Inserisci un numero (es. 25 oppure 25,50).");
 
     try {
         const ref = await fsAddDoc(fsCollection(db, "prenotazioni"), obj);
@@ -151,8 +158,8 @@ async function addPren() {
         state.prenDB[date].push(obj);
         
         // Auto-salva cliente nel CRM con telefono
-        autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
-        
+        await autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
+
         renderPren();
         ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
     } catch(e) { console.error(e); }
@@ -202,13 +209,20 @@ async function editPren(date, pid) {
     if (nuovaVettura === null) return;
     const nuovoPrezzo = prompt('Prezzo €:', entry.prezzo);
     if (nuovoPrezzo === null) return;
+    // Validazione numerica (accetta "25", "25,50", "25.50")
+    const prezzoTrim = nuovoPrezzo.trim();
+    const prezzoNum = parseFloat(prezzoTrim.replace(',', '.'));
+    if (prezzoTrim && (isNaN(prezzoNum) || prezzoNum < 0)) {
+        alert("⚠️ Prezzo non valido! Usa un numero (es. 25 oppure 25,50).");
+        return;
+    }
     const nuoveNote = prompt('Note:', entry.note || '');
     if (nuoveNote === null) return;
-    
+
     const updates = {
         cliente: nuovoCliente.trim().toUpperCase(),
         vettura: nuovaVettura.trim().toUpperCase(),
-        prezzo: nuovoPrezzo.trim(),
+        prezzo: prezzoTrim,
         note: nuoveNote.trim()
     };
     
@@ -292,8 +306,8 @@ async function addTap() {
         state.tapDB.push(obj);
         
         // Auto-salva cliente nel CRM
-        autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
-        
+        await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
+
         renderTap();
         ['tCliente','tModello','tTarga','tPrezzo'].forEach(id => document.getElementById(id).value = '');
         if(msg) { msg.style.color = 'var(--grn)'; msg.textContent = 'Tappezzeria registrata!'; setTimeout(() => msg.textContent = '', 2000); }

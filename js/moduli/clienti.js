@@ -344,15 +344,32 @@ function mostraSelettoreVetturaTap(cliente){
 }
 
 // ═══ AUTO-CREAZIONE CLIENTE ═══
-export function autoSalvaCliente(nome,vettura,targa,telefono){
+// Ora async: restituisce una Promise, così i chiamanti possono await-are
+// per evitare race con altre operazioni sullo state clienti.
+export async function autoSalvaCliente(nome,vettura,targa,telefono){
     if(!nome||nome.length<2)return;
     const nomeUp=nome.toUpperCase();
     const esistente=clientiDB.find(c=>c.nome===nomeUp);
     if(esistente){
-        if(vettura&&!esistente.vetture?.some(v=>v.modello===vettura.toUpperCase())){const nv={modello:vettura.toUpperCase(),targa:(targa||'').toUpperCase(),prezzo:0};const vt=[...(esistente.vetture||[]),nv];fsUpdateDoc(fsDoc(db,'clienti',esistente._id),{vetture:vt}).catch(e=>console.warn(e));esistente.vetture=vt;}
-        if(telefono&&!esistente.telefono){fsUpdateDoc(fsDoc(db,'clienti',esistente._id),{telefono}).catch(e=>console.warn(e));esistente.telefono=telefono;}
+        const ops=[];
+        if(vettura&&!esistente.vetture?.some(v=>v.modello===vettura.toUpperCase())){
+            const nv={modello:vettura.toUpperCase(),targa:(targa||'').toUpperCase(),prezzo:0};
+            const vt=[...(esistente.vetture||[]),nv];
+            ops.push(fsUpdateDoc(fsDoc(db,'clienti',esistente._id),{vetture:vt}).catch(e=>console.warn(e)));
+            esistente.vetture=vt;
+        }
+        if(telefono&&!esistente.telefono){
+            ops.push(fsUpdateDoc(fsDoc(db,'clienti',esistente._id),{telefono}).catch(e=>console.warn(e)));
+            esistente.telefono=telefono;
+        }
+        await Promise.all(ops);
         return;
     }
     const record={nome:nomeUp,telefono:telefono||'',vetture:vettura?[{modello:vettura.toUpperCase(),targa:(targa||'').toUpperCase(),prezzo:0}]:[],note:'',prezzoVip:0,tipo:'privato',timestamp:Date.now()};
-    fsAddDoc(fsCollection(db,'clienti'),record).then(ref=>{record._id=ref.id;clientiDB.push(record);state.clientiDB=clientiDB;}).catch(e=>console.warn(e));
+    try{
+        const ref=await fsAddDoc(fsCollection(db,'clienti'),record);
+        record._id=ref.id;
+        clientiDB.push(record);
+        state.clientiDB=clientiDB;
+    }catch(e){console.warn(e);}
 }

@@ -5,7 +5,12 @@ import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 
+let _abbonamentiInitialized = false;
+
 export function initAbbonamenti() {
+    if (_abbonamentiInitialized) return;
+    _abbonamentiInitialized = true;
+
     const addAbbBtn = document.getElementById('addAbbBtn');
     if(addAbbBtn) addAbbBtn.addEventListener('click', () => showAbbF());
 
@@ -351,19 +356,24 @@ async function deleteAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
     const motivazione = prompt(`⚠️ Stai per ELIMINARE l'abbonamento di ${r['NOME E COGNOME']} (Targa: ${r.TARGA}).\nInserisci il MOTIVO della cancellazione (OBBLIGATORIO):`);
     if(motivazione === null || motivazione.trim() === '') { alert("❌ Cancellazione annullata: motivazione mancante."); return; }
-    
-    state.localAbb = state.localAbb.filter(x => x._id !== id);
-    renderAbb();
-    
+
     try {
+        // Prima elimina su Firestore (log + delete), poi aggiorna lo stato locale
         await logDelete('ABBONAMENTI', `Cliente: ${r['NOME E COGNOME']} - Targa: ${r.TARGA}`, motivazione.trim());
         await fsDeleteDoc(fsDoc(db, "abbonamenti", id));
-        await fetch(CONFIG.GAS_URL, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-            body: JSON.stringify({ action: 'deleteAbbonamento', id: id }) 
-        });
-    } catch(e) { console.warn(e); }
+        // Solo ora rimuoviamo dallo state locale: se arrivi qui la cancellazione cloud è andata
+        state.localAbb = state.localAbb.filter(x => x._id !== id);
+        renderAbb();
+        // Sync Sheets in fire-and-forget (non compromette lo stato se fallisce)
+        fetch(CONFIG.GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'deleteAbbonamento', id: id })
+        }).catch(e => console.warn('Sync Sheets fallita (non bloccante):', e));
+    } catch(e) {
+        console.error('Errore cancellazione abbonamento:', e);
+        alert('❌ Errore durante la cancellazione. Il record NON è stato rimosso — riprova.');
+    }
 }
 
 async function syncAbbToSheet(rec, isUpdate) {
