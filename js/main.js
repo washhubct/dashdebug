@@ -142,9 +142,15 @@ async function initFirebaseData() {
         state.giornDB = [];
         snapGiorn.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.giornDB.push(d); });
         
-        const snapCanc = await fsGetDocs(fsCollection(db, "cancellazioni"));
+        // Log cancellazioni: solo admin può leggere (rules Firestore).
+        // Per operator l'errore è atteso → non blocca il caricamento.
         state.logDB = [];
-        snapCanc.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.logDB.push(d); });
+        try {
+            const snapCanc = await fsGetDocs(fsCollection(db, "cancellazioni"));
+            snapCanc.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.logDB.push(d); });
+        } catch(logErr) {
+            console.warn("Log cancellazioni non accessibile (permessi):", logErr.message);
+        }
         
         const snapUsc = await fsGetDocs(fsCollection(db, "uscite"));
         state.usciteDB = [];
