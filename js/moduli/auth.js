@@ -4,7 +4,8 @@ import { state } from '../state.js';
 // Lista admin — la sicurezza reale dev'essere su Firestore Security Rules,
 // questa lista client serve solo per UI gating (mostrare/nascondere azioni)
 const ADMIN_EMAILS = [
-    'amministrazione@avrlogisticarl.com'
+    'amministrazione@avrlogisticarl.com',
+    'michela@avrlogisticarl.com'
 ];
 
 /**

@@ -22,7 +22,10 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn()
              && request.auth.token.email != null
-             && request.auth.token.email.lower() == 'amministrazione@avrlogisticarl.com';
+             && (
+               request.auth.token.email.lower() == 'amministrazione@avrlogisticarl.com'
+               || request.auth.token.email.lower() == 'michela@avrlogisticarl.com'
+             );
     }
 
     function isOperator() {
