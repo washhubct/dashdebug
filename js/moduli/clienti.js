@@ -7,6 +7,7 @@ let filtroAttivo = 'tutti';
 
 export function initClienti() {
     document.getElementById('addClienteBtn')?.addEventListener('click', () => showClienteForm());
+    document.getElementById('findDupBtn')?.addEventListener('click', openFindDuplicati);
     document.getElementById('clienteSaveBtn')?.addEventListener('click', salvaCliente);
     document.getElementById('clienteAnnullaBtn')?.addEventListener('click', hideClienteForm);
     document.getElementById('clienteSrch')?.addEventListener('input', renderClienti);
@@ -466,4 +467,225 @@ export async function autoSalvaCliente(nome,vettura,targa,telefono){
         clientiDB.push(record);
         state.clientiDB=clientiDB;
     }catch(e){console.warn(e);}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TROVA DUPLICATI & MERGE
+// ═══════════════════════════════════════════════════════════════════
+
+// Trova tutte le coppie di clienti simili (sim >= soglia)
+function findDuplicatePairs(soglia = 0.70) {
+    const pairs = [];
+    for (let i = 0; i < clientiDB.length; i++) {
+        for (let j = i + 1; j < clientiDB.length; j++) {
+            const a = clientiDB[i], b = clientiDB[j];
+            const sim = nameSimilarity(a.nome, b.nome);
+            if (sim >= soglia) pairs.push({ a, b, sim });
+        }
+    }
+    pairs.sort((x, y) => y.sim - x.sim);
+    return pairs;
+}
+
+async function openFindDuplicati() {
+    const pairs = findDuplicatePairs(0.70);
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:20px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow-y:auto';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg2);border-radius:var(--r);padding:24px 20px;max-width:640px;width:100%;box-shadow:var(--shadow-xl);margin-top:20px;margin-bottom:20px';
+
+    if (pairs.length === 0) {
+        modal.innerHTML = `
+            <h3 style="font:700 16px var(--f);margin-bottom:8px">🎉 Nessun duplicato trovato</h3>
+            <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:16px">
+                Il CRM è pulito. Tutti i nomi sono sufficientemente diversi tra loro.
+            </p>
+            <button class="btn btn-primary" style="width:100%" id="dupCloseBtn">Chiudi</button>
+        `;
+    } else {
+        let html = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                <h3 style="font:700 16px var(--f)">🔍 ${pairs.length} possibili duplicati</h3>
+                <button class="btn" id="dupCloseBtn">✕</button>
+            </div>
+            <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:16px">
+                Coppie di clienti con nomi simili. Clicca "Unifica" per fonderle in un unico record.
+            </p>
+            <div style="display:flex;flex-direction:column;gap:12px">
+        `;
+        pairs.forEach((p, idx) => {
+            const statsA = calcolaStatsCliente(p.a.nome);
+            const statsB = calcolaStatsCliente(p.b.nome);
+            const simPerc = Math.round(p.sim * 100);
+            const badge = simPerc >= 90 ? 'r' : (simPerc >= 80 ? 'a' : 'b');
+            html += `
+                <div style="border:1px solid var(--brd);border-radius:var(--r2);padding:14px;background:var(--bg4)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <span class="badge ${badge}">${simPerc}% simile</span>
+                        <button class="btn btn-primary dup-merge-btn" data-idx="${idx}" style="font-size:12px;padding:7px 14px">↔ Unifica</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                        <div style="padding:10px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--brd)">
+                            <div style="font:700 13px var(--f)">${esc(p.a.nome)}</div>
+                            <div style="font:400 11px var(--f);color:var(--tx3);margin-top:4px">${statsA.numLavaggi} lav. · ${p.a.telefono||'no tel'}</div>
+                        </div>
+                        <div style="padding:10px;background:var(--bg2);border-radius:var(--r2);border:1px solid var(--brd)">
+                            <div style="font:700 13px var(--f)">${esc(p.b.nome)}</div>
+                            <div style="font:400 11px var(--f);color:var(--tx3);margin-top:4px">${statsB.numLavaggi} lav. · ${p.b.telefono||'no tel'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        modal.innerHTML = html;
+    }
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    modal.querySelector('#dupCloseBtn')?.addEventListener('click', () => overlay.remove());
+    modal.querySelectorAll('.dup-merge-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx);
+            overlay.remove();
+            openMergeDialog(pairs[idx].a, pairs[idx].b);
+        });
+    });
+}
+
+function openMergeDialog(a, b) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg2);border-radius:var(--r);padding:24px 20px;max-width:520px;width:100%;box-shadow:var(--shadow-xl)';
+
+    const statsA = calcolaStatsCliente(a.nome);
+    const statsB = calcolaStatsCliente(b.nome);
+
+    modal.innerHTML = `
+        <h3 style="font:700 16px var(--f);margin-bottom:8px">↔ Unifica clienti</h3>
+        <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:16px">
+            Scegli quale tenere come <strong>record principale</strong>. Vetture, telefono e note
+            dell'altro verranno unite, e lo storico (prenotazioni, tappezzeria, sospesi) aggiornato.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+            <label style="padding:12px 14px;background:var(--bg);border:1.5px solid var(--brd2);border-radius:var(--r2);cursor:pointer;display:flex;gap:10px;align-items:center">
+                <input type="radio" name="master" value="a" checked>
+                <div>
+                    <div style="font:600 13px var(--f)">${esc(a.nome)}</div>
+                    <div style="font:400 11px var(--f);color:var(--tx3)">${statsA.numLavaggi} lavaggi · ${a.telefono||'—'} · ${(a.vetture||[]).length} vetture</div>
+                </div>
+            </label>
+            <label style="padding:12px 14px;background:var(--bg);border:1.5px solid var(--brd2);border-radius:var(--r2);cursor:pointer;display:flex;gap:10px;align-items:center">
+                <input type="radio" name="master" value="b">
+                <div>
+                    <div style="font:600 13px var(--f)">${esc(b.nome)}</div>
+                    <div style="font:400 11px var(--f);color:var(--tx3)">${statsB.numLavaggi} lavaggi · ${b.telefono||'—'} · ${(b.vetture||[]).length} vetture</div>
+                </div>
+            </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+            <button class="btn" id="mergeCancel" style="flex:1">Annulla</button>
+            <button class="btn btn-primary" id="mergeConfirm" style="flex:1">↔ Conferma unione</button>
+        </div>
+        <div id="mergeMsg" style="font:400 12px var(--f);margin-top:10px;min-height:18px"></div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    modal.querySelector('#mergeCancel').addEventListener('click', () => overlay.remove());
+    modal.querySelector('#mergeConfirm').addEventListener('click', async () => {
+        const master = modal.querySelector('input[name="master"]:checked').value === 'a' ? a : b;
+        const dup = master === a ? b : a;
+        const msg = modal.querySelector('#mergeMsg');
+        msg.style.color = 'var(--tx2)';
+        msg.textContent = '⏳ Unione in corso...';
+        modal.querySelector('#mergeConfirm').disabled = true;
+        try {
+            const stats = await mergeClienti(master, dup);
+            msg.style.color = 'var(--grn)';
+            msg.textContent = `✅ Unificati. ${stats.pren} prenotazioni, ${stats.tap} tappezzerie, ${stats.sosp} sospesi aggiornati.`;
+            setTimeout(() => { overlay.remove(); renderClienti(); openFindDuplicati(); }, 1200);
+        } catch (e) {
+            console.error(e);
+            msg.style.color = 'var(--red)';
+            msg.textContent = '⚠️ Errore: ' + e.message;
+            modal.querySelector('#mergeConfirm').disabled = false;
+        }
+    });
+}
+
+// Unisce duplicato nel master:
+// - sposta vetture non duplicate
+// - aggiunge telefono se master non ne ha
+// - concatena note
+// - aggiorna "cliente" su prenotazioni, tappezzeria, sospesi
+// - elimina il record duplicato
+async function mergeClienti(master, dup) {
+    const dupNome = master.nome === dup.nome ? null : dup.nome;
+
+    // 1) Merge vetture (dedup by modello+targa)
+    const masterVett = [...(master.vetture || [])];
+    (dup.vetture || []).forEach(dv => {
+        const key = (v) => `${normalizeName(v.modello)}|${normalizeName(v.targa)}`;
+        if (!masterVett.some(mv => key(mv) === key(dv))) masterVett.push(dv);
+    });
+
+    // 2) Telefono: prendi quello del master, fallback al dup
+    const telefonoFinale = master.telefono || dup.telefono || '';
+
+    // 3) Note: concatena
+    const noteFinali = [master.note, dup.note].filter(Boolean).join(' | ');
+
+    // 4) Aggiorna master su Firestore
+    await fsUpdateDoc(fsDoc(db, 'clienti', master._id), {
+        vetture: masterVett,
+        telefono: telefonoFinale,
+        note: noteFinali
+    });
+    master.vetture = masterVett;
+    master.telefono = telefonoFinale;
+    master.note = noteFinali;
+
+    // 5) Aggiorna storico: prenotazioni, tappezzeria, sospesi
+    let prenUpdated = 0, tapUpdated = 0, sospUpdated = 0;
+    if (dupNome) {
+        // Prenotazioni
+        for (const [date, entries] of Object.entries(state.prenDB || {})) {
+            for (const e of entries) {
+                if (normalizeName(e.cliente) === normalizeName(dupNome)) {
+                    await fsUpdateDoc(fsDoc(db, 'prenotazioni', e._pid), { cliente: master.nome });
+                    e.cliente = master.nome;
+                    prenUpdated++;
+                }
+            }
+        }
+        // Tappezzerie
+        for (const t of state.tapDB || []) {
+            if (normalizeName(t.cliente) === normalizeName(dupNome)) {
+                await fsUpdateDoc(fsDoc(db, 'tappezzeria', t._id), { cliente: master.nome });
+                t.cliente = master.nome;
+                tapUpdated++;
+            }
+        }
+        // Sospesi (solo quelli nativi Firestore, PREN-/TAP- sono aggiornati tramite i loro source)
+        for (const s of state.localSosp || []) {
+            if (normalizeName(s.cliente) === normalizeName(dupNome)
+                && s._sid && !s._sid.startsWith('PREN-') && !s._sid.startsWith('TAP-')) {
+                await fsUpdateDoc(fsDoc(db, 'sospesi', s._sid), { cliente: master.nome });
+                s.cliente = master.nome;
+                sospUpdated++;
+            }
+        }
+    }
+
+    // 6) Elimina il duplicato
+    await fsDeleteDoc(fsDoc(db, 'clienti', dup._id));
+    clientiDB = clientiDB.filter(c => c._id !== dup._id);
+    state.clientiDB = clientiDB;
+
+    return { pren: prenUpdated, tap: tapUpdated, sosp: sospUpdated };
 }
