@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
-import { autoSalvaCliente, checkClienteDuplicato } from './clienti.js';
+import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast } from './clienti.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -179,6 +179,8 @@ async function markPaid(date, pid, mod) {
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { saldato: 'SI', saldo: mod });
         entry.saldato = 'SI'; entry.saldo = mod;
         renderPren();
+        // Trigger ringraziamento WhatsApp (non blocking)
+        showThankYouToast(entry.cliente, pNum(entry.prezzo));
     } catch(e) { alert("Errore Cloud"); }
 }
 
@@ -353,6 +355,8 @@ async function toggleTap(id) {
             
             // Scrivi in Prima Nota se non è sospeso
             if (modUp !== 'SOSPESO') {
+                // Ringraziamento WhatsApp (post saldo, non per sospesi/fatturati)
+                if (modUp !== 'FATTURATO') showThankYouToast(t.cliente, parseFloat(t.prezzo) || 0);
                 try {
                     const imp = parseFloat(t.prezzo) || 0;
                     await fsAddDoc(fsCollection(db, "primaNota"), {

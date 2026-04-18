@@ -4,6 +4,7 @@ import { state, CONFIG } from '../state.js';
 import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
+import { showThankYouToast } from './clienti.js';
 
 let _abbonamentiInitialized = false;
 
@@ -263,6 +264,8 @@ async function saveAbb() {
     
     // Scrivi in Prima Nota su Firestore quando pagato
     if(pagamento === 'SI') {
+        // Ringraziamento WhatsApp al salvataggio abbonamento pagato
+        showThankYouToast(nome, imp);
         try {
             const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
             const dataISO = dataPag || fmtDI(new Date());
@@ -332,6 +335,8 @@ async function renewAbb(id) {
     
     // Se pagato, scrivi in Prima Nota
     if (pagato && imp > 0) {
+        // Ringraziamento WhatsApp al rinnovo pagato
+        showThankYouToast(r['NOME E COGNOME'] || '', imp);
         try {
             const nome = r['NOME E COGNOME'] || '';
             const targa = r.TARGA || '';

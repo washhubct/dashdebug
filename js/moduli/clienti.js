@@ -721,7 +721,7 @@ async function mergeClienti(master, dup) {
 // WHATSAPP MARKETING — invio messaggi con template
 // ═══════════════════════════════════════════════════════════════════
 
-function openWAMessageDialog(clienteId) {
+function openWAMessageDialog(clienteId, preselectedTplId) {
     if (!isAdmin()) { alert('⛔ Solo l\'amministratore può inviare messaggi WhatsApp.'); return; }
     const c = clientiDB.find(x => x._id === clienteId);
     if (!c) return;
@@ -729,6 +729,7 @@ function openWAMessageDialog(clienteId) {
     if (!tel) { alert('Numero non valido per WhatsApp: ' + (c.telefono||'(vuoto)')); return; }
 
     const stats = calcolaStatsCliente(c.nome);
+    const preIdx = preselectedTplId ? WA_TEMPLATES.findIndex(t => t.id === preselectedTplId) : 0;
 
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10002;display:flex;align-items:flex-start;justify-content:center;padding:20px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow-y:auto';
@@ -775,6 +776,7 @@ function openWAMessageDialog(clienteId) {
         textarea.value = fillTemplate(t.text, c, stats);
     };
     selTpl.addEventListener('change', refreshTpl);
+    if (preIdx >= 0) selTpl.value = preIdx;
     refreshTpl();
 
     modal.querySelector('#waCancel').addEventListener('click', () => overlay.remove());
@@ -793,5 +795,54 @@ function openWAMessageDialog(clienteId) {
         } catch(e) {
             alert('Impossibile copiare. Seleziona e copia manualmente.');
         }
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// THANK YOU TOAST — auto-prompt dopo ogni saldo
+// Chiamare dopo il salvataggio di un pagamento per suggerire
+// all'admin di inviare un ringraziamento su WhatsApp.
+// Se il cliente non esiste nel CRM o non ha telefono valido, skip silenzioso.
+// ═══════════════════════════════════════════════════════════════════
+export function showThankYouToast(nomeCliente, importoOptional) {
+    if (!isAdmin()) return;
+    if (!nomeCliente) return;
+    const normNome = normalizeName(nomeCliente);
+    const c = clientiDB.find(x => normalizeName(x.nome) === normNome);
+    if (!c || !c.telefono || !formatPhoneForWA(c.telefono)) return;
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9998;max-width:340px;background:var(--bg2);border:1.5px solid var(--grn);border-left:4px solid var(--grn);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow-lg);font-family:var(--f);transition:all .3s ease';
+    toast.style.transform = 'translateY(20px)';
+    toast.style.opacity = '0';
+
+    const importoStr = importoOptional ? `€${Number(importoOptional).toFixed(2).replace('.',',')}` : '';
+    toast.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="flex:1;min-width:0">
+                <div style="font:600 13px var(--f);color:var(--tx);overflow:hidden;text-overflow:ellipsis">✅ Pagamento da ${esc(c.nome)}</div>
+                ${importoStr ? `<div style="font:500 11px var(--mono);color:var(--tx3);margin-top:2px">${importoStr}</div>` : ''}
+                <button class="toast-thank-btn" style="margin-top:10px;padding:8px 14px;background:#25D366;border:0;color:#fff;border-radius:var(--r2);font:600 12px var(--f);cursor:pointer;width:100%">📱 Ringrazia su WhatsApp</button>
+            </div>
+            <button class="toast-close" style="background:0;border:0;color:var(--tx3);font-size:20px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0">×</button>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+    // Anim in
+    requestAnimationFrame(() => { toast.style.transform = 'translateY(0)'; toast.style.opacity = '1'; });
+
+    const dismiss = () => {
+        toast.style.transform = 'translateY(20px)';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    };
+    const timer = setTimeout(dismiss, 12000); // auto-dismiss 12s
+
+    toast.querySelector('.toast-close').addEventListener('click', () => { clearTimeout(timer); dismiss(); });
+    toast.querySelector('.toast-thank-btn').addEventListener('click', () => {
+        clearTimeout(timer);
+        dismiss();
+        openWAMessageDialog(c._id, 'grazie');
     });
 }
