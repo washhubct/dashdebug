@@ -1,4 +1,5 @@
 import { db, fsCollection, fsGetDocs, fsAddDoc } from './firebase-config.js';
+import { query, where } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 const MAX_AUTO_PER_SLOT = 1;
@@ -80,14 +81,15 @@ dateInput.addEventListener('change', async () => {
     slotMsg.textContent = 'Verifico disponibilità in tempo reale... ⏳';
 
     try {
-        const snap = await fsGetDocs(fsCollection(db, 'prenotazioni'));
+        // Query filtrata by dataPren: leggiamo solo le prenotazioni del giorno
+        // selezionato invece dell'intera collezione (privacy + performance).
+        const q = query(fsCollection(db, 'prenotazioni'), where('dataPren', '==', selectedDate));
+        const snap = await fsGetDocs(q);
         let countPerSlot = {};
-        
+
         snap.forEach(doc => {
             const data = doc.data();
-            if (data.dataPren === selectedDate) {
-                countPerSlot[data.orario] = (countPerSlot[data.orario] || 0) + 1;
-            }
+            countPerSlot[data.orario] = (countPerSlot[data.orario] || 0) + 1;
         });
 
         slotMsg.textContent = 'Seleziona un orario:';
