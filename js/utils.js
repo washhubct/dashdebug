@@ -50,3 +50,73 @@ export function d2s(v) {
     const d = new Date(v);
     return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
 }
+
+// ═══ CRM: Normalizzazione nomi cliente ═══
+// UPPERCASE + trim + collapse spazi multipli (coerente con formato DB esistente)
+// Es: "  riccardo  vecchio " → "RICCARDO VECCHIO"
+export function normalizeName(s) {
+    if (!s) return '';
+    return String(s).trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+// Distanza di Levenshtein tra due stringhe
+function levenshtein(a, b) {
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const m = [];
+    for (let i = 0; i <= b.length; i++) m[i] = [i];
+    for (let j = 0; j <= a.length; j++) m[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b[i - 1] === a[j - 1]) m[i][j] = m[i - 1][j - 1];
+            else m[i][j] = Math.min(m[i - 1][j - 1] + 1, m[i][j - 1] + 1, m[i - 1][j] + 1);
+        }
+    }
+    return m[b.length][a.length];
+}
+
+// ═══ Similarità tra due nomi (0-1) ═══
+// Token-based: decompone in parole, gestisce ordine diverso e abbreviazioni
+// Es: "Riccardo Vecchio" vs "Vecchio R" → ~0.9 (alto)
+//     "Mario Rossi" vs "Vecchio R" → ~0.3 (basso)
+export function nameSimilarity(a, b) {
+    if (!a || !b) return 0;
+    const norm = s => String(s).toLowerCase().trim()
+        .replace(/[.,;:'"!?()[\]{}]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const tokA = norm(a).split(' ').filter(Boolean);
+    const tokB = norm(b).split(' ').filter(Boolean);
+    if (!tokA.length || !tokB.length) return 0;
+
+    // Match esatto intero
+    if (norm(a) === norm(b)) return 1;
+
+    let matched = 0;
+    const usedB = new Set();
+    for (const tA of tokA) {
+        for (let i = 0; i < tokB.length; i++) {
+            if (usedB.has(i)) continue;
+            const tB = tokB[i];
+            // Match esatto token
+            if (tA === tB) { matched += 1; usedB.add(i); break; }
+            // Abbreviazione: uno è prefisso dell'altro (es. "r" in "riccardo")
+            if (tA.length >= 1 && tB.length >= 1 &&
+                (tA === tB.substring(0, tA.length) || tB === tA.substring(0, tB.length))) {
+                // Peso crescente con la lunghezza dell'abbreviazione
+                const minLen = Math.min(tA.length, tB.length);
+                matched += minLen === 1 ? 0.7 : 0.85;
+                usedB.add(i);
+                break;
+            }
+            // Fuzzy: Levenshtein con soglia 85% su token lunghi
+            const dist = levenshtein(tA, tB);
+            const maxLen = Math.max(tA.length, tB.length);
+            const sim = 1 - dist / maxLen;
+            if (maxLen >= 4 && sim >= 0.85) { matched += sim; usedB.add(i); break; }
+        }
+    }
+
+    // Dice coefficient: 2 * matched / (|A| + |B|)
+    return (2 * matched) / (tokA.length + tokB.length);
+}

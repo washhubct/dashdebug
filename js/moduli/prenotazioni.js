@@ -1,9 +1,9 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
-import { pNum, fEur, esc, fmtDI } from '../utils.js';
+import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
-import { autoSalvaCliente } from './clienti.js';
+import { autoSalvaCliente, checkClienteDuplicato } from './clienti.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -136,20 +136,27 @@ async function addPren() {
     const date = document.getElementById('prenData').value;
     const telefono = document.getElementById('pTelefono')?.value.trim() || '';
     const prezzoRaw = document.getElementById('pPrezzo').value.trim();
+    const inputNome = document.getElementById('pCliente').value;
+    const inputVett = document.getElementById('pVettura').value;
+
+    if (!inputNome.trim() || !inputVett.trim() || !prezzoRaw || !telefono) return alert("Compila i campi obbligatori (Nominativo, Telefono, Vettura, Prezzo)!");
+    const prezzoNum = parseFloat(prezzoRaw.replace(',', '.'));
+    if (isNaN(prezzoNum) || prezzoNum < 0) return alert("⚠️ Prezzo non valido! Inserisci un numero (es. 25 oppure 25,50).");
+
+    // Hard autocomplete: se esistono clienti simili, forza scelta o conferma "nuovo"
+    const clienteFinale = await checkClienteDuplicato(inputNome);
+    if (clienteFinale === null) return; // utente ha annullato
+
     const obj = {
         dataPren: date,
         orario: document.getElementById('pOrario').value,
-        cliente: document.getElementById('pCliente').value.trim().toUpperCase(),
+        cliente: clienteFinale,
         telefono: telefono,
-        vettura: document.getElementById('pVettura').value.trim().toUpperCase(),
+        vettura: normalizeName(inputVett),
         prezzo: prezzoRaw,
         note: document.getElementById('pNote').value.trim(),
         saldo: '', saldato: ''
     };
-    if (!obj.cliente || !obj.vettura || !obj.prezzo || !obj.telefono) return alert("Compila i campi obbligatori (Nominativo, Telefono, Vettura, Prezzo)!");
-    // Validazione numerica prezzo (accetta sia "25" sia "25,50" sia "25.50")
-    const prezzoNum = parseFloat(prezzoRaw.replace(',', '.'));
-    if (isNaN(prezzoNum) || prezzoNum < 0) return alert("⚠️ Prezzo non valido! Inserisci un numero (es. 25 oppure 25,50).");
 
     try {
         const ref = await fsAddDoc(fsCollection(db, "prenotazioni"), obj);
@@ -220,8 +227,8 @@ async function editPren(date, pid) {
     if (nuoveNote === null) return;
 
     const updates = {
-        cliente: nuovoCliente.trim().toUpperCase(),
-        vettura: nuovaVettura.trim().toUpperCase(),
+        cliente: normalizeName(nuovoCliente),
+        vettura: normalizeName(nuovaVettura),
         prezzo: prezzoTrim,
         note: nuoveNote.trim()
     };
@@ -289,18 +296,27 @@ export function renderTap() {
 
 async function addTap() {
     const msg = document.getElementById('tapMsg');
-    const obj = {
-        dataIn: new Date().toLocaleDateString('it-IT'),
-        cliente: document.getElementById('tCliente').value.trim().toUpperCase(),
-        modello: document.getElementById('tModello').value.trim().toUpperCase(),
-        targa: document.getElementById('tTarga').value.trim().toUpperCase(),
-        prezzo: document.getElementById('tPrezzo').value.trim(),
-        status: 'IN', pagamento: '', dataOut: ''
-    };
-    if(!obj.cliente || !obj.modello || !obj.prezzo) {
+    const inputNome = document.getElementById('tCliente').value;
+    const modelloRaw = document.getElementById('tModello').value;
+    const prezzoRaw = document.getElementById('tPrezzo').value.trim();
+
+    if(!inputNome.trim() || !modelloRaw.trim() || !prezzoRaw) {
         if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Compila Cliente, Modello e Prezzo!'; }
         return;
     }
+
+    // Hard autocomplete: scelta obbligata se ci sono simili
+    const clienteFinale = await checkClienteDuplicato(inputNome);
+    if (clienteFinale === null) return;
+
+    const obj = {
+        dataIn: new Date().toLocaleDateString('it-IT'),
+        cliente: clienteFinale,
+        modello: normalizeName(modelloRaw),
+        targa: normalizeName(document.getElementById('tTarga').value),
+        prezzo: prezzoRaw,
+        status: 'IN', pagamento: '', dataOut: ''
+    };
     try {
         const ref = await fsAddDoc(fsCollection(db, "tappezzeria"), obj);
         obj._id = ref.id;

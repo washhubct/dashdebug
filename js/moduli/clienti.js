@@ -1,6 +1,6 @@
 import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
-import { pNum, fEur, esc, fmtDI, pDate } from '../utils.js';
+import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity } from '../utils.js';
 
 let clientiDB = [];
 let filtroAttivo = 'tutti';
@@ -240,7 +240,7 @@ function aggiungiCampoVettura(data){
 
 async function salvaCliente(){
     const msg=document.getElementById('clienteMsg');
-    const nome=document.getElementById('cNome').value.trim().toUpperCase();
+    const nome=normalizeName(document.getElementById('cNome').value);
     const telefono=document.getElementById('cTel').value.trim();
     const note=document.getElementById('cNote').value.trim();
     const prezzoVip=parseFloat(document.getElementById('cPrezzoVip').value)||0;
@@ -269,8 +269,14 @@ async function salvaCliente(){
             if(idx>=0){record._id=state.clienteEditId;clientiDB[idx]=record;}
             if(msg){msg.style.color='var(--grn)';msg.textContent='✅ Aggiornato!';}
         } else {
-            const dup=clientiDB.find(c=>c.nome===nome);
-            if(dup&&!confirm(`Esiste già "${nome}". Aggiungo comunque?`))return;
+            // Hard autocomplete anche nel form cliente: se simili, blocca
+            const nomeFinale = await checkClienteDuplicato(nome);
+            if (nomeFinale === null) return;
+            if (nomeFinale !== nome) {
+                // L'utente ha scelto un esistente invece di crearne uno nuovo
+                if(msg){msg.style.color='var(--amb)';msg.textContent=`⚠️ Usa il cliente esistente "${nomeFinale}" dalla lista per modificarlo.`;}
+                return;
+            }
             const ref=await fsAddDoc(fsCollection(db,'clienti'),record);
             record._id=ref.id; clientiDB.push(record);
             if(msg){msg.style.color='var(--grn)';msg.textContent='✅ Salvato!';}
@@ -343,17 +349,105 @@ function mostraSelettoreVetturaTap(cliente){
     document.addEventListener('click',function h(e){if(!sel.contains(e.target)&&e.target!==im){sel.remove();document.removeEventListener('click',h);}});
 }
 
+// ═══ DUPLICATI: ricerca clienti simili per un nome input ═══
+// Ritorna array di { cliente, sim } ordinati per similarità decrescente.
+export function findSimilarClienti(nomeInput, soglia = 0.85) {
+    const norm = normalizeName(nomeInput);
+    if (!norm || norm.length < 2) return [];
+    const hits = [];
+    for (const c of clientiDB) {
+        const sim = nameSimilarity(c.nome, norm);
+        if (sim >= soglia) hits.push({ cliente: c, sim });
+    }
+    hits.sort((a, b) => b.sim - a.sim);
+    return hits.slice(0, 5);
+}
+
+// ═══ HARD AUTOCOMPLETE: dialog blocker per evitare duplicati ═══
+// Ritorna Promise<string|null>:
+//   - string = nome da usare (esistente scelto o input confermato "nuovo")
+//   - null   = utente ha annullato
+export function checkClienteDuplicato(nomeInput) {
+    return new Promise((resolve) => {
+        const norm = normalizeName(nomeInput);
+        if (!norm) { resolve(null); return; }
+        // Match esatto → usa direttamente senza chiedere
+        if (clientiDB.find(c => normalizeName(c.nome) === norm)) {
+            resolve(norm); return;
+        }
+        const simili = findSimilarClienti(norm, 0.85);
+        if (simili.length === 0) { resolve(norm); return; }
+        showClienteSimileDialog(norm, simili, resolve);
+    });
+}
+
+function showClienteSimileDialog(nomeInput, simili, resolve) {
+    const overlay = document.createElement('div');
+    overlay.className = 'dup-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg2);border-radius:var(--r);padding:24px 20px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-xl)';
+
+    let html = `
+        <h3 style="font:700 16px var(--f);margin-bottom:6px">🔍 Clienti simili trovati</h3>
+        <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:16px">
+            Hai digitato: <strong style="color:var(--tx)">${esc(nomeInput)}</strong><br>
+            Per evitare duplicati, scegli se è uno di questi o conferma come nuovo.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+    `;
+    simili.forEach((s, i) => {
+        const stats = calcolaStatsCliente(s.cliente.nome);
+        const simPerc = Math.round(s.sim * 100);
+        html += `
+            <button class="dup-opt" data-idx="${i}" style="text-align:left;padding:12px 14px;background:var(--bg);border:1.5px solid var(--brd2);border-radius:var(--r2);cursor:pointer;transition:all .15s;font-family:var(--f)">
+                <div style="font:600 14px var(--f);color:var(--tx)">${esc(s.cliente.nome)}</div>
+                <div style="font:400 11px var(--f);color:var(--tx3);margin-top:4px">${stats.numLavaggi} lavaggi · ${esc(s.cliente.telefono||'no tel')} · ${simPerc}% simile</div>
+            </button>
+        `;
+    });
+    html += `
+            <button class="dup-new" style="text-align:left;padding:12px 14px;background:var(--gold-subtle);border:1.5px solid var(--gold-ring);border-radius:var(--r2);cursor:pointer;margin-top:4px;font-family:var(--f)">
+                <div style="font:600 14px var(--f);color:var(--gold)">➕ È un nuovo cliente</div>
+                <div style="font:400 11px var(--f);color:var(--tx2);margin-top:4px">Salva esattamente "${esc(nomeInput)}"</div>
+            </button>
+            <button class="dup-cancel" style="text-align:center;padding:12px;background:0;border:0;color:var(--tx3);cursor:pointer;margin-top:4px;font:500 13px var(--f)">Annulla</button>
+        </div>
+    `;
+    modal.innerHTML = html;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    modal.querySelectorAll('.dup-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx);
+            overlay.remove();
+            resolve(simili[idx].cliente.nome);
+        });
+    });
+    modal.querySelector('.dup-new').addEventListener('click', () => {
+        overlay.remove();
+        resolve(nomeInput);
+    });
+    modal.querySelector('.dup-cancel').addEventListener('click', () => {
+        overlay.remove();
+        resolve(null);
+    });
+}
+
 // ═══ AUTO-CREAZIONE CLIENTE ═══
 // Ora async: restituisce una Promise, così i chiamanti possono await-are
 // per evitare race con altre operazioni sullo state clienti.
 export async function autoSalvaCliente(nome,vettura,targa,telefono){
     if(!nome||nome.length<2)return;
-    const nomeUp=nome.toUpperCase();
-    const esistente=clientiDB.find(c=>c.nome===nomeUp);
+    const nomeUp=normalizeName(nome);
+    const esistente=clientiDB.find(c=>normalizeName(c.nome)===nomeUp);
     if(esistente){
         const ops=[];
-        if(vettura&&!esistente.vetture?.some(v=>v.modello===vettura.toUpperCase())){
-            const nv={modello:vettura.toUpperCase(),targa:(targa||'').toUpperCase(),prezzo:0};
+        const vettUp=vettura?normalizeName(vettura):'';
+        if(vettUp&&!esistente.vetture?.some(v=>normalizeName(v.modello)===vettUp)){
+            const nv={modello:vettUp,targa:normalizeName(targa),prezzo:0};
             const vt=[...(esistente.vetture||[]),nv];
             ops.push(fsUpdateDoc(fsDoc(db,'clienti',esistente._id),{vetture:vt}).catch(e=>console.warn(e)));
             esistente.vetture=vt;
@@ -365,7 +459,7 @@ export async function autoSalvaCliente(nome,vettura,targa,telefono){
         await Promise.all(ops);
         return;
     }
-    const record={nome:nomeUp,telefono:telefono||'',vetture:vettura?[{modello:vettura.toUpperCase(),targa:(targa||'').toUpperCase(),prezzo:0}]:[],note:'',prezzoVip:0,tipo:'privato',timestamp:Date.now()};
+    const record={nome:nomeUp,telefono:telefono||'',vetture:vettura?[{modello:normalizeName(vettura),targa:normalizeName(targa),prezzo:0}]:[],note:'',prezzoVip:0,tipo:'privato',timestamp:Date.now()};
     try{
         const ref=await fsAddDoc(fsCollection(db,'clienti'),record);
         record._id=ref.id;
