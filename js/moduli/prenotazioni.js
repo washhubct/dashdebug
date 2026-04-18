@@ -268,10 +268,11 @@ export function renderTap() {
 
     if (outOggi.length > 0) {
         let outHtml = `<div style="margin-top:14px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">✅ Completate Oggi</div>
-        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data IN</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Pagamento</th></tr></thead><tbody>`;
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Entrata</th><th>Uscita</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Pagamento</th></tr></thead><tbody>`;
         outOggi.forEach(t => {
             outHtml += `<tr style="opacity:0.6">
                 <td>${t.dataIn}</td>
+                <td>${t.dataOut || '—'}</td>
                 <td>${esc(t.cliente)}</td>
                 <td>${esc(t.modello)}</td>
                 <td>${esc(t.targa)}</td>
