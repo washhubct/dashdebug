@@ -75,6 +75,21 @@ function levenshtein(a, b) {
     return m[b.length][a.length];
 }
 
+// ═══ Formatta telefono per wa.me (richiede numero senza "+") ═══
+// Gestisce: "333 1234567", "+39 333 1234567", "0039 3331234567", "393331234567"
+// Ritorna stringa tipo "393331234567" o null se formato irriconoscibile.
+export function formatPhoneForWA(tel) {
+    if (!tel) return null;
+    let clean = String(tel).replace(/[^\d+]/g, '');
+    if (clean.startsWith('00')) clean = '+' + clean.substring(2);
+    if (!clean.startsWith('+')) {
+        if (clean.startsWith('39') && clean.length >= 11) clean = '+' + clean;
+        else if (clean.startsWith('3') && (clean.length === 10 || clean.length === 9)) clean = '+39' + clean;
+        else return null;
+    }
+    return clean.replace(/^\+/, '');
+}
+
 // ═══ Similarità tra due nomi (0-1) ═══
 // Token-based: decompone in parole, gestisce ordine diverso e abbreviazioni
 // Es: "Riccardo Vecchio" vs "Vecchio R" → ~0.9 (alto)

@@ -1,6 +1,30 @@
 import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
-import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity } from '../utils.js';
+import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity, formatPhoneForWA } from '../utils.js';
+import { isAdmin } from './auth.js';
+
+// ═══ Template messaggi WhatsApp (FASE 2 marketing) ═══
+const WA_TEMPLATES = [
+    { id: 'richiamo', label: '🔔 Richiamo (dormiente)',
+      text: "Ciao {nomeShort}! 👋\n\nSono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare 🚗\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio." },
+    { id: 'grazie', label: '🙏 Ringraziamento nuovo cliente',
+      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare. Speriamo tu sia rimasto soddisfatto ✨\n\nA presto 🚗" },
+    { id: 'abbonamento', label: '📆 Rinnovo abbonamento',
+      text: "Ciao {nomeShort}! 📆\n\nTi scrivo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere 👍" },
+    { id: 'promo', label: '🎁 Promozione',
+      text: "Ciao {nomeShort}! 🎁\n\nOfferta speciale al Wash Hub Lungomare: [inserisci dettagli]\n\nTi aspettiamo! 🚗💦" },
+    { id: 'custom', label: '✏️ Scrivi da zero', text: '' }
+];
+
+function fillTemplate(tpl, cliente, stats) {
+    const nomeShort = (cliente.nome || '').split(' ').map(w => w[0] + w.substring(1).toLowerCase()).slice(0, 1).join(' ') || cliente.nome || '';
+    return tpl
+        .replace(/{nome}/g, cliente.nome || '')
+        .replace(/{nomeShort}/g, nomeShort)
+        .replace(/{giorni}/g, stats.giorniDaUltimaVisita < 999 ? stats.giorniDaUltimaVisita : '—')
+        .replace(/{numLavaggi}/g, stats.numLavaggi)
+        .replace(/{ticketMedio}/g, stats.ticketMedio);
+}
 
 let clientiDB = [];
 let filtroAttivo = 'tutti';
@@ -170,6 +194,8 @@ export function renderClienti() {
 
     if(!filtered.length){tb.innerHTML='<tr><td colspan="8" class="empty">Nessun cliente trovato</td></tr>';return;}
 
+    const showWA = isAdmin(); // solo admin può inviare WhatsApp
+
     tb.innerHTML=filtered.map(c=>{
         const vetture=(c.vetture||[]).map(v=>`${v.modello||''} ${v.targa||''}`).join(', ')||'—';
         const isVip=c.prezzoVip&&c.prezzoVip>0;
@@ -188,12 +214,13 @@ export function renderClienti() {
             <td style="text-align:center;font:600 12px var(--mono)">${c._numLavaggi||0}</td>
             <td><span class="badge ${alertClass}">${alertLabel}</span></td>
             <td style="font-weight:600">${c._spesaTotale>0?fEur(c._spesaTotale):'—'}</td>
-            <td style="white-space:nowrap"><button class="act-btn cli-storico-btn" data-id="${c._id}" title="Storico">📋</button><button class="act-btn edit-cli" data-id="${c._id}" title="Modifica">✎</button><button class="act-btn del del-cli" data-id="${c._id}" title="Elimina">✕</button></td></tr>`;
+            <td style="white-space:nowrap"><button class="act-btn cli-storico-btn" data-id="${c._id}" title="Storico">📋</button>${showWA && formatPhoneForWA(c.telefono)?`<button class="act-btn wa-btn" data-id="${c._id}" title="Invia WhatsApp" style="border-color:#25D366;color:#25D366">📱</button>`:''}<button class="act-btn edit-cli" data-id="${c._id}" title="Modifica">✎</button><button class="act-btn del del-cli" data-id="${c._id}" title="Elimina">✕</button></td></tr>`;
     }).join('');
 
     tb.querySelectorAll('.edit-cli').forEach(btn=>btn.addEventListener('click',()=>editCliente(btn.dataset.id)));
     tb.querySelectorAll('.del-cli').forEach(btn=>btn.addEventListener('click',()=>deleteCliente(btn.dataset.id)));
     tb.querySelectorAll('.cli-storico,.cli-storico-btn').forEach(el=>el.addEventListener('click',()=>mostraStorico(el.dataset.id)));
+    tb.querySelectorAll('.wa-btn').forEach(btn=>btn.addEventListener('click',()=>openWAMessageDialog(btn.dataset.id)));
 }
 
 function showClienteForm(data) {
@@ -688,4 +715,83 @@ async function mergeClienti(master, dup) {
     state.clientiDB = clientiDB;
 
     return { pren: prenUpdated, tap: tapUpdated, sosp: sospUpdated };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WHATSAPP MARKETING — invio messaggi con template
+// ═══════════════════════════════════════════════════════════════════
+
+function openWAMessageDialog(clienteId) {
+    if (!isAdmin()) { alert('⛔ Solo l\'amministratore può inviare messaggi WhatsApp.'); return; }
+    const c = clientiDB.find(x => x._id === clienteId);
+    if (!c) return;
+    const tel = formatPhoneForWA(c.telefono);
+    if (!tel) { alert('Numero non valido per WhatsApp: ' + (c.telefono||'(vuoto)')); return; }
+
+    const stats = calcolaStatsCliente(c.nome);
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10002;display:flex;align-items:flex-start;justify-content:center;padding:20px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);overflow-y:auto';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg2);border-radius:var(--r);padding:24px 20px;max-width:520px;width:100%;box-shadow:var(--shadow-xl);margin-top:20px';
+
+    let tplOptions = WA_TEMPLATES.map((t, i) => `<option value="${i}">${t.label}</option>`).join('');
+
+    modal.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h3 style="font:700 16px var(--f)">📱 Invia WhatsApp</h3>
+            <button class="btn" id="waCancel">✕</button>
+        </div>
+        <div style="padding:10px 14px;background:var(--bg);border-radius:var(--r2);margin-bottom:14px">
+            <div style="font:600 13px var(--f)">${esc(c.nome)}</div>
+            <div style="font:400 11px var(--f);color:var(--tx3);margin-top:3px">
+                ${esc(c.telefono)} · ${stats.numLavaggi} lavaggi · ${stats.giorniDaUltimaVisita<999?stats.giorniDaUltimaVisita+'gg fa':'mai'}
+            </div>
+        </div>
+        <div class="ff" style="margin-bottom:10px">
+            <label>Template</label>
+            <select id="waTpl">${tplOptions}</select>
+        </div>
+        <div class="ff" style="margin-bottom:10px">
+            <label>Messaggio (modificabile)</label>
+            <textarea id="waMsg" rows="8" style="width:100%;font:400 14px var(--f);padding:10px 14px;border:1.5px solid var(--brd2);border-radius:var(--r2);resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;gap:8px">
+            <button class="btn" id="waCopyBtn" style="flex:1">📋 Copia testo</button>
+            <button class="btn btn-primary" id="waOpenBtn" style="flex:1;background:#25D366;border-color:#25D366">📱 Apri WhatsApp</button>
+        </div>
+        <p style="font:400 11px var(--f);color:var(--tx3);margin-top:10px">
+            Si aprirà WhatsApp con il messaggio precompilato: controlla e premi invio.
+        </p>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const selTpl = modal.querySelector('#waTpl');
+    const textarea = modal.querySelector('#waMsg');
+    const refreshTpl = () => {
+        const t = WA_TEMPLATES[parseInt(selTpl.value)];
+        textarea.value = fillTemplate(t.text, c, stats);
+    };
+    selTpl.addEventListener('change', refreshTpl);
+    refreshTpl();
+
+    modal.querySelector('#waCancel').addEventListener('click', () => overlay.remove());
+    modal.querySelector('#waOpenBtn').addEventListener('click', () => {
+        const msg = textarea.value.trim();
+        if (!msg) { alert('Il messaggio è vuoto.'); return; }
+        const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+        overlay.remove();
+    });
+    modal.querySelector('#waCopyBtn').addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(textarea.value);
+            modal.querySelector('#waCopyBtn').textContent = '✅ Copiato';
+            setTimeout(() => { modal.querySelector('#waCopyBtn').textContent = '📋 Copia testo'; }, 1500);
+        } catch(e) {
+            alert('Impossibile copiare. Seleziona e copia manualmente.');
+        }
+    });
 }
