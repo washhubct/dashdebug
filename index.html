@@ -19,6 +19,32 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="WASH HUB">
 <link rel="apple-touch-icon" href="img/logo.png">
+
+<script>
+// ═══ AUTO-RELOAD VERSIONATO ═══
+// Se l'app viene aggiornata, forza il reload al primo caricamento successivo
+// svuotando cache Service Worker e localStorage di versione.
+(function(){
+    var APP_VERSION = '20260420';
+    var KEY = 'wh_app_version';
+    try {
+        var last = localStorage.getItem(KEY);
+        if (last && last !== APP_VERSION) {
+            // Versione cambiata: svuota cache Service Worker (se presente) e ricarica
+            if ('caches' in window) {
+                caches.keys().then(function(names){
+                    names.forEach(function(n){ caches.delete(n); });
+                });
+            }
+            localStorage.setItem(KEY, APP_VERSION);
+            // Reload senza cache — solo una volta per versione
+            setTimeout(function(){ location.reload(); }, 50);
+            return;
+        }
+        localStorage.setItem(KEY, APP_VERSION);
+    } catch(e) { /* localStorage non disponibile, skip silenziosamente */ }
+})();
+</script>
 </head>
 <body>
 
