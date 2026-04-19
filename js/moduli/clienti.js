@@ -7,18 +7,20 @@ const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
 const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
 
 const WA_TEMPLATES = [
-    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento',
-      text: "Ciao {nomeShort},\n\nGrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nA presto!" },
-    { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente',
-      text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nSeguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nSe ti è piaciuto il servizio, lasciaci una recensione su Google, per noi vale tantissimo:\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nWash Hub Lungomare" },
+    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google)',
+      text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nStaff" },
+    { id: 'benvenuto-pren', label: '👋 Benvenuto + conferma prenotazione',
+      text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nTi confermiamo la tua prenotazione:\nData: {dataPren}\nOra: {orario}\n\nIntanto, seguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nA presto,\nStaff" },
+    { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente (senza prenotazione)',
+      text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nSeguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nSe ti è piaciuto il servizio, lasciaci una recensione su Google, per noi vale tantissimo:\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nStaff" },
     { id: 'conferma-pren', label: '📅 Conferma prenotazione',
-      text: "Ciao {nomeShort},\n\nti confermiamo la tua prenotazione al Wash Hub Lungomare:\n\nData: {dataPren}\nOra: {orario}\n\nSe dovessi avere imprevisti, avvisaci in tempo.\n\nA presto,\nWash Hub Lungomare" },
+      text: "Ciao {nomeShort},\n\nti confermiamo la tua prenotazione al Wash Hub Lungomare:\n\nData: {dataPren}\nOra: {orario}\n\nSe dovessi avere imprevisti, avvisaci in tempo.\n\nA presto,\nStaff" },
     { id: 'richiamo', label: '🔔 Richiamo (dormiente)',
-      text: "Ciao {nomeShort},\n\nsono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare.\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio.\n\nA presto,\nWash Hub Lungomare" },
+      text: "Ciao {nomeShort},\n\nsono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare.\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio.\n\nA presto,\nStaff" },
     { id: 'abbonamento', label: '📆 Rinnovo abbonamento',
-      text: "Ciao {nomeShort},\n\nti scriviamo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere.\n\nA presto,\nWash Hub Lungomare" },
+      text: "Ciao {nomeShort},\n\nti scriviamo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere.\n\nA presto,\nStaff" },
     { id: 'promo', label: '🎁 Promozione',
-      text: "Ciao {nomeShort},\n\noggi al Wash Hub Lungomare abbiamo un'offerta speciale per te: [inserisci dettagli].\n\nTi aspettiamo!\n\nWash Hub Lungomare" },
+      text: "Ciao {nomeShort},\n\noggi al Wash Hub Lungomare abbiamo un'offerta speciale per te: [inserisci dettagli].\n\nTi aspettiamo!\n\nA presto,\nStaff" },
     { id: 'custom', label: '✏️ Scrivi da zero', text: '' }
 ];
 
@@ -476,10 +478,10 @@ function showClienteSimileDialog(nomeInput, simili, resolve) {
 }
 
 // ═══ AUTO-CREAZIONE CLIENTE ═══
-// Ora async: restituisce una Promise, così i chiamanti possono await-are
-// per evitare race con altre operazioni sullo state clienti.
+// Restituisce Promise<boolean>: true se ha creato un nuovo cliente, false se esistente.
+// Il chiamante decide quale toast WhatsApp mostrare a fronte del risultato.
 export async function autoSalvaCliente(nome,vettura,targa,telefono){
-    if(!nome||nome.length<2)return;
+    if(!nome||nome.length<2)return false;
     const nomeUp=normalizeName(nome);
     const esistente=clientiDB.find(c=>normalizeName(c.nome)===nomeUp);
     if(esistente){
@@ -496,7 +498,7 @@ export async function autoSalvaCliente(nome,vettura,targa,telefono){
             esistente.telefono=telefono;
         }
         await Promise.all(ops);
-        return;
+        return false; // cliente esistente
     }
     const record={nome:nomeUp,telefono:telefono||'',vetture:vettura?[{modello:normalizeName(vettura),targa:normalizeName(targa),prezzo:0}]:[],note:'',prezzoVip:0,tipo:'privato',timestamp:Date.now()};
     try{
@@ -504,9 +506,11 @@ export async function autoSalvaCliente(nome,vettura,targa,telefono){
         record._id=ref.id;
         clientiDB.push(record);
         state.clientiDB=clientiDB;
-        // Nuovo cliente con telefono valido: proponi messaggio di benvenuto
-        if (telefono && formatPhoneForWA(telefono)) showWelcomeToast(nomeUp);
-    }catch(e){console.warn(e);}
+        return true; // nuovo cliente creato
+    }catch(e){
+        console.warn(e);
+        return false;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -878,13 +882,27 @@ export function showThankYouToast(nomeCliente, importoOptional) {
     });
 }
 
-// Wrapper: benvenuto nuovo cliente (con link IG + Google Review)
+// Wrapper: benvenuto nuovo cliente (senza prenotazione contestuale)
+// - contiene link IG + Google Review
 export function showWelcomeToast(nomeCliente) {
     showWAPromptToast({
         nomeCliente, templateId: 'benvenuto',
         title: '🆕 Nuovo cliente: ' + (nomeCliente || '—'),
-        subtitle: 'Invia messaggio di benvenuto con social',
+        subtitle: 'Invia messaggio di benvenuto con social e review',
         buttonLabel: '👋 Invia Benvenuto'
+    });
+}
+
+// Wrapper: benvenuto + conferma prenotazione (combo nuovo cliente che prenota)
+// - un singolo messaggio con saluto, dettagli prenotazione e link Instagram
+// - il link Google Review lo vedrà dopo il servizio nel messaggio di ringraziamento
+export function showWelcomePrenToast(nomeCliente, dataPren, orario) {
+    showWAPromptToast({
+        nomeCliente, templateId: 'benvenuto-pren',
+        title: '🆕 Nuovo: ' + (nomeCliente || '—'),
+        subtitle: `${dataPren || ''} · ${orario || ''}`,
+        buttonLabel: '👋 Benvenuto + Conferma',
+        extraVars: { dataPren, orario }
     });
 }
 

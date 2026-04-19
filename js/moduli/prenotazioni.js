@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
-import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast } from './clienti.js';
+import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -164,18 +164,22 @@ async function addPren() {
         if (!state.prenDB[date]) state.prenDB[date] = [];
         state.prenDB[date].push(obj);
         
-        // Auto-salva cliente nel CRM con telefono
-        await autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
+        // Auto-salva cliente nel CRM con telefono; isNew = true se creato ora
+        const isNewClient = await autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
 
         renderPren();
         ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
 
-        // Proponi conferma prenotazione via WhatsApp (se cliente non nuovo,
-        // che ha già ricevuto il messaggio di benvenuto)
-        // Formatta data italiana DD/MM/YYYY
+        // UN SOLO toast a seconda che il cliente sia nuovo o già conosciuto.
+        // Nuovo → benvenuto + conferma prenotazione in unico messaggio (con IG).
+        // Esistente → solo conferma prenotazione (promemoria).
         const [y, m, d] = (date || '').split('-');
         const dataIta = d && m && y ? `${d}/${m}/${y}` : date;
-        showConfirmPrenToast(obj.cliente, dataIta, obj.orario);
+        if (isNewClient) {
+            showWelcomePrenToast(obj.cliente, dataIta, obj.orario);
+        } else {
+            showConfirmPrenToast(obj.cliente, dataIta, obj.orario);
+        }
     } catch(e) { console.error(e); }
 }
 
@@ -331,11 +335,16 @@ async function addTap() {
         obj._id = ref.id;
         state.tapDB.push(obj);
         
-        // Auto-salva cliente nel CRM
-        await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
+        // Auto-salva cliente nel CRM. Tappezzeria non raccoglie tel:
+        // se il cliente era già nel CRM con tel noto, il toast benvenuto può
+        // comunque scattare (in caso di prima interazione con noi).
+        const isNewClient = await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
 
         renderTap();
         ['tCliente','tModello','tTarga','tPrezzo'].forEach(id => document.getElementById(id).value = '');
+
+        // Se è un nuovo cliente con telefono valido nel CRM, propone benvenuto
+        if (isNewClient) showWelcomeToast(obj.cliente);
         if(msg) { msg.style.color = 'var(--grn)'; msg.textContent = 'Tappezzeria registrata!'; setTimeout(() => msg.textContent = '', 2000); }
     } catch(e) { console.error(e); if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Errore connessione Cloud'; } }
 }
