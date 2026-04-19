@@ -8,17 +8,17 @@ const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
 
 const WA_TEMPLATES = [
     { id: 'grazie', label: '🙏 Ringraziamento post-pagamento',
-      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare. Speriamo tu sia rimasto soddisfatto ✨\n\nA presto 🚗" },
+      text: "Ciao {nomeShort},\n\nGrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nA presto!" },
     { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente',
-      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare Catania! ✨ È un piacere averti tra i nostri clienti.\n\n📸 Seguici su Instagram per novità e promo:\n" + WA_IG_URL + "\n\n⭐ Se ti è piaciuto il servizio, lasciaci una recensione su Google, per noi vale tantissimo:\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto! 🚗💦" },
+      text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nSeguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nSe ti è piaciuto il servizio, lasciaci una recensione su Google, per noi vale tantissimo:\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nWash Hub Lungomare" },
     { id: 'conferma-pren', label: '📅 Conferma prenotazione',
-      text: "Ciao {nomeShort}! ✅\n\nTi confermo la prenotazione al Wash Hub Lungomare per il {dataPren} alle {orario}.\n\nSe dovessi avere imprevisti, avvisaci in tempo 🙏\n\nA presto! 🚗" },
+      text: "Ciao {nomeShort},\n\nti confermiamo la tua prenotazione al Wash Hub Lungomare:\n\nData: {dataPren}\nOra: {orario}\n\nSe dovessi avere imprevisti, avvisaci in tempo.\n\nA presto,\nWash Hub Lungomare" },
     { id: 'richiamo', label: '🔔 Richiamo (dormiente)',
-      text: "Ciao {nomeShort}! 👋\n\nSono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare 🚗\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio." },
+      text: "Ciao {nomeShort},\n\nsono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare.\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio.\n\nA presto,\nWash Hub Lungomare" },
     { id: 'abbonamento', label: '📆 Rinnovo abbonamento',
-      text: "Ciao {nomeShort}! 📆\n\nTi scrivo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere 👍" },
+      text: "Ciao {nomeShort},\n\nti scriviamo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere.\n\nA presto,\nWash Hub Lungomare" },
     { id: 'promo', label: '🎁 Promozione',
-      text: "Ciao {nomeShort}! 🎁\n\nOfferta speciale al Wash Hub Lungomare: [inserisci dettagli]\n\nTi aspettiamo! 🚗💦" },
+      text: "Ciao {nomeShort},\n\noggi al Wash Hub Lungomare abbiamo un'offerta speciale per te: [inserisci dettagli].\n\nTi aspettiamo!\n\nWash Hub Lungomare" },
     { id: 'custom', label: '✏️ Scrivi da zero', text: '' }
 ];
 
