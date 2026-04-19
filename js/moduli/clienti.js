@@ -1,14 +1,20 @@
 import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity, formatPhoneForWA } from '../utils.js';
-import { isAdmin } from './auth.js';
 
 // ═══ Template messaggi WhatsApp (FASE 2 marketing) ═══
+const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
+const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
+
 const WA_TEMPLATES = [
+    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento',
+      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare. Speriamo tu sia rimasto soddisfatto ✨\n\nA presto 🚗" },
+    { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente',
+      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare Catania! ✨ È un piacere averti tra i nostri clienti.\n\n📸 Seguici su Instagram per novità e promo:\n" + WA_IG_URL + "\n\n⭐ Se ti è piaciuto il servizio, lasciaci una recensione su Google, per noi vale tantissimo:\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto! 🚗💦" },
+    { id: 'conferma-pren', label: '📅 Conferma prenotazione',
+      text: "Ciao {nomeShort}! ✅\n\nTi confermo la prenotazione al Wash Hub Lungomare per il {dataPren} alle {orario}.\n\nSe dovessi avere imprevisti, avvisaci in tempo 🙏\n\nA presto! 🚗" },
     { id: 'richiamo', label: '🔔 Richiamo (dormiente)',
       text: "Ciao {nomeShort}! 👋\n\nSono passati {giorni} giorni dal tuo ultimo lavaggio al Wash Hub Lungomare 🚗\n\nTi aspettiamo quando vuoi! Puoi prenotare lo slot che preferisci rispondendo a questo messaggio." },
-    { id: 'grazie', label: '🙏 Ringraziamento nuovo cliente',
-      text: "Ciao {nomeShort}! 🙏\n\nGrazie per aver scelto il Wash Hub Lungomare. Speriamo tu sia rimasto soddisfatto ✨\n\nA presto 🚗" },
     { id: 'abbonamento', label: '📆 Rinnovo abbonamento',
       text: "Ciao {nomeShort}! 📆\n\nTi scrivo dal Wash Hub Lungomare: il tuo abbonamento al parcheggio è in scadenza.\n\nVuoi rinnovarlo? Fammi sapere 👍" },
     { id: 'promo', label: '🎁 Promozione',
@@ -16,14 +22,19 @@ const WA_TEMPLATES = [
     { id: 'custom', label: '✏️ Scrivi da zero', text: '' }
 ];
 
-function fillTemplate(tpl, cliente, stats) {
-    const nomeShort = (cliente.nome || '').split(' ').map(w => w[0] + w.substring(1).toLowerCase()).slice(0, 1).join(' ') || cliente.nome || '';
-    return tpl
-        .replace(/{nome}/g, cliente.nome || '')
+function fillTemplate(tpl, cliente, stats, extra) {
+    const e = extra || {};
+    const nomeRaw = cliente.nome || '';
+    const firstWord = nomeRaw.split(' ')[0] || nomeRaw;
+    const nomeShort = firstWord ? firstWord[0] + firstWord.substring(1).toLowerCase() : '';
+    return String(tpl)
+        .replace(/{nome}/g, nomeRaw)
         .replace(/{nomeShort}/g, nomeShort)
-        .replace(/{giorni}/g, stats.giorniDaUltimaVisita < 999 ? stats.giorniDaUltimaVisita : '—')
-        .replace(/{numLavaggi}/g, stats.numLavaggi)
-        .replace(/{ticketMedio}/g, stats.ticketMedio);
+        .replace(/{giorni}/g, stats && stats.giorniDaUltimaVisita < 999 ? stats.giorniDaUltimaVisita : '—')
+        .replace(/{numLavaggi}/g, stats ? stats.numLavaggi : 0)
+        .replace(/{ticketMedio}/g, stats ? stats.ticketMedio : 0)
+        .replace(/{dataPren}/g, e.dataPren || '')
+        .replace(/{orario}/g, e.orario || '');
 }
 
 let clientiDB = [];
@@ -194,8 +205,6 @@ export function renderClienti() {
 
     if(!filtered.length){tb.innerHTML='<tr><td colspan="8" class="empty">Nessun cliente trovato</td></tr>';return;}
 
-    const showWA = isAdmin(); // solo admin può inviare WhatsApp
-
     tb.innerHTML=filtered.map(c=>{
         const vetture=(c.vetture||[]).map(v=>`${v.modello||''} ${v.targa||''}`).join(', ')||'—';
         const isVip=c.prezzoVip&&c.prezzoVip>0;
@@ -214,7 +223,7 @@ export function renderClienti() {
             <td style="text-align:center;font:600 12px var(--mono)">${c._numLavaggi||0}</td>
             <td><span class="badge ${alertClass}">${alertLabel}</span></td>
             <td style="font-weight:600">${c._spesaTotale>0?fEur(c._spesaTotale):'—'}</td>
-            <td style="white-space:nowrap"><button class="act-btn cli-storico-btn" data-id="${c._id}" title="Storico">📋</button>${showWA && formatPhoneForWA(c.telefono)?`<button class="act-btn wa-btn" data-id="${c._id}" title="Invia WhatsApp" style="border-color:#25D366;color:#25D366">📱</button>`:''}<button class="act-btn edit-cli" data-id="${c._id}" title="Modifica">✎</button><button class="act-btn del del-cli" data-id="${c._id}" title="Elimina">✕</button></td></tr>`;
+            <td style="white-space:nowrap"><button class="act-btn cli-storico-btn" data-id="${c._id}" title="Storico">📋</button>${formatPhoneForWA(c.telefono)?`<button class="act-btn wa-btn" data-id="${c._id}" title="Invia WhatsApp" style="border-color:#25D366;color:#25D366">📱</button>`:''}<button class="act-btn edit-cli" data-id="${c._id}" title="Modifica">✎</button><button class="act-btn del del-cli" data-id="${c._id}" title="Elimina">✕</button></td></tr>`;
     }).join('');
 
     tb.querySelectorAll('.edit-cli').forEach(btn=>btn.addEventListener('click',()=>editCliente(btn.dataset.id)));
@@ -308,6 +317,8 @@ async function salvaCliente(){
             const ref=await fsAddDoc(fsCollection(db,'clienti'),record);
             record._id=ref.id; clientiDB.push(record);
             if(msg){msg.style.color='var(--grn)';msg.textContent='✅ Salvato!';}
+            // Propone messaggio di benvenuto se c'è telefono valido
+            if (telefono && formatPhoneForWA(telefono)) showWelcomeToast(nome);
         }
         state.clientiDB=clientiDB;
         setTimeout(()=>{hideClienteForm();renderClienti();},600);
@@ -493,6 +504,8 @@ export async function autoSalvaCliente(nome,vettura,targa,telefono){
         record._id=ref.id;
         clientiDB.push(record);
         state.clientiDB=clientiDB;
+        // Nuovo cliente con telefono valido: proponi messaggio di benvenuto
+        if (telefono && formatPhoneForWA(telefono)) showWelcomeToast(nomeUp);
     }catch(e){console.warn(e);}
 }
 
@@ -721,8 +734,7 @@ async function mergeClienti(master, dup) {
 // WHATSAPP MARKETING — invio messaggi con template
 // ═══════════════════════════════════════════════════════════════════
 
-function openWAMessageDialog(clienteId, preselectedTplId) {
-    if (!isAdmin()) { alert('⛔ Solo l\'amministratore può inviare messaggi WhatsApp.'); return; }
+function openWAMessageDialog(clienteId, preselectedTplId, extraVars) {
     const c = clientiDB.find(x => x._id === clienteId);
     if (!c) return;
     const tel = formatPhoneForWA(c.telefono);
@@ -773,7 +785,7 @@ function openWAMessageDialog(clienteId, preselectedTplId) {
     const textarea = modal.querySelector('#waMsg');
     const refreshTpl = () => {
         const t = WA_TEMPLATES[parseInt(selTpl.value)];
-        textarea.value = fillTemplate(t.text, c, stats);
+        textarea.value = fillTemplate(t.text, c, stats, extraVars);
     };
     selTpl.addEventListener('change', refreshTpl);
     if (preIdx >= 0) selTpl.value = preIdx;
@@ -799,37 +811,45 @@ function openWAMessageDialog(clienteId, preselectedTplId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// THANK YOU TOAST — auto-prompt dopo ogni saldo
-// Chiamare dopo il salvataggio di un pagamento per suggerire
-// all'admin di inviare un ringraziamento su WhatsApp.
-// Se il cliente non esiste nel CRM o non ha telefono valido, skip silenzioso.
+// TOAST WHATSAPP — auto-prompt con pulsante invio messaggio
+// Disponibile a tutti gli utenti autenticati (operator + admin).
+// Se il cliente non ha telefono valido, skip silenzioso.
 // ═══════════════════════════════════════════════════════════════════
-export function showThankYouToast(nomeCliente, importoOptional) {
-    if (!isAdmin()) return;
+// Container stackabile per toast multipli (uno sopra l'altro)
+function getWAToastStack() {
+    let stack = document.getElementById('wa-toast-stack');
+    if (stack) return stack;
+    stack = document.createElement('div');
+    stack.id = 'wa-toast-stack';
+    stack.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9998;display:flex;flex-direction:column-reverse;gap:10px;max-width:340px;pointer-events:none';
+    document.body.appendChild(stack);
+    return stack;
+}
+
+function showWAPromptToast(opts) {
+    const { nomeCliente, templateId, title, subtitle, buttonLabel, extraVars } = opts;
     if (!nomeCliente) return;
     const normNome = normalizeName(nomeCliente);
     const c = clientiDB.find(x => normalizeName(x.nome) === normNome);
     if (!c || !c.telefono || !formatPhoneForWA(c.telefono)) return;
 
     const toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9998;max-width:340px;background:var(--bg2);border:1.5px solid var(--grn);border-left:4px solid var(--grn);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow-lg);font-family:var(--f);transition:all .3s ease';
+    toast.style.cssText = 'background:var(--bg2);border:1.5px solid var(--grn);border-left:4px solid var(--grn);border-radius:var(--r2);padding:14px 16px;box-shadow:var(--shadow-lg);font-family:var(--f);transition:all .3s ease;pointer-events:auto';
     toast.style.transform = 'translateY(20px)';
     toast.style.opacity = '0';
 
-    const importoStr = importoOptional ? `€${Number(importoOptional).toFixed(2).replace('.',',')}` : '';
     toast.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
             <div style="flex:1;min-width:0">
-                <div style="font:600 13px var(--f);color:var(--tx);overflow:hidden;text-overflow:ellipsis">✅ Pagamento da ${esc(c.nome)}</div>
-                ${importoStr ? `<div style="font:500 11px var(--mono);color:var(--tx3);margin-top:2px">${importoStr}</div>` : ''}
-                <button class="toast-thank-btn" style="margin-top:10px;padding:8px 14px;background:#25D366;border:0;color:#fff;border-radius:var(--r2);font:600 12px var(--f);cursor:pointer;width:100%">📱 Ringrazia su WhatsApp</button>
+                <div style="font:600 13px var(--f);color:var(--tx);overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>
+                ${subtitle ? `<div style="font:500 11px var(--mono);color:var(--tx3);margin-top:2px">${esc(subtitle)}</div>` : ''}
+                <button class="toast-action-btn" style="margin-top:10px;padding:8px 14px;background:#25D366;border:0;color:#fff;border-radius:var(--r2);font:600 12px var(--f);cursor:pointer;width:100%">${esc(buttonLabel)}</button>
             </div>
             <button class="toast-close" style="background:0;border:0;color:var(--tx3);font-size:20px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0">×</button>
         </div>
     `;
 
-    document.body.appendChild(toast);
-    // Anim in
+    getWAToastStack().appendChild(toast);
     requestAnimationFrame(() => { toast.style.transform = 'translateY(0)'; toast.style.opacity = '1'; });
 
     const dismiss = () => {
@@ -837,12 +857,44 @@ export function showThankYouToast(nomeCliente, importoOptional) {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     };
-    const timer = setTimeout(dismiss, 12000); // auto-dismiss 12s
+    const timer = setTimeout(dismiss, 15000); // auto-dismiss 15s
 
     toast.querySelector('.toast-close').addEventListener('click', () => { clearTimeout(timer); dismiss(); });
-    toast.querySelector('.toast-thank-btn').addEventListener('click', () => {
+    toast.querySelector('.toast-action-btn').addEventListener('click', () => {
         clearTimeout(timer);
         dismiss();
-        openWAMessageDialog(c._id, 'grazie');
+        openWAMessageDialog(c._id, templateId, extraVars);
+    });
+}
+
+// Wrapper: ringraziamento post-pagamento
+export function showThankYouToast(nomeCliente, importoOptional) {
+    const subtitle = importoOptional ? `€${Number(importoOptional).toFixed(2).replace('.',',')}` : '';
+    showWAPromptToast({
+        nomeCliente, templateId: 'grazie',
+        title: '✅ Pagamento da ' + (nomeCliente || '—'),
+        subtitle,
+        buttonLabel: '📱 Ringrazia su WhatsApp'
+    });
+}
+
+// Wrapper: benvenuto nuovo cliente (con link IG + Google Review)
+export function showWelcomeToast(nomeCliente) {
+    showWAPromptToast({
+        nomeCliente, templateId: 'benvenuto',
+        title: '🆕 Nuovo cliente: ' + (nomeCliente || '—'),
+        subtitle: 'Invia messaggio di benvenuto con social',
+        buttonLabel: '👋 Invia Benvenuto'
+    });
+}
+
+// Wrapper: conferma prenotazione
+export function showConfirmPrenToast(nomeCliente, dataPren, orario) {
+    showWAPromptToast({
+        nomeCliente, templateId: 'conferma-pren',
+        title: '📅 Prenotazione di ' + (nomeCliente || '—'),
+        subtitle: `${dataPren || ''} · ${orario || ''}`,
+        buttonLabel: '📱 Invia Conferma',
+        extraVars: { dataPren, orario }
     });
 }

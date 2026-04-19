@@ -3,7 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
-import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast } from './clienti.js';
+import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast } from './clienti.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -169,6 +169,13 @@ async function addPren() {
 
         renderPren();
         ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
+
+        // Proponi conferma prenotazione via WhatsApp (se cliente non nuovo,
+        // che ha già ricevuto il messaggio di benvenuto)
+        // Formatta data italiana DD/MM/YYYY
+        const [y, m, d] = (date || '').split('-');
+        const dataIta = d && m && y ? `${d}/${m}/${y}` : date;
+        showConfirmPrenToast(obj.cliente, dataIta, obj.orario);
     } catch(e) { console.error(e); }
 }
 
