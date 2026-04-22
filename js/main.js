@@ -2,6 +2,7 @@ import { state, CONFIG } from './state.js';
 import { fmtDI } from './utils.js';
 // LE IMPORTAZIONI ESATTE SONO QUI:
 import { fsGetDocs, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, db } from './firebase-config.js';
+import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
 import { initAuth } from './moduli/auth.js';
 import { initNavigazione, goPage } from './moduli/navigazione.js';
@@ -96,107 +97,178 @@ function initDashDates() {
     });
 }
 
-function onDateChg() {
+function needsHistorical(dateFrom) {
+    if (!dateFrom) return false;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 400);
+    return dateFrom < cutoff;
+}
+
+async function onDateChg() {
     const f = document.getElementById('dtFrom').value;
     const t = document.getElementById('dtTo').value;
     if(f) state.dateFrom = new Date(f);
     if(t) state.dateTo = new Date(t);
     document.querySelectorAll('#page-dashboard .qbtn').forEach(b => b.classList.remove('on'));
+    if (needsHistorical(state.dateFrom)) await loadHistoricalData();
     renderDash();
 }
 
-function qp(days, btn) {
+async function qp(days, btn) {
     const n = new Date();
     state.dateTo = new Date(n.getFullYear(), n.getMonth(), n.getDate());
     state.dateFrom = days === 0 ? new Date(2024, 0, 1) : new Date(n.getTime() - days * 864e5);
-    
+
     document.getElementById('dtFrom').value = fmtDI(state.dateFrom);
     document.getElementById('dtTo').value = fmtDI(state.dateTo);
-    
+
     document.querySelectorAll('#page-dashboard .qbtn').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
+    if (needsHistorical(state.dateFrom)) await loadHistoricalData();
     renderDash();
+}
+
+// Cutoff per fast-load: solo ultimi ~13 mesi su prenotazioni + primaNota.
+// Storico pieno disponibile on-demand via loadHistoricalData().
+function getCutoffISO(days = 400) {
+    const d = new Date(); d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+async function loadPrenotazioniFast(cutoff) {
+    // Due query parallele: recenti (per calendario/cassa) + tutti i SOSPESO/FATTURATO (per pagina Sospesi anche storici)
+    const [snapRecenti, snapSosp, snapFatt] = await Promise.all([
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("dataPren", ">=", cutoff))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "SOSPESO"))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "FATTURATO"))),
+    ]);
+    state.prenDB = {};
+    const seen = new Set();
+    const addDoc = docSnap => {
+        if (seen.has(docSnap.id)) return;
+        seen.add(docSnap.id);
+        const d = docSnap.data(); d._pid = docSnap.id;
+        if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
+        state.prenDB[d.dataPren].push(d);
+    };
+    snapRecenti.forEach(addDoc);
+    snapSosp.forEach(addDoc);
+    snapFatt.forEach(addDoc);
+}
+
+async function loadPrimaNotaFast(cutoff) {
+    const snapPN = await fsGetDocs(query(fsCollection(db, "primaNota"), where("dataISO", ">=", cutoff)));
+    const pnRows = [];
+    snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
+    state.rawData = { primaNota: { rows: pnRows } };
+    console.log(`Prima Nota (ultimi 13m): ${pnRows.length} record`);
+}
+
+// Carica lo storico completo on-demand quando l'utente richiede range oltre cutoff
+export async function loadHistoricalData() {
+    if (state._historicalLoaded) return;
+    state._historicalLoaded = true;
+    try {
+        const [snapPren, snapPN] = await Promise.all([
+            fsGetDocs(fsCollection(db, "prenotazioni")),
+            fsGetDocs(fsCollection(db, "primaNota")),
+        ]);
+        // Merge prenotazioni mancanti
+        const seen = new Set();
+        for (const entries of Object.values(state.prenDB)) entries.forEach(e => seen.add(e._pid));
+        snapPren.forEach(docSnap => {
+            if (seen.has(docSnap.id)) return;
+            const d = docSnap.data(); d._pid = docSnap.id;
+            if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
+            state.prenDB[d.dataPren].push(d);
+        });
+        const pnRows = [];
+        snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
+        state.rawData = { primaNota: { rows: pnRows } };
+        console.log(`Storico completo caricato: primaNota ${pnRows.length}`);
+    } catch (e) {
+        console.warn("Errore caricamento storico:", e.message);
+        state._historicalLoaded = false;
+    }
 }
 
 async function initFirebaseData() {
     const ld = document.getElementById('loader');
     const upd = document.getElementById('lastUpd');
-    
+
     if (ld) { ld.style.display = 'flex'; ld.classList.remove('out'); }
     if (upd) upd.textContent = 'Sincronizzazione...';
 
+    const cutoff = getCutoffISO(400);
+    state._historicalLoaded = false;
+
     try {
-        const snapPren = await fsGetDocs(fsCollection(db, "prenotazioni"));
-        state.prenDB = {};
-        snapPren.forEach(docSnap => {
-            let d = docSnap.data(); d._pid = docSnap.id; 
-            if(!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
-            state.prenDB[d.dataPren].push(d);
-        });
+        // Tutte le collezioni in parallelo. Ogni task gestisce le sue eccezioni.
+        const tasks = [
+            loadPrenotazioniFast(cutoff),
 
-        const snapTap = await fsGetDocs(fsCollection(db, "tappezzeria"));
-        state.tapDB = [];
-        snapTap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.tapDB.push(d); });
+            fsGetDocs(fsCollection(db, "tappezzeria")).then(snap => {
+                state.tapDB = [];
+                snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.tapDB.push(d); });
+            }),
 
-        const snapGiorn = await fsGetDocs(fsCollection(db, "giornalieri"));
-        state.giornDB = [];
-        snapGiorn.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.giornDB.push(d); });
-        
-        // Log cancellazioni: solo admin può leggere (rules Firestore).
-        // Per operator l'errore è atteso → non blocca il caricamento.
-        state.logDB = [];
-        try {
-            const snapCanc = await fsGetDocs(fsCollection(db, "cancellazioni"));
-            snapCanc.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.logDB.push(d); });
-        } catch(logErr) {
-            console.warn("Log cancellazioni non accessibile (permessi):", logErr.message);
-        }
-        
-        const snapUsc = await fsGetDocs(fsCollection(db, "uscite"));
-        state.usciteDB = [];
-        snapUsc.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.usciteDB.push(d); });
+            fsGetDocs(fsCollection(db, "giornalieri")).then(snap => {
+                state.giornDB = [];
+                snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.giornDB.push(d); });
+            }),
 
-        const snapSosp = await fsGetDocs(fsCollection(db, "sospesi"));
-        state.localSosp = []; 
-        snapSosp.forEach(docSnap => { 
-            let d = docSnap.data(); 
-            d._sid = docSnap.id;
-            // Leggi stati fatturato/pagato dal documento Firestore
-            if (d.fatturato) { d._fatturato = true; d._dataFatt = d.dataFattura || ''; }
-            if (d.pagato) { d._pagato = true; d._modPag = d.modPagamento || ''; d._dataPag = d.dataPagamento || ''; }
-            state.localSosp.push(d); 
-        });
+            // Log cancellazioni: solo admin (rules). Per operator l'errore è atteso.
+            (async () => {
+                state.logDB = [];
+                try {
+                    const snap = await fsGetDocs(fsCollection(db, "cancellazioni"));
+                    snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.logDB.push(d); });
+                } catch (logErr) {
+                    console.warn("Log cancellazioni non accessibile (permessi):", logErr.message);
+                }
+            })(),
 
-        const snapAbb = await fsGetDocs(fsCollection(db, "abbonamenti"));
-        state.localAbb = [];
-        snapAbb.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.localAbb.push(d); });
+            fsGetDocs(fsCollection(db, "uscite")).then(snap => {
+                state.usciteDB = [];
+                snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.usciteDB.push(d); });
+            }),
 
+            fsGetDocs(fsCollection(db, "sospesi")).then(snap => {
+                state.localSosp = [];
+                snap.forEach(docSnap => {
+                    let d = docSnap.data();
+                    d._sid = docSnap.id;
+                    if (d.fatturato) { d._fatturato = true; d._dataFatt = d.dataFattura || ''; }
+                    if (d.pagato) { d._pagato = true; d._modPag = d.modPagamento || ''; d._dataPag = d.dataPagamento || ''; }
+                    state.localSosp.push(d);
+                });
+            }),
+
+            fsGetDocs(fsCollection(db, "abbonamenti")).then(snap => {
+                state.localAbb = [];
+                snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.localAbb.push(d); });
+            }),
+
+            loadPrimaNotaFast(cutoff).catch(pnErr => {
+                console.warn("Prima Nota Firebase non disponibile:", pnErr.message);
+                if (!state.rawData) state.rawData = { primaNota: { rows: [] } };
+            }),
+
+            (async () => {
+                try {
+                    const snap = await fsGetDocs(fsCollection(db, "presenzeDipendenti"));
+                    state.presenzeDB = [];
+                    snap.forEach(docSnap => state.presenzeDB.push(docSnap.data()));
+                    console.log(`Presenze caricate: ${state.presenzeDB.length} record`);
+                } catch (presErr) {
+                    console.warn("Presenze non disponibili:", presErr.message);
+                }
+            })(),
+
+            caricaClienti(),
+        ];
+
+        await Promise.all(tasks);
         await loadSospesiPagati();
-
-        // Carica dati Prima Nota da Firebase per Report e Dashboard Analitica
-        try {
-            const snapPN = await fsGetDocs(fsCollection(db, "primaNota"));
-            const pnRows = [];
-            snapPN.forEach(docSnap => { pnRows.push(docSnap.data()); });
-            state.rawData = { primaNota: { rows: pnRows } };
-            console.log(`Prima Nota caricata: ${pnRows.length} record`);
-        } catch(pnErr) {
-            console.warn("Prima Nota Firebase non disponibile:", pnErr.message);
-            if(!state.rawData) state.rawData = { primaNota: { rows: [] } };
-        }
-
-        // Carica Presenze Dipendenti per Dashboard Analitica (costo lavoro)
-        try {
-            const snapPres = await fsGetDocs(fsCollection(db, "presenzeDipendenti"));
-            state.presenzeDB = [];
-            snapPres.forEach(docSnap => { state.presenzeDB.push(docSnap.data()); });
-            console.log(`Presenze caricate: ${state.presenzeDB.length} record`);
-        } catch(presErr) {
-            console.warn("Presenze non disponibili:", presErr.message);
-        }
-
-        // Carica Clienti CRM
-        await caricaClienti();
 
         if (upd) upd.textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
