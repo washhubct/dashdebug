@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Python bridge
+bridge-cassa/.env
+bridge-cassa/.venv/
+bridge-cassa/venv/
+bridge-cassa/__pycache__/
+bridge-cassa/**/*.pyc
+bridge-cassa/*.log
+
+# Node
+node_modules/
+
+# Editors
+.vscode/
+.idea/
+
+# Firebase service account (NON committare mai)
+*-service-account*.json
+firebase-adminsdk-*.json
