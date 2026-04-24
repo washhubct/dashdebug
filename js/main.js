@@ -15,6 +15,8 @@ import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } fro
 import { initReport, renderReport, renderDash } from './moduli/report.js';
 import { initPresenze, renderPresenze } from './moduli/presenze.js';
 import { initClienti, caricaClienti, renderClienti } from './moduli/clienti.js';
+import { initCassaAutomatica } from './moduli/cassa-automatica.js';
+import { initCassaStato } from './moduli/cassa-stato.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -27,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initReport();
     initPresenze();
     initClienti();
+    initCassaStato();
     initDashDates();
 });
 
@@ -48,6 +51,7 @@ document.addEventListener('authSuccess', () => {
         });
     }
 
+    initCassaAutomatica();
     initFirebaseData();
 });
 

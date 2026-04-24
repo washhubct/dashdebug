@@ -45,6 +45,7 @@ export function renderCassa() {
     let sospGiorno = 0;
     
     // 1. Prenotazioni (Lavaggi)
+    let prenAutoEntries = []; // per render dettaglio entrate cassa auto
     (state.prenDB[dStr] || []).forEach(p => {
         if(p.saldo === 'SOSPESO') {
             sospGiorno += pNum(p.prezzo);
@@ -54,6 +55,7 @@ export function renderCassa() {
             else if(p.saldo === 'POS') eP += imp;
             else if(p.saldo === 'BONIFICO') eB += imp;
             cLav += imp;
+            if (p.pagamentoVia === 'CASSA_AUTO') prenAutoEntries.push(p);
         }
     });
 
@@ -133,6 +135,44 @@ export function renderCassa() {
     if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cPar);
     if(document.getElementById('uscitaTb')) document.getElementById('uscitaTb').innerHTML = uHtml;
     if(document.getElementById('cassaNetta')) document.getElementById('cassaNetta').textContent = fEur(eC - uC);
+
+    // Tag visivo pagamenti via cassa automatica (non altera i totali sopra)
+    renderCassaAutoEntries(prenAutoEntries);
+}
+
+// Mostra la lista dei pagamenti incassati tramite cassa automatica VNE.
+// Compare solo se nella giornata ci sono pagamenti pagamentoVia='CASSA_AUTO'.
+function renderCassaAutoEntries(entries) {
+    let host = document.getElementById('cassaAutoEntries');
+    if (!entries || entries.length === 0) {
+        if (host) host.remove();
+        return;
+    }
+    if (!host) {
+        const sec = document.querySelector('#page-cassa .sec');
+        if (!sec) return;
+        host = document.createElement('div');
+        host.id = 'cassaAutoEntries';
+        host.style.cssText = 'margin-top:10px; margin-bottom:14px';
+        // Inserisci subito dopo i KPI (prima della form uscita)
+        const formPanel = sec.querySelector('.form-panel');
+        if (formPanel) sec.insertBefore(host, formPanel);
+        else sec.appendChild(host);
+    }
+    let html = `<div style="font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">🏧 Incassi via Cassa Automatica</div>
+        <div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>Cliente</th><th>Vettura</th><th style="width:120px">Importo</th></tr></thead><tbody>`;
+    entries.forEach(p => {
+        const imp = pNum(p.prezzo);
+        const partial = p.vneStatus === 'partial' ? ' <span style="color:#e69500;font-size:10px">(parziale)</span>' : '';
+        html += `<tr>
+            <td><strong>${esc(p.cliente || '')}</strong></td>
+            <td>${esc(p.vettura || '')}</td>
+            <td style="font-weight:600">🏧 €${imp}${partial}</td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+    host.innerHTML = html;
 }
 
 async function addUscita() {

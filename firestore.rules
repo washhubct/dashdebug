@@ -118,6 +118,16 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // CONFIG — parametri operativi (es. cassa automatica VNE)
+    // Tutti gli auth leggono (il client web ha bisogno di bridgeUrl/Token).
+    // Solo admin può scrivere: bridgeToken è sensibile.
+    // ═══════════════════════════════════════════════════════════
+    match /config/{doc} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // LOG CANCELLAZIONI — admin-only in lettura
     // L'operator può CREARE log (es. quando cancella una riga) ma
     // non deve sapere che esistono: read/update/delete bloccati.

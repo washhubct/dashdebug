@@ -4,6 +4,7 @@ import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
+import { avviaPagamento } from './cassa-automatica.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -79,11 +80,15 @@ export function renderPren() {
                 else incSospesi += prezzo;
 
                 const isPaid = e.saldato === 'SI' && e.saldo !== 'SOSPESO';
+                const cassaAutoBtn = state.cassaAuto?.enabled
+                    ? `<button class="btn pay-btn-auto" data-id="${e._pid}" data-prezzo="${prezzo}" title="Cassa automatica" style="border-color:#C8A84E;color:#8a7331">🏧</button>`
+                    : '';
                 let pagHtml = e.saldo === 'SOSPESO' ? '<span class="badge a">SOSPESO ⏳</span>' :
                              isPaid ? '<span class="badge g">SALDATO ✓</span>' :
-                             `<button class="btn pay-btn" data-id="${e._pid}" data-mod="CONTANTI">💵</button> 
-                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="POS">💳</button> 
-                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>`;
+                             `<button class="btn pay-btn" data-id="${e._pid}" data-mod="CONTANTI">💵</button>
+                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="POS">💳</button>
+                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>
+                              ${cassaAutoBtn}`;
 
                 html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
@@ -122,6 +127,9 @@ async function handlePrenActions(e) {
     } else if (btn.classList.contains('pay-btn')) {
         btn.disabled = true;
         try { await markPaid(date, id, btn.dataset.mod); } finally { btn.disabled = false; }
+    } else if (btn.classList.contains('pay-btn-auto')) {
+        btn.disabled = true;
+        try { await payViaCassaAuto(date, id); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('undo-pay')) {
         btn.disabled = true;
         try { await unmarkPaid(date, id); } finally { btn.disabled = false; }
@@ -193,6 +201,70 @@ async function markPaid(date, pid, mod) {
         // Trigger ringraziamento WhatsApp (non blocking)
         showThankYouToast(entry.cliente, pNum(entry.prezzo));
     } catch(e) { alert("Errore Cloud"); }
+}
+
+// Pagamento tramite cassa automatica VNE.
+// Sul completed → saldato CONTANTI con metadati VNE. Su partial chiede
+// conferma e salda l'importo realmente inserito. Su deleted/returned/
+// timeout/error non modifica nulla.
+async function payViaCassaAuto(date, pid) {
+    const entry = state.prenDB[date]?.find(e => e._pid === pid);
+    if (!entry) return;
+    const prezzoEur = pNum(entry.prezzo);
+    if (!prezzoEur || prezzoEur <= 0) {
+        alert('Prezzo non valido per cassa automatica.');
+        return;
+    }
+    const importoCent = Math.round(prezzoEur * 100);
+    console.log('[CASSA-AUTO] avvio pagamento', { pid, importoCent });
+
+    avviaPagamento(importoCent, pid, async (res) => {
+        try {
+            if (res.status === 'completed') {
+                const upd = {
+                    saldato: 'SI', saldo: 'CONTANTI',
+                    pagamentoVia: 'CASSA_AUTO',
+                    idVNE: res.idVNE,
+                    vneInserito: res.inserito,
+                    vneResto: res.resto,
+                };
+                await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), upd);
+                Object.assign(entry, upd);
+                renderPren();
+                showThankYouToast(entry.cliente, prezzoEur);
+                return;
+            }
+            if (res.status === 'partial') {
+                const ok = confirm(`Cliente ha inserito €${(res.inserito||0).toFixed(2)} ma il totale era €${prezzoEur.toFixed(2)}.\nAccettare pagamento parziale?`);
+                if (!ok) {
+                    console.log('[CASSA-AUTO] parziale rifiutato dall\'operatore');
+                    return;
+                }
+                const upd = {
+                    saldato: 'SI', saldo: 'CONTANTI',
+                    pagamentoVia: 'CASSA_AUTO',
+                    idVNE: res.idVNE,
+                    vneStatus: 'partial',
+                    vneInserito: res.inserito,
+                    vneResto: res.resto,
+                    prezzo: String(res.inserito),
+                };
+                await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), upd);
+                Object.assign(entry, upd);
+                renderPren();
+                showThankYouToast(entry.cliente, res.inserito);
+                return;
+            }
+            // deleted | returned | timeout | error: nessuna modifica
+            if (res.status === 'error') {
+                alert('Errore cassa: ' + (res.error || 'sconosciuto'));
+            }
+            console.log('[CASSA-AUTO] esito', res.status);
+        } catch (e) {
+            console.error('[CASSA-AUTO] errore aggiornamento prenotazione', e);
+            alert('Errore salvataggio prenotazione dopo pagamento. Verifica manualmente.');
+        }
+    });
 }
 
 async function unmarkPaid(date, pid) {
