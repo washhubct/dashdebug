@@ -53,15 +53,23 @@ Vedi `PROTOCOLLO-VNE-NOTES.md` per la mappatura completa errori.
 
 ## Logging
 
-Output JSON-strutturato su stdout (catturato da NSSM nei file `bridge.out.log`
-e `bridge.err.log`). Esempio:
+Output JSON-strutturato su stdout. Esempio:
 
 ```json
 {"ts":"2026-04-25T10:11:42","event":"vne_call","tipo":1,"vne_status":200,"latency_ms":342}
 ```
 
-Su Windows leggibili anche da Visualizzatore eventi → Applicazione → filtro
-"WashHubCassaBridge".
+- **Linux/Pi:** `tail -f /var/log/washhub-cassa-bridge.log` o `journalctl -u washhub-cassa-bridge -f`
+- **Windows:** file `bridge.out.log` / `bridge.err.log` (NSSM); Visualizzatore eventi → Applicazione → filtro "WashHubCassaBridge"
+
+## Hardware target
+
+**Raccomandato:** Raspberry Pi (4/5/Zero 2W) dedicato, sempre acceso, in cavo LAN
+con la cassa VNE. Vedi `install-linux.md`.
+
+**Alternativa:** PC Windows in struttura, vedi `install-windows.md`.
+
+Il codice è platform-agnostic; cambia solo il supervisor (systemd vs NSSM).
 
 ## File
 
@@ -70,8 +78,10 @@ Su Windows leggibili anche da Visualizzatore eventi → Applicazione → filtro
 - `test_mock.py` — emulatore VNE su porta 9999 per dev senza cassa
 - `requirements.txt` — pin minori
 - `.env.example` — template config
-- `install-windows.md` — guida step-by-step per l'installatore
+- `install-linux.md` — **guida ufficiale**: Raspberry Pi + systemd + cloudflared
+- `install-windows.md` — guida alternativa: PC Windows + NSSM
 - `PROTOCOLLO-VNE-NOTES.md` — mappa errori e note sul protocollo 3.05
+- `smoke-test.sh` — script bash che esercita tutti gli endpoint contro il mock
 
 ## Quick start dev (Mac/Linux)
 

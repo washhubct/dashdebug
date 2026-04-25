@@ -1,7 +1,9 @@
 # Installazione bridge cassa VNE — PC Windows del Wash Hub
 
-> Guida operativa per chi installa fisicamente il bridge sul PC di
-> Sebastiano (sempre acceso, in cavo LAN con la cassa VNE).
+> ⚠️ **Guida alternativa.** La scelta operativa di Wash Hub è il
+> Raspberry Pi (vedi `install-linux.md`). Questa guida resta come
+> fallback se il Pi non è disponibile e si vuole usare un PC Windows
+> sempre acceso in struttura.
 
 ---
 
@@ -137,10 +139,22 @@ C:\cloudflared\cloudflared.exe tunnel create washhub-cassa
 Copia il **Tunnel ID** stampato (UUID). I credenziali finiscono in
 `C:\Users\<user>\.cloudflared\<UUID>.json`.
 
-### 7.4 Route DNS
+### 7.4 Aggiungi CNAME su GoDaddy
 
-```powershell
-C:\cloudflared\cloudflared.exe tunnel route dns washhub-cassa cassa.washhub.it
+> `washhub.it` resta su GoDaddy (NS `ns81/ns82.domaincontrol.com`).
+> Quindi NON usare `cloudflared tunnel route dns ...` (richiede NS Cloudflare).
+
+1. Apri <https://account.godaddy.com> → dominio `washhub.it` → tab **DNS**.
+2. Click **"Aggiungi nuovo record"**.
+3. Compila:
+   - **Tipo:** `CNAME`
+   - **Nome:** `cassa`
+   - **Dati:** `<UUID>.cfargotunnel.com` (incolla l'UUID del tunnel)
+   - **TTL:** 1 ora
+4. Salva.
+5. Verifica dopo 10-30 minuti dal Mac:
+```bash
+nslookup cassa.washhub.it 8.8.8.8
 ```
 
 ### 7.5 Crea `config.yml`
