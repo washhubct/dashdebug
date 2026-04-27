@@ -8,6 +8,7 @@ bridge-cassa/venv/
 bridge-cassa/__pycache__/
 bridge-cassa/**/*.pyc
 bridge-cassa/*.log
+bridge-cassa/tls/
 
 # Node
 node_modules/

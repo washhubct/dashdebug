@@ -47,9 +47,11 @@ async function main() {
     const disableArg = flag('--disable');
 
     if (!snap.exists) {
+        // Default URL: LAN locale (Pi Zero W con TLS self-signed).
+        // Se userai un Cloudflare Tunnel, sovrascrivi con --url https://cassa.washhub.it
         const seed = {
             enabled: false,
-            bridgeUrl: 'https://cassa.washhub.it',
+            bridgeUrl: arg('--url') || 'https://washhub-cassa.local:8765',
             bridgeToken: tokenArg || 'DA_INSERIRE_DOPO_INSTALLAZIONE_BRIDGE',
             pollingIntervalMs: 1500,
             maxPollingMs: 180000,
@@ -66,11 +68,13 @@ async function main() {
     if (tokenArg) updates.bridgeToken = tokenArg;
     if (enableArg) updates.enabled = true;
     if (disableArg) updates.enabled = false;
+    const urlArg = arg('--url');
+    if (urlArg) updates.bridgeUrl = urlArg;
 
     if (Object.keys(updates).length === 1) {
         console.log('ℹ️  Doc già esistente. Stato attuale:');
         console.log(snap.data());
-        console.log('\nFlag disponibili: --token <X>, --enable, --disable');
+        console.log('\nFlag disponibili: --token <X>, --url <X>, --enable, --disable');
         return;
     }
     await ref.update(updates);

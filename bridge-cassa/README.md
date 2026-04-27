@@ -64,12 +64,16 @@ Output JSON-strutturato su stdout. Esempio:
 
 ## Hardware target
 
-**Raccomandato:** Raspberry Pi (4/5/Zero 2W) dedicato, sempre acceso, in cavo LAN
-con la cassa VNE. Vedi `install-linux.md`.
+**Setup attuale:** Raspberry Pi Zero W, modalità HTTPS self-signed LAN-only,
+PC di Sebastiano stessa rete Wi-Fi. Niente Cloudflare Tunnel.
+Vedi [`install-linux.md`](install-linux.md).
 
-**Alternativa:** PC Windows in struttura, vedi `install-windows.md`.
+**Alternativa:** PC Windows + cloudflared per raggiungere da fuori rete.
+Vedi [`install-windows.md`](install-windows.md).
 
-Il codice è platform-agnostic; cambia solo il supervisor (systemd vs NSSM).
+Il codice è platform-agnostic; il `run.py` rileva automaticamente i cert in `tls/`:
+- Cert presenti → HTTPS LAN su 0.0.0.0:8765 (Pi Zero W).
+- Cert assenti → HTTP loopback 127.0.0.1:8765 (per Cloudflare Tunnel).
 
 ## File
 
@@ -78,8 +82,9 @@ Il codice è platform-agnostic; cambia solo il supervisor (systemd vs NSSM).
 - `test_mock.py` — emulatore VNE su porta 9999 per dev senza cassa
 - `requirements.txt` — pin minori
 - `.env.example` — template config
-- `install-linux.md` — **guida ufficiale**: Raspberry Pi + systemd + cloudflared
-- `install-windows.md` — guida alternativa: PC Windows + NSSM
+- `init-tls.sh` — genera cert self-signed con SAN per LAN (per modalità Pi Zero)
+- `install-linux.md` — **guida ufficiale**: Raspberry Pi Zero W + systemd, HTTPS LAN-only
+- `install-windows.md` — guida alternativa: PC Windows + NSSM + Cloudflare Tunnel
 - `PROTOCOLLO-VNE-NOTES.md` — mappa errori e note sul protocollo 3.05
 - `smoke-test.sh` — script bash che esercita tutti gli endpoint contro il mock
 

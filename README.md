@@ -15,28 +15,31 @@ Integrazione con la cassa automatica V.N.E. (protocollo SelfCashAPI 3.05)
 installata in struttura. Il pagamento contante avviene direttamente nella
 cassa (banconote + monete con resto), e il gestionale lo registra.
 
-### Architettura
+### Architettura (modalità LAN-only)
 
 ```
-┌──────────────────────┐                ┌────────────────────────┐
-│ dashboard.washhub.it │  HTTPS+Bearer  │ cassa.washhub.it       │
-│  (GitHub Pages, JS)  │ ─────────────▶ │  Cloudflare Tunnel     │
-└──────────────────────┘                └─────────┬──────────────┘
-                                                  │ http loopback
-                                                  ▼
-                                       ┌──────────────────────────┐
-                                       │ Bridge Python Flask      │
-                                       │  Raspberry Pi (Linux)    │
-                                       │  127.0.0.1:8765 / systemd│
-                                       └─────────┬────────────────┘
-                                                 │ HTTPS self-signed
-                                                 │ LAN
-                                                 ▼
-                                       ┌──────────────────────────┐
-                                       │ VNE Automatic Cash       │
-                                       │  protocollo 3.05         │
-                                       └──────────────────────────┘
+PC Sebastiano                    Raspberry Pi Zero W
+(stesso Wi-Fi del Wash Hub)     (IP statico LAN)
+        │                                │
+        │ HTTPS self-signed              │
+        │ (eccezione cert salvata        │
+        │  nel browser una volta)        │
+        ▼                                ▼
+https://washhub-cassa.local:8765 ──▶ Bridge Python (cheroot TLS)
+                                         │
+                                         │ HTTPS self-signed
+                                         ▼
+                                  Cassa VNE (LAN)
+                                  protocollo 3.05
 ```
+
+**Niente Cloudflare Tunnel, niente DNS pubblico**: bridge e PC di Sebastiano
+sono sulla stessa rete locale, il browser apre `https://washhub-cassa.local:8765`
+con cert self-signed (eccezione salvata una volta sola per browser).
+
+> Per il setup alternativo con Cloudflare Tunnel (utile se serve raggiungere
+> il bridge da fuori il Wash Hub), il bridge supporta anche modalità HTTP loopback:
+> basta NON generare i cert e il `run.py` parte automaticamente in HTTP su 127.0.0.1.
 
 ### Componenti
 
@@ -53,22 +56,21 @@ cassa (banconote + monete con resto), e il gestionale lo registra.
 
 ### DNS
 
-`washhub.it` resta su GoDaddy (NS `ns81/ns82.domaincontrol.com`). Il
-sottodominio `cassa.washhub.it` è un **CNAME manuale** verso
-`<UUID>.cfargotunnel.com` aggiunto sul pannello DNS GoDaddy dopo aver
-creato il tunnel — **nessuna migrazione di nameserver necessaria**.
+Nessun DNS pubblico necessario. `washhub.it` resta su GoDaddy senza modifiche.
+Il bridge è raggiungibile in LAN tramite mDNS (`washhub-cassa.local`) o IP
+statico assegnato dal router.
 
 ### Checklist installazione
 
-- [ ] Acquistare Raspberry Pi 5 4GB + alimentatore + microSD 32GB + case.
-- [ ] Setup Pi seguendo `bridge-cassa/install-linux.md` step 1-9.
-- [ ] Servizio systemd `washhub-cassa-bridge` attivo (step 10).
-- [ ] Cloudflare Tunnel creato — annota UUID (step 11-13).
-- [ ] CNAME `cassa.washhub.it` su GoDaddy DNS → `<UUID>.cfargotunnel.com` (step 14).
-- [ ] `cloudflared` come servizio (step 15-17).
-- [ ] Reboot Pi e verifica autostart (step 18).
-- [ ] Eseguire `node scripts/setup-cassa-config.js --token <TOKEN>`.
-- [ ] Deploy regole Firestore: `firebase deploy --only firestore:rules --project dashboard-washhub`.
+- [ ] Setup Pi Zero W seguendo `bridge-cassa/install-linux.md` step 1-7.
+- [ ] Genera cert self-signed: `./init-tls.sh <IP-LAN>` (step 8).
+- [ ] Bridge token: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` (step 9).
+- [ ] `.env` configurato con VNE_HOST + token (step 10).
+- [ ] Servizio systemd `washhub-cassa-bridge` attivo (step 12).
+- [ ] PC Sebastiano: cert eccezione salvata nel browser visitando l'URL bridge (step 13).
+- [ ] Reboot Pi e verifica autostart (step 14).
+- [ ] Doc Firestore: `node scripts/setup-cassa-config.js --token <TOKEN> --url https://washhub-cassa.local:8765`.
+- [ ] Deploy regole: `firebase deploy --only firestore:rules --project dashboard-washhub`.
 - [ ] Test pagamento reale su una prenotazione finta.
 - [ ] Abilitare: `node scripts/setup-cassa-config.js --enable`.
 
