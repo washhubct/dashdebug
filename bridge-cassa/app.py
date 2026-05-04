@@ -128,8 +128,12 @@ def map_vne_response(data: Any, status: int) -> tuple[dict, int]:
         if status == 504:
             return {"error": "vne_timeout"}, 504
         return {"error": "vne_unreachable"}, 502
-    # Risposta standard VNE: req_status 0=OK, !=0=NACK + mess
-    if isinstance(data, dict) and data.get("req_status") not in (None, 0):
+    # Risposta standard VNE:
+    #   req_status 0 = OK
+    #   req_status 1 = transazione accettata/in_progress (richiede polling)
+    #   req_status 2+ = NACK con `mess` come codice errore
+    # NB: PROTOCOLLO-VNE-NOTES.md riassumeva 0/!=0 ma firmware reali distinguono 1 vs 2+.
+    if isinstance(data, dict) and data.get("req_status") not in (None, 0, 1):
         jlog("vne_nack", req_status=data.get("req_status"), mess=data.get("mess"), raw=data)
         return (
             {
