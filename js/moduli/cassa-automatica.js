@@ -138,9 +138,11 @@ export async function avviaPagamento(importoCent, idPrenotazione, cb) {
             await sleep(state.cassaAuto.pollingIntervalMs);
             try {
                 const p = await bridge('/polling/' + encodeURIComponent(idVNE));
-                inserito = (p.importo_inserito ?? p.inserito ?? 0);
-                resto = (p.resto ?? 0);
-                lastStatus = p.status || lastStatus;
+                // Firmware reali avvolgono i dati in `payment_details`; alcuni mock no.
+                const det = p.payment_details || p;
+                inserito = (det.inserted ?? det.importo_inserito ?? det.inserito ?? 0);
+                resto = (det.rest ?? det.resto ?? 0);
+                lastStatus = det.status || lastStatus;
                 modal.update({ inserito, resto, status: lastStatus });
                 if (['completed', 'partial', 'deleted', 'returned'].includes(lastStatus)) {
                     break;
