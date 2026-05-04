@@ -130,6 +130,7 @@ def map_vne_response(data: Any, status: int) -> tuple[dict, int]:
         return {"error": "vne_unreachable"}, 502
     # Risposta standard VNE: req_status 0=OK, !=0=NACK + mess
     if isinstance(data, dict) and data.get("req_status") not in (None, 0):
+        jlog("vne_nack", req_status=data.get("req_status"), mess=data.get("mess"), raw=data)
         return (
             {
                 "error": "vne_nack",
