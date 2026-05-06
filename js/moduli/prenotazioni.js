@@ -262,27 +262,30 @@ async function mostraModalServizi(date, pid) {
     return new Promise(resolve => {
         const base = pNum(entry.prezzo);
         const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
 
         overlay.innerHTML = `
-            <div style="background:var(--bg2);border-radius:var(--r);padding:24px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.4)">
-                <h3 style="font:700 15px var(--f);margin-bottom:4px">🛍️ Servizi Aggiuntivi</h3>
-                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:16px">${esc(entry.cliente)} — lavaggio: <strong>€${base.toFixed(2)}</strong></div>
-                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+                <div style="margin-bottom:14px">
+                    <div style="font:700 16px var(--f);margin-bottom:2px">Servizi extra?</div>
+                    <div style="font:400 12px var(--f);color:var(--tx2)">${esc(entry.cliente)} · lavaggio <strong style="color:var(--tx)">€${base.toFixed(2)}</strong></div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
                     ${servizi.map(s => `
-                        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--r2);border:1px solid var(--brd);cursor:pointer">
-                            <input type="checkbox" class="sa-item" data-nome="${esc(s.nome)}" data-prezzo="${s.prezzo}" style="width:17px;height:17px;cursor:pointer;flex-shrink:0">
-                            <span style="flex:1;font:500 13px var(--f)">${esc(s.nome)}</span>
-                            <span style="font:600 13px var(--mono);color:var(--grn)">+€${s.prezzo.toFixed(2)}</span>
+                        <label style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg3);border-radius:var(--r2);border:1.5px solid var(--brd);cursor:pointer;transition:border-color .15s" onchange="this.style.borderColor=this.querySelector('input').checked?'var(--grn)':'var(--brd)'">
+                            <input type="checkbox" class="sa-item" data-nome="${esc(s.nome)}" data-prezzo="${s.prezzo}" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;accent-color:var(--grn)">
+                            <span style="flex:1;font:500 14px var(--f)">${esc(s.nome)}</span>
+                            <span style="font:700 13px var(--mono);color:var(--grn)">+€${s.prezzo.toFixed(2)}</span>
                         </label>
                     `).join('')}
                 </div>
-                <div style="text-align:center;padding:10px;background:var(--bg4);border-radius:var(--r2);margin-bottom:16px;font:600 14px var(--f)">
-                    Totale: <span id="saTot" style="font-size:20px;color:var(--grn)">€${base.toFixed(2)}</span>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border-radius:var(--r2);margin-bottom:14px">
+                    <span style="font:500 13px var(--f);color:var(--tx2)">Totale da incassare</span>
+                    <span id="saTot" style="font:700 20px var(--f);color:var(--grn)">€${base.toFixed(2)}</span>
                 </div>
                 <div style="display:flex;gap:8px">
-                    <button id="saSkip" class="btn" style="flex:1">Salta</button>
-                    <button id="saOk" class="btn btn-primary" style="flex:2">Procedi →</button>
+                    <button id="saSkip" class="btn" style="flex:1;color:var(--tx2)">Solo lavaggio</button>
+                    <button id="saOk" class="btn btn-primary" style="flex:2;font:600 14px var(--f)">Incassa €${base.toFixed(2)}</button>
                 </div>
             </div>`;
 
@@ -293,6 +296,7 @@ async function mostraModalServizi(date, pid) {
                 let tot = base;
                 overlay.querySelectorAll('.sa-item:checked').forEach(c => tot += parseFloat(c.dataset.prezzo));
                 overlay.querySelector('#saTot').textContent = '€' + tot.toFixed(2);
+                overlay.querySelector('#saOk').textContent = 'Incassa €' + tot.toFixed(2);
             });
         });
 
