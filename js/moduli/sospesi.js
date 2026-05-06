@@ -362,7 +362,7 @@ export function renderSospPage() {
                 for (const [mese, recs] of Object.entries(byMese)) {
                     const totMese = recs.reduce((s, r) => s + r.importo, 0);
                     trHtml += `<tr style="background:var(--amb1)">
-                        <td colspan="4" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}</td>
+                        <td colspan="5" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}</td>
                         <td style="text-align:right;padding-right:10px">
                             <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" data-mod="BONIFICO" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Conferma pagamento solo per ${mese}">✅ Pagato</button>
                         </td>
@@ -370,7 +370,8 @@ export function renderSospPage() {
                     recs.forEach(r => {
                         trHtml += `<tr>
                             <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
-                            <td>${esc(r.vettura)}${r.targa ? `<br><span style="font:500 10px var(--mono);color:var(--tx2)">${esc(r.targa)}</span>` : ''}</td>
+                            <td>${esc(r.vettura)}</td>
+                            <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
                             <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
                             <td style="text-align:right">
@@ -409,7 +410,8 @@ export function renderSospPage() {
                         }
                         trHtml += `<tr>
                             <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
-                            <td>${esc(r.vettura)}${r.targa ? `<br><span style="font:500 10px var(--mono);color:var(--tx2)">${esc(r.targa)}</span>` : ''}</td>
+                            <td>${esc(r.vettura)}</td>
+                            <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
                             <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
                             ${azioniHtml}
@@ -427,7 +429,7 @@ export function renderSospPage() {
                 </div>
                 ${btnClienteHtml}
                 <table class="tbl">
-                    <thead><tr><th>Data</th><th>Vettura/Lavorazione</th><th style="width:80px">Importo</th><th>Note</th>${thAzioni}</tr></thead>
+                    <thead><tr><th>Data</th><th>Vettura/Lavorazione</th><th style="width:80px">Targa</th><th style="width:80px">Importo</th><th>Note</th>${thAzioni}</tr></thead>
                     <tbody>${trHtml}</tbody>
                 </table>
             </div>`;
