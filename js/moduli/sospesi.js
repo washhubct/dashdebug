@@ -367,7 +367,8 @@ export function renderSospPage() {
                     recs.forEach(r => {
                         let azioniHtml = '';
                         if (filter === 'pagati') {
-                            azioniHtml = `<td><span class="badge g">${r._modPag || 'SI'}</span><br><span style="font:400 9px var(--mono);color:var(--tx3)">${r._dataPag || ''}</span></td>`;
+                            azioniHtml = `<td style="white-space:nowrap"><span class="badge g">${r._modPag || 'SI'}</span><br><span style="font:400 9px var(--mono);color:var(--tx3)">${r._dataPag || ''}</span>
+                                <button class="act-btn btn-riapri-pagato" data-sid="${r._sid}" title="Riporta in Aperti" style="color:var(--tx2);font-size:11px;margin-left:4px">↩</button></td>`;
                         } else {
                             azioniHtml = `<td style="white-space:nowrap">
                                 <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Segna PAGATO in contanti — registra subito l'incasso">💵</button>
@@ -422,6 +423,9 @@ export function renderSospPage() {
     });
     container.querySelectorAll('.btn-riapri-singolo').forEach(btn => {
         btn.addEventListener('click', () => riapriFatturato(btn.dataset.sid));
+    });
+    container.querySelectorAll('.btn-riapri-pagato').forEach(btn => {
+        btn.addEventListener('click', () => riapriPagato(btn.dataset.sid));
     });
 }
 
@@ -521,6 +525,29 @@ async function segnaPagatoMese(cliente, mese, mod) {
         await salvaSospesoFirestore(s);
     }
     await scriviPrimaNota(cliente, totale, mod, mese);
+    renderSospPage();
+    updateSospBadge();
+    renderCassa();
+}
+
+// ─── RIAPRI PAGATO ───
+async function riapriPagato(sid) {
+    const r = state.localSosp.find(s => s._sid === sid);
+    if (!r) return;
+    r._pagato = false;
+    r._modPag = '';
+    r._dataPag = '';
+    try {
+        if (sid.startsWith('PREN-')) {
+            await fsUpdateDoc(fsDoc(db, 'prenotazioni', sid.replace('PREN-', '')), { saldo: 'SOSPESO', saldato: '' });
+        } else if (sid.startsWith('TAP-')) {
+            await fsUpdateDoc(fsDoc(db, 'tappezzeria', sid.replace('TAP-', '')), { pagamento: 'SOSPESO' });
+        } else {
+            await fsUpdateDoc(fsDoc(db, 'sospesi', sid), { pagato: false, modPagamento: '', dataPagamento: '' });
+        }
+    } catch(e) {
+        console.warn('Errore riapri pagato:', e.message);
+    }
     renderSospPage();
     updateSospBadge();
     renderCassa();
