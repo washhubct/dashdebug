@@ -399,13 +399,34 @@ async function editPren(date, pid) {
     } catch(e) { alert("Errore Cloud"); }
 }
 
+function _parseIta(s) {
+    if (!s) return null;
+    const [d, m, y] = s.split('/');
+    return y ? new Date(+y, +m - 1, +d) : null;
+}
+
 export function renderTap() {
     const tb = document.getElementById('tapTb');
     if (!tb) return;
 
-    const inLav = state.tapDB.filter(t => t.status === 'IN');
-    const oggi = new Date().toLocaleDateString('it-IT');
-    const outOggi = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === oggi);
+    // Usa la data selezionata nel selettore, non la data di sistema
+    const iso = document.getElementById('prenData')?.value;
+    const selDataIta = iso ? iso.split('-').reverse().join('/') : new Date().toLocaleDateString('it-IT');
+    const selDate = iso ? new Date(iso + 'T00:00:00') : new Date();
+    selDate.setHours(0, 0, 0, 0);
+
+    // In lavorazione: status=IN (qualunque giorno), oppure OUT ma usciti DOPO la data selezionata
+    const inLav = state.tapDB.filter(t => {
+        if (t.status === 'IN') return true;
+        if (t.status === 'OUT') {
+            const dOut = _parseIta(t.dataOut);
+            return dOut && dOut > selDate;
+        }
+        return false;
+    });
+
+    // Completate nel giorno selezionato
+    const outData = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === selDataIta);
 
     let html = '';
     if (inLav.length === 0) {
@@ -432,10 +453,10 @@ export function renderTap() {
         tb.closest('.tbl-wrap')?.after(outSection);
     }
 
-    if (outOggi.length > 0) {
-        let outHtml = `<div style="margin-top:14px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">✅ Completate Oggi</div>
+    if (outData.length > 0) {
+        let outHtml = `<div style="margin-top:14px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">✅ Completate ${selDataIta}</div>
         <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Entrata</th><th>Uscita</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Pagamento</th></tr></thead><tbody>`;
-        outOggi.forEach(t => {
+        outData.forEach(t => {
             outHtml += `<tr style="opacity:0.6">
                 <td>${t.dataIn}</td>
                 <td>${t.dataOut || '—'}</td>
