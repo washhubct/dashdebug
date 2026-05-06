@@ -39,6 +39,10 @@ export function initSospesi() {
 
     document.getElementById('btnEsportaSospesi')?.addEventListener('click', esportaExcelSospesi);
 
+    const elRegol = document.getElementById('sospRegolData');
+    if (elRegol) elRegol.value = '2026-03-31';
+    document.getElementById('btnRegolarizzaSosp')?.addEventListener('click', regolarizzaSospesi);
+
     const filterBtns = document.querySelectorAll('#page-sospesi .qbtn');
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -500,6 +504,46 @@ async function segnaPagatoMese(cliente, mese, mod) {
         await salvaSospesoFirestore(s);
     }
     await scriviPrimaNota(cliente, totale, mod, mese);
+    renderSospPage();
+    updateSospBadge();
+    renderCassa();
+}
+
+// ─── REGOLARIZZA SOSPESI STORICI ───
+async function regolarizzaSospesi() {
+    const val = document.getElementById('sospRegolData')?.value;
+    if (!val) { alert('Seleziona una data limite.'); return; }
+
+    const limiteMs = new Date(val + 'T23:59:59').getTime();
+
+    const daRegolarizzare = state.localSosp.filter(s => {
+        if (s._pagato) return false;
+        const d = pDate(s.data);
+        if (!d || isNaN(d.getTime())) return false;
+        return d.getTime() <= limiteMs;
+    });
+
+    if (!daRegolarizzare.length) { alert('Nessun sospeso aperto trovato fino alla data selezionata.'); return; }
+
+    const totale = daRegolarizzare.reduce((s, r) => s + r.importo, 0);
+    const dataLabel = val.split('-').reverse().join('/');
+    if (!confirm(`Regolarizzare ${daRegolarizzare.length} sospesi fino al ${dataLabel}?\nTotale: ${fEur(totale)}\nModalità: REGOLARIZZATO\n\nQuesta operazione non può essere annullata.`)) return;
+
+    const oggi = oggiIta();
+    let ok = 0;
+    for (const s of daRegolarizzare) {
+        s._pagato  = true;
+        s._modPag  = 'REGOLARIZZATO';
+        s._dataPag = oggi;
+        try {
+            await salvaSospesoFirestore(s);
+            ok++;
+        } catch(e) {
+            console.warn('Errore regolarizzazione', s._sid, e.message);
+        }
+    }
+
+    alert(`Regolarizzati ${ok} sospesi su ${daRegolarizzare.length}.`);
     renderSospPage();
     updateSospBadge();
     renderCassa();
