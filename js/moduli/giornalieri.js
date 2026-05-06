@@ -40,27 +40,20 @@ export function initGiornalieri() {
 }
 
 export function calcPrezzoGiornaliero(oraIn, dataIn, oraOut, dataOut) {
-    let start = new Date(dataIn + 'T' + oraIn);
-    let end = new Date(dataOut + 'T' + oraOut);
-    let diffMs = end - start;
+    const start = new Date(dataIn + 'T' + oraIn);
+    const end   = new Date(dataOut + 'T' + oraOut);
+    const diffMs = end - start;
     if (diffMs <= 0) return 0;
-    
-    let diffMinuti = Math.floor(diffMs / (1000 * 60));
-    // Sottraiamo 15 min di tolleranza
-    let oreDaPagare = Math.ceil(Math.max(0, diffMinuti - 15) / 60);
 
-    if (oreDaPagare === 0 && diffMinuti > 0) oreDaPagare = 1;
+    const diffOre = diffMs / 3600000; // ore decimali
 
-    let giorni = Math.floor(oreDaPagare / 24);
-    let restoOre = oreDaPagare % 24;
+    if (diffOre <= 1)  return 2;
+    if (diffOre <= 6)  return 8;
+    if (diffOre <= 24) return 15;
 
-    let extra = 0;
-    if (restoOre <= 0) extra = 0;
-    else if (restoOre <= 5) extra = restoOre * 2; 
-    else if (restoOre <= 12) extra = 10;          
-    else extra = 20;                             
-
-    return (giorni * 20) + extra;
+    // Dal 2° giorno in poi: €12 per ogni 24h aggiuntive
+    const giorniExtra = Math.ceil((diffOre - 24) / 24);
+    return 15 + giorniExtra * 12;
 }
 
 export function renderGiornalieri() {
