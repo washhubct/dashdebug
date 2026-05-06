@@ -9,6 +9,11 @@ import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
+// Ritorna true se il telefono ha almeno 9 cifre (ignora spazi, +, -)
+function validaTelefono(tel) {
+    return (tel.replace(/[\s\-\+\.]/g, '').match(/\d/g) || []).length >= 9;
+}
+
 export function initPrenotazioni() {
     const prenData = document.getElementById('prenData');
     if (prenData) {
@@ -153,6 +158,7 @@ async function addPren() {
 
     if (!inputNome.trim()) return showErr('⚠️ Inserisci il nominativo', 'pCliente');
     if (!telefono) return showErr('⚠️ Il numero di telefono è obbligatorio', 'pTelefono');
+    if (!validaTelefono(telefono)) return showErr('⚠️ Telefono non valido — inserisci almeno 9 cifre (es. 333 1234567)', 'pTelefono');
     if (!inputVett.trim()) return showErr('⚠️ Inserisci il modello vettura', 'pVettura');
     if (!prezzoRaw) return showErr('⚠️ Inserisci il prezzo', 'pPrezzo');
 
@@ -465,6 +471,11 @@ async function addTap() {
     if (clienteFinale === null) return;
 
     const telefono = (document.getElementById('tTelefono')?.value || '').trim();
+    if (telefono && !validaTelefono(telefono)) {
+        if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Telefono non valido — inserisci almeno 9 cifre'; }
+        document.getElementById('tTelefono')?.focus();
+        return;
+    }
     const obj = {
         dataIn: new Date().toLocaleDateString('it-IT'),
         cliente: clienteFinale,
