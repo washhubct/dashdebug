@@ -45,15 +45,23 @@ export function calcPrezzoGiornaliero(oraIn, dataIn, oraOut, dataOut) {
     const diffMs = end - start;
     if (diffMs <= 0) return 0;
 
-    const diffOre = diffMs / 3600000; // ore decimali
+    const diffOre = diffMs / 3600000;
 
-    if (diffOre <= 1)  return 2;
-    if (diffOre <= 6)  return 8;
-    if (diffOre <= 24) return 15;
+    // Primo giorno (≤24h)
+    if (diffOre <= 6) {
+        // €2/h con cap a €8
+        return Math.min(Math.ceil(diffOre) * 2, 8);
+    }
+    if (diffOre <= 24) {
+        // €8 fisso + €2/h per ogni ora oltre le 6h, cap €15
+        return Math.min(8 + Math.ceil(diffOre - 6) * 2, 15);
+    }
 
-    // Dal 2° giorno in poi: €12 per ogni 24h aggiuntive
-    const giorniExtra = Math.ceil((diffOre - 24) / 24);
-    return 15 + giorniExtra * 12;
+    // Oltre 24h: €15 primo giorno + €12 per ogni giorno intero + €2/h per le ore residue
+    const oreExtra    = diffOre - 24;
+    const giorniInteri = Math.floor(oreExtra / 24);
+    const oreResidue   = oreExtra % 24;
+    return 15 + giorniInteri * 12 + Math.ceil(oreResidue) * 2;
 }
 
 export function renderGiornalieri() {
