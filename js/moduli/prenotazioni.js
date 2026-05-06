@@ -375,8 +375,10 @@ async function addTap() {
     const modelloRaw = document.getElementById('tModello').value;
     const prezzoRaw = document.getElementById('tPrezzo').value.trim();
 
-    if(!inputNome.trim() || !modelloRaw.trim() || !prezzoRaw) {
-        if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Compila Cliente, Modello e Prezzo!'; }
+    const targaRaw = document.getElementById('tTarga').value.trim();
+    if(!inputNome.trim() || !modelloRaw.trim() || !prezzoRaw || !targaRaw) {
+        if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Compila Cliente, Modello, Targa e Prezzo!'; }
+        if(!targaRaw) document.getElementById('tTarga').focus();
         return;
     }
 

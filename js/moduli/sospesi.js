@@ -124,6 +124,7 @@ export function buildSospesiArray() {
             cliente: (t.cliente || 'DA TAPPEZZERIA').toUpperCase(),
             data: t.dataOut || t.dataIn,
             vettura: 'TAPPEZZERIA ' + (t.modello || ''),
+            targa: t.targa || '',
             importo: parseFloat(t.prezzo) || 0,
             note: 'Tappezzeria',
             dataPagamento: '',
@@ -369,7 +370,7 @@ export function renderSospPage() {
                     recs.forEach(r => {
                         trHtml += `<tr>
                             <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
-                            <td>${esc(r.vettura)}</td>
+                            <td>${esc(r.vettura)}${r.targa ? `<br><span style="font:500 10px var(--mono);color:var(--tx2)">${esc(r.targa)}</span>` : ''}</td>
                             <td style="font-weight:600">€${r.importo}</td>
                             <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
                             <td style="text-align:right">
@@ -408,7 +409,7 @@ export function renderSospPage() {
                         }
                         trHtml += `<tr>
                             <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
-                            <td>${esc(r.vettura)}</td>
+                            <td>${esc(r.vettura)}${r.targa ? `<br><span style="font:500 10px var(--mono);color:var(--tx2)">${esc(r.targa)}</span>` : ''}</td>
                             <td style="font-weight:600">€${r.importo}</td>
                             <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
                             ${azioniHtml}
