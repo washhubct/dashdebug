@@ -386,11 +386,13 @@ async function addTap() {
     const clienteFinale = await checkClienteDuplicato(inputNome);
     if (clienteFinale === null) return;
 
+    const telefono = (document.getElementById('tTelefono')?.value || '').trim();
     const obj = {
         dataIn: new Date().toLocaleDateString('it-IT'),
         cliente: clienteFinale,
         modello: normalizeName(modelloRaw),
         targa: normalizeName(document.getElementById('tTarga').value),
+        telefono,
         prezzo: prezzoRaw,
         status: 'IN', pagamento: '', dataOut: ''
     };
@@ -405,7 +407,7 @@ async function addTap() {
         const isNewClient = await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
 
         renderTap();
-        ['tCliente','tModello','tTarga','tPrezzo'].forEach(id => document.getElementById(id).value = '');
+        ['tCliente','tModello','tTarga','tTelefono','tPrezzo'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
 
         // Se è un nuovo cliente con telefono valido nel CRM, propone benvenuto
         if (isNewClient) showWelcomeToast(obj.cliente);
