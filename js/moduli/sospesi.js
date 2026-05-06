@@ -20,6 +20,7 @@ export async function loadSospesiPagati() {
 }
 
 let _sospesiInitialized = false;
+let _sospDateFilter = null; // { daMs, aMs } quando attivo
 
 export function initSospesi() {
     buildSospesiArray();
@@ -38,6 +39,27 @@ export function initSospesi() {
     if (elA)  elA.value  = toInputDate(ultimoMese);
 
     document.getElementById('btnEsportaSospesi')?.addEventListener('click', esportaExcelSospesi);
+
+    document.getElementById('btnFiltraSospesi')?.addEventListener('click', () => {
+        const daVal = document.getElementById('sospExportDa')?.value;
+        const aVal  = document.getElementById('sospExportA')?.value;
+        if (!daVal || !aVal) { alert('Seleziona Da e A per filtrare.'); return; }
+        _sospDateFilter = { daMs: new Date(daVal).getTime(), aMs: new Date(aVal + 'T23:59:59').getTime() };
+        const btnReset = document.getElementById('btnResetFiltraSospesi');
+        const btnFiltra = document.getElementById('btnFiltraSospesi');
+        if (btnReset) btnReset.style.display = '';
+        if (btnFiltra) btnFiltra.style.background = 'var(--bg4)';
+        renderSospPage();
+    });
+
+    document.getElementById('btnResetFiltraSospesi')?.addEventListener('click', () => {
+        _sospDateFilter = null;
+        const btnReset = document.getElementById('btnResetFiltraSospesi');
+        const btnFiltra = document.getElementById('btnFiltraSospesi');
+        if (btnReset) btnReset.style.display = 'none';
+        if (btnFiltra) btnFiltra.style.background = '';
+        renderSospPage();
+    });
 
     const filterBtns = document.querySelectorAll('#page-sospesi .qbtn');
     filterBtns.forEach(btn => {
@@ -276,6 +298,14 @@ export function renderSospPage() {
     if (filter === 'fatturati') items = fatturati;
     else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato);
     else items = aperti;
+
+    if (_sospDateFilter) {
+        items = items.filter(s => {
+            const d = pDate(s.data);
+            if (!d || isNaN(d.getTime())) return false;
+            return d.getTime() >= _sospDateFilter.daMs && d.getTime() <= _sospDateFilter.aMs;
+        });
+    }
 
     if (srch) {
         items = items.filter(s =>
