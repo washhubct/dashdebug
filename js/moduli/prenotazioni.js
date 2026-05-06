@@ -267,7 +267,7 @@ async function mostraModalServizi(date, pid) {
         overlay.innerHTML = `
             <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
                 <div style="margin-bottom:14px">
-                    <div style="font:700 16px var(--f);margin-bottom:2px">Servizi extra?</div>
+                    <div style="font:700 17px var(--f);margin-bottom:4px">Ci sono servizi aggiuntivi?</div>
                     <div style="font:400 12px var(--f);color:var(--tx2)">${esc(entry.cliente)} · lavaggio <strong style="color:var(--tx)">€${base.toFixed(2)}</strong></div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
