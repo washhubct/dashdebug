@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260425v2';
+    var APP_VERSION = '20260506v1';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -85,6 +85,7 @@
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
 <a class="sb-item admin-only" id="nav-cancellazioni"><span class="icon">🗑️</span>Log Cancellazioni</a>
+<a class="sb-item admin-only" id="nav-servizi"><span class="icon">⭐</span>Servizi Aggiuntivi</a>
 </nav>
 <div class="sb-footer">
 <div class="sb-user"><div class="sb-avatar" id="sbAvatar">A</div><div class="sb-user-info"><div class="name" id="sbName">Admin</div><div class="role" id="sbRole">Amministratore</div></div></div>
@@ -528,10 +529,29 @@
 </div>
 </div>
 
+<div class="page" id="page-servizi">
+<div class="sec">
+<h3 style="font:700 15px var(--f);margin-bottom:6px">⭐ Servizi Aggiuntivi</h3>
+<p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:20px">Questi servizi vengono proposti a Sebastiano durante il pagamento. Attiva/disattiva o modifica i prezzi in qualsiasi momento.</p>
+
+<div style="background:var(--bg3);border-radius:var(--r);padding:20px;margin-bottom:24px">
+<h4 style="font:600 13px var(--f);margin-bottom:12px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px">Aggiungi nuovo servizio</h4>
+<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="ff" style="flex:2;min-width:180px"><label>Nome servizio *</label><input id="sNome" placeholder="Es: Profumo auto, Sanificazione..."></div>
+    <div class="ff" style="width:120px"><label>Prezzo € *</label><input id="sPrezzo" type="number" step="0.01" min="0" placeholder="15.00"></div>
+    <button class="btn btn-primary" id="btnSalvaServizio" style="height:37px;padding:0 20px">+ Aggiungi</button>
+</div>
+</div>
+
+<div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Servizi configurati</div>
+<div id="serviziList" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>
+</div>
+
 </div></div></div>
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260504b"></script>
+<script type="module" src="js/main.js?v=20260506a"></script>
 
 </body>
 </html>

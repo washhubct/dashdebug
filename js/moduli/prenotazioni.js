@@ -5,6 +5,7 @@ import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
 import { avviaPagamento, healthBridge } from './cassa-automatica.js';
+import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -122,7 +123,11 @@ async function handlePrenActions(e) {
         document.getElementById('pCliente').focus();
     } else if (btn.classList.contains('pay-btn')) {
         btn.disabled = true;
-        try { await markPaid(date, id, btn.dataset.mod); } finally { btn.disabled = false; }
+        try {
+            const mod = btn.dataset.mod;
+            const serviziExtra = mod !== 'SOSPESO' ? await mostraModalServizi(date, id) : [];
+            await markPaid(date, id, mod, serviziExtra);
+        } finally { btn.disabled = false; }
     } else if (btn.classList.contains('undo-pay')) {
         btn.disabled = true;
         try { await unmarkPaid(date, id); } finally { btn.disabled = false; }
@@ -230,19 +235,81 @@ async function gestisciCassaContanti(prezzoEur, refId) {
     return { abort: true };
 }
 
-async function markPaid(date, pid, mod) {
+async function mostraModalServizi(date, pid) {
+    const entry = state.prenDB[date]?.find(e => e._pid === pid);
+    if (!entry) return [];
+
+    const servizi = await loadServiziAttivi();
+    if (servizi.length === 0) return [];
+
+    return new Promise(resolve => {
+        const base = pNum(entry.prezzo);
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+        overlay.innerHTML = `
+            <div style="background:var(--bg2);border-radius:var(--r);padding:24px;width:100%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,.4)">
+                <h3 style="font:700 15px var(--f);margin-bottom:4px">🛍️ Servizi Aggiuntivi</h3>
+                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:16px">${esc(entry.cliente)} — lavaggio: <strong>€${base.toFixed(2)}</strong></div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+                    ${servizi.map(s => `
+                        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:var(--r2);border:1px solid var(--brd);cursor:pointer">
+                            <input type="checkbox" class="sa-item" data-nome="${esc(s.nome)}" data-prezzo="${s.prezzo}" style="width:17px;height:17px;cursor:pointer;flex-shrink:0">
+                            <span style="flex:1;font:500 13px var(--f)">${esc(s.nome)}</span>
+                            <span style="font:600 13px var(--mono);color:var(--grn)">+€${s.prezzo.toFixed(2)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <div style="text-align:center;padding:10px;background:var(--bg4);border-radius:var(--r2);margin-bottom:16px;font:600 14px var(--f)">
+                    Totale: <span id="saTot" style="font-size:20px;color:var(--grn)">€${base.toFixed(2)}</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button id="saSkip" class="btn" style="flex:1">Salta</button>
+                    <button id="saOk" class="btn btn-primary" style="flex:2">Procedi →</button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelectorAll('.sa-item').forEach(chk => {
+            chk.addEventListener('change', () => {
+                let tot = base;
+                overlay.querySelectorAll('.sa-item:checked').forEach(c => tot += parseFloat(c.dataset.prezzo));
+                overlay.querySelector('#saTot').textContent = '€' + tot.toFixed(2);
+            });
+        });
+
+        const close = (selected) => { document.body.removeChild(overlay); resolve(selected); };
+
+        overlay.querySelector('#saSkip').addEventListener('click', () => close([]));
+        overlay.querySelector('#saOk').addEventListener('click', () => {
+            const sel = [];
+            overlay.querySelectorAll('.sa-item:checked').forEach(c => sel.push({ nome: c.dataset.nome, prezzo: parseFloat(c.dataset.prezzo) }));
+            close(sel);
+        });
+    });
+}
+
+async function markPaid(date, pid, mod, serviziExtra = []) {
     const entry = state.prenDB[date]?.find(e => e._pid === pid);
     if (!entry) return;
 
     let extraMeta = {};
     let prezzoFinaleStr = entry.prezzo;
 
+    if (serviziExtra && serviziExtra.length > 0) {
+        const totale = pNum(entry.prezzo) + serviziExtra.reduce((s, x) => s + x.prezzo, 0);
+        prezzoFinaleStr = String(totale);
+        extraMeta.serviziAggiuntivi = serviziExtra;
+        extraMeta.prezzoLavaggio = entry.prezzo;
+    }
+
     if (mod === 'CONTANTI') {
-        const prezzoEur = pNum(entry.prezzo);
+        const prezzoEur = pNum(prezzoFinaleStr);
         const r = await gestisciCassaContanti(prezzoEur, pid);
         if (r.abort) return;
         if (r.ok) {
-            extraMeta = r.meta;
+            extraMeta = { ...extraMeta, ...r.meta };
             if (r.effettivo) prezzoFinaleStr = String(r.effettivo);
         }
     }

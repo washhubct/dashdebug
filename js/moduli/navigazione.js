@@ -95,7 +95,8 @@ export function goPage(id) {
         presenze: ['👷', 'Presenze Dipendenti'],
         clienti: ['👥', 'Clienti / CRM'],
         report: ['💰', 'Report Finanziario'],
-        cancellazioni: ['🗑️', 'Registro Cancellazioni']
+        cancellazioni: ['🗑️', 'Registro Cancellazioni'],
+        servizi: ['⭐', 'Servizi Aggiuntivi']
     };
     const t = titles[id] || ['', ''];
 
