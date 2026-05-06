@@ -342,7 +342,9 @@ export function renderSospPage() {
                             <td>${esc(r.vettura)}</td>
                             <td style="font-weight:600">€${r.importo}</td>
                             <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
-                            <td></td>
+                            <td style="text-align:right">
+                                <button class="act-btn btn-riapri-singolo" data-sid="${r._sid}" title="Riporta in Aperti" style="color:var(--tx2);font-size:11px">↩</button>
+                            </td>
                         </tr>`;
                     });
                 }
@@ -417,6 +419,9 @@ export function renderSospPage() {
     });
     container.querySelectorAll('.btn-pagato-mese').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoMese(btn.dataset.cli, btn.dataset.mese, btn.dataset.mod));
+    });
+    container.querySelectorAll('.btn-riapri-singolo').forEach(btn => {
+        btn.addEventListener('click', () => riapriFatturato(btn.dataset.sid));
     });
 }
 
@@ -519,6 +524,27 @@ async function segnaPagatoMese(cliente, mese, mod) {
     renderSospPage();
     updateSospBadge();
     renderCassa();
+}
+
+// ─── RIAPRI FATTURATO ───
+async function riapriFatturato(sid) {
+    const r = state.localSosp.find(s => s._sid === sid);
+    if (!r) return;
+    r._fatturato = false;
+    r._dataFatt = '';
+    try {
+        if (sid.startsWith('PREN-')) {
+            await fsUpdateDoc(fsDoc(db, 'prenotazioni', sid.replace('PREN-', '')), { saldo: 'SOSPESO' });
+        } else if (sid.startsWith('TAP-')) {
+            await fsUpdateDoc(fsDoc(db, 'tappezzeria', sid.replace('TAP-', '')), { pagamento: 'SOSPESO' });
+        } else {
+            await fsUpdateDoc(fsDoc(db, 'sospesi', sid), { fatturato: false, dataFattura: '' });
+        }
+    } catch(e) {
+        console.warn('Errore riapri fatturato:', e.message);
+    }
+    renderSospPage();
+    updateSospBadge();
 }
 
 // ─── EXPORT EXCEL ───
