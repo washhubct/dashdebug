@@ -3,6 +3,8 @@ import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db } from '../firebase-config.js';
 
+/* global XLSX */
+
 // Helper: data italiana con zero padding (DD/MM/YYYY) — consistente con cassa.js
 function oggiIta() {
     const n = new Date();
@@ -24,6 +26,18 @@ export function initSospesi() {
 
     if (_sospesiInitialized) return;
     _sospesiInitialized = true;
+
+    // Default range date = mese corrente
+    const oggi = new Date();
+    const primoMese = new Date(oggi.getFullYear(), oggi.getMonth(), 1);
+    const ultimoMese = new Date(oggi.getFullYear(), oggi.getMonth() + 1, 0);
+    const toInputDate = d => d.toISOString().slice(0, 10);
+    const elDa = document.getElementById('sospExportDa');
+    const elA  = document.getElementById('sospExportA');
+    if (elDa) elDa.value = toInputDate(primoMese);
+    if (elA)  elA.value  = toInputDate(ultimoMese);
+
+    document.getElementById('btnEsportaSospesi')?.addEventListener('click', esportaExcelSospesi);
 
     const filterBtns = document.querySelectorAll('#page-sospesi .qbtn');
     filterBtns.forEach(btn => {
@@ -489,4 +503,72 @@ async function segnaPagatoMese(cliente, mese, mod) {
     renderSospPage();
     updateSospBadge();
     renderCassa();
+}
+
+// ─── EXPORT EXCEL ───
+function esportaExcelSospesi() {
+    const daVal = document.getElementById('sospExportDa')?.value;
+    const aVal  = document.getElementById('sospExportA')?.value;
+    if (!daVal || !aVal) { alert('Seleziona il range di date.'); return; }
+
+    const daMs = new Date(daVal).getTime();
+    const aMs  = new Date(aVal + 'T23:59:59').getTime();
+
+    const filtrati = state.localSosp.filter(s => {
+        const d = pDate(s.data);
+        if (!d || isNaN(d.getTime())) return false;
+        return d.getTime() >= daMs && d.getTime() <= aMs;
+    });
+
+    if (!filtrati.length) { alert('Nessun sospeso nel periodo selezionato.'); return; }
+
+    // Raggruppa per cliente
+    const byCliente = {};
+    filtrati.forEach(s => {
+        const cli = s.cliente || 'N/D';
+        if (!byCliente[cli]) byCliente[cli] = [];
+        byCliente[cli].push(s);
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    // Foglio riepilogo per cliente
+    const riepilogoRows = [['Cliente', 'N° Sospesi', 'Totale (€)', 'Aperti (€)', 'Fatturati (€)', 'Pagati (€)']];
+    Object.entries(byCliente)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .forEach(([cli, records]) => {
+            const aperti    = records.filter(r => !r._pagato && !r._fatturato).reduce((s, r) => s + r.importo, 0);
+            const fatturati = records.filter(r => r._fatturato && !r._pagato).reduce((s, r) => s + r.importo, 0);
+            const pagati    = records.filter(r => r._pagato).reduce((s, r) => s + r.importo, 0);
+            const totale    = records.reduce((s, r) => s + r.importo, 0);
+            riepilogoRows.push([cli, records.length, totale, aperti, fatturati, pagati]);
+        });
+    const wsRiepilogo = XLSX.utils.aoa_to_sheet(riepilogoRows);
+    wsRiepilogo['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, wsRiepilogo, 'Riepilogo');
+
+    // Foglio dettaglio tutti i sospesi
+    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Importo (€)', 'Note', 'Stato', 'Mod. Pagamento', 'Data Pagamento']];
+    filtrati
+        .sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0))
+        .forEach(s => {
+            const stato = s._pagato ? 'PAGATO' : s._fatturato ? 'FATTURATO' : 'APERTO';
+            dettaglioRows.push([
+                s.cliente || '',
+                s.data || '',
+                s.vettura || '',
+                s.importo || 0,
+                s.note || '',
+                stato,
+                s._modPag || '',
+                s._dataPag || ''
+            ]);
+        });
+    const wsDettaglio = XLSX.utils.aoa_to_sheet(dettaglioRows);
+    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsDettaglio, 'Dettaglio');
+
+    const daLabel = daVal.split('-').reverse().join('');
+    const aLabel  = aVal.split('-').reverse().join('');
+    XLSX.writeFile(wb, `sospesi_${daLabel}-${aLabel}.xlsx`);
 }

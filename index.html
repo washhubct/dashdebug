@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
 <link rel="stylesheet" href="css/style.css?v=202604221826">
 <link rel="manifest" href="manifest.json">
@@ -349,6 +350,14 @@
 <button class="qbtn">Fatturati</button>
 <button class="qbtn">Pagati/Chiusi</button>
 <input class="search-box" id="sospSrch" placeholder="Cerca cliente o vettura..." style="margin-left:auto">
+</div>
+
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+  <label style="font:500 12px var(--f);color:var(--tx2)">Da</label>
+  <input type="date" id="sospExportDa" style="font:400 12px var(--f);padding:4px 8px;border:1px solid var(--brd);border-radius:6px;background:var(--bg3);color:var(--tx)">
+  <label style="font:500 12px var(--f);color:var(--tx2)">A</label>
+  <input type="date" id="sospExportA" style="font:400 12px var(--f);padding:4px 8px;border:1px solid var(--brd);border-radius:6px;background:var(--bg3);color:var(--tx)">
+  <button class="btn" id="btnEsportaSospesi" style="background:var(--grn1);border-color:var(--grn);color:var(--grn);font-size:12px;padding:4px 14px">⬇ Esporta Excel</button>
 </div>
 
 <div id="sospCards"></div>
