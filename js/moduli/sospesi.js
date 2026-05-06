@@ -347,25 +347,41 @@ export function renderSospPage() {
                     });
                 }
             } else {
+                const byMese = {};
                 rows.forEach(r => {
-                    let azioniHtml = '';
-                    if (filter === 'pagati') {
-                        azioniHtml = `<td><span class="badge g">${r._modPag || 'SI'}</span><br><span style="font:400 9px var(--mono);color:var(--tx3)">${r._dataPag || ''}</span></td>`;
-                    } else {
-                        azioniHtml = `<td style="white-space:nowrap">
-                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Segna PAGATO in contanti — registra subito l'incasso">💵</button>
-                            <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="POS" title="Segna PAGATO con POS — registra subito l'incasso">💳</button>
-                            <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna FATTURATO — resta in attesa di pagamento" style="color:var(--amb)">📄</button>
-                        </td>`;
-                    }
-                    trHtml += `<tr>
-                        <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
-                        <td>${esc(r.vettura)}</td>
-                        <td style="font-weight:600">€${r.importo}</td>
-                        <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
-                        ${azioniHtml}
-                    </tr>`;
+                    const m = getMeseAnno(r.data);
+                    if (!byMese[m]) byMese[m] = [];
+                    byMese[m].push(r);
                 });
+                for (const [mese, recs] of Object.entries(byMese)) {
+                    const totMese = recs.reduce((s, r) => s + r.importo, 0);
+                    const bgColor = filter === 'pagati' ? 'var(--grn1)' : 'var(--bg4)';
+                    const txtColor = filter === 'pagati' ? 'var(--grn)' : 'var(--tx2)';
+                    trHtml += `<tr style="background:${bgColor}">
+                        <td colspan="5" style="font:600 11px var(--f);color:${txtColor};padding:6px 10px">
+                            📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}
+                        </td>
+                    </tr>`;
+                    recs.forEach(r => {
+                        let azioniHtml = '';
+                        if (filter === 'pagati') {
+                            azioniHtml = `<td><span class="badge g">${r._modPag || 'SI'}</span><br><span style="font:400 9px var(--mono);color:var(--tx3)">${r._dataPag || ''}</span></td>`;
+                        } else {
+                            azioniHtml = `<td style="white-space:nowrap">
+                                <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Segna PAGATO in contanti — registra subito l'incasso">💵</button>
+                                <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="POS" title="Segna PAGATO con POS — registra subito l'incasso">💳</button>
+                                <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna FATTURATO — resta in attesa di pagamento" style="color:var(--amb)">📄</button>
+                            </td>`;
+                        }
+                        trHtml += `<tr>
+                            <td style="font:400 10px var(--mono)">${r.data || '-'}</td>
+                            <td>${esc(r.vettura)}</td>
+                            <td style="font-weight:600">€${r.importo}</td>
+                            <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
+                            ${azioniHtml}
+                        </tr>`;
+                    });
+                }
             }
 
             const thAzioni = filter === 'pagati' ? '<th>Pagato</th>' : (filter === 'fatturati' ? '<th style="width:100px"></th>' : '<th style="width:140px">Azioni</th>');
