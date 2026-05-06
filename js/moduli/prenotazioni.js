@@ -140,14 +140,24 @@ async function handlePrenActions(e) {
 
 async function addPren() {
     const date = document.getElementById('prenData').value;
-    const telefono = document.getElementById('pTelefono')?.value.trim() || '';
-    const prezzoRaw = document.getElementById('pPrezzo').value.trim();
     const inputNome = document.getElementById('pCliente').value;
+    const telefono = document.getElementById('pTelefono')?.value.trim() || '';
     const inputVett = document.getElementById('pVettura').value;
+    const prezzoRaw = document.getElementById('pPrezzo').value.trim();
+    const msg = document.getElementById('prenMsg');
 
-    if (!inputNome.trim() || !inputVett.trim() || !prezzoRaw || !telefono) return alert("Compila i campi obbligatori (Nominativo, Telefono, Vettura, Prezzo)!");
+    const showErr = (text, focusId) => {
+        if (msg) { msg.style.color = 'var(--red)'; msg.textContent = text; }
+        document.getElementById(focusId)?.focus();
+    };
+
+    if (!inputNome.trim()) return showErr('⚠️ Inserisci il nominativo', 'pCliente');
+    if (!telefono) return showErr('⚠️ Il numero di telefono è obbligatorio', 'pTelefono');
+    if (!inputVett.trim()) return showErr('⚠️ Inserisci il modello vettura', 'pVettura');
+    if (!prezzoRaw) return showErr('⚠️ Inserisci il prezzo', 'pPrezzo');
+
     const prezzoNum = parseFloat(prezzoRaw.replace(',', '.'));
-    if (isNaN(prezzoNum) || prezzoNum < 0) return alert("⚠️ Prezzo non valido! Inserisci un numero (es. 25 oppure 25,50).");
+    if (isNaN(prezzoNum) || prezzoNum < 0) return showErr('⚠️ Prezzo non valido (es. 25 oppure 25,50)', 'pPrezzo');
 
     // Hard autocomplete: se esistono clienti simili, forza scelta o conferma "nuovo"
     const clienteFinale = await checkClienteDuplicato(inputNome);
@@ -175,6 +185,7 @@ async function addPren() {
 
         renderPren();
         ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
+        if (msg) msg.textContent = '';
 
         // UN SOLO toast a seconda che il cliente sia nuovo o già conosciuto.
         // Nuovo → benvenuto + conferma prenotazione in unico messaggio (con IG).
