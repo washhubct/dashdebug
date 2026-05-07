@@ -356,3 +356,70 @@ function openCassaModal(importoCent, idPrenotazione) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─── MODAL PAGAMENTO UNIVERSALE ──────────────────────────────────
+/**
+ * Mostra "Come paga?" e gestisce VNE se contanti.
+ * @returns {Promise<{mod, meta, prezzoFinale}|null>}  null = annullato
+ */
+export async function richiediPagamento(importoEur, label, refId, { addBonifico = false } = {}) {
+    const mod = await _mostraModalMetodo(importoEur, label, addBonifico);
+    if (!mod) return null;
+
+    if (mod !== 'CONTANTI') return { mod, meta: {}, prezzoFinale: importoEur };
+
+    // VNE: se disabilitato procedi manuale
+    if (!state.cassaAuto?.enabled) return { mod: 'CONTANTI', meta: {}, prezzoFinale: importoEur };
+
+    const h = await healthBridge();
+    if (!h?.ok || !h?.vne_reachable) {
+        const motivo = !h?.ok ? 'bridge offline' : 'cassa scollegata';
+        const ok = confirm(`⚠️ Cassa non raggiungibile (${motivo}).\nSalvare come contanti manuale?`);
+        return ok ? { mod: 'CONTANTI', meta: {}, prezzoFinale: importoEur } : null;
+    }
+
+    const importoCent = Math.round(importoEur * 100);
+    const res = await new Promise(resolve => avviaPagamento(importoCent, refId, resolve));
+
+    if (res.status === 'completed') {
+        return { mod: 'CONTANTI', prezzoFinale: importoEur,
+            meta: { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE, vneInserito: res.inserito, vneResto: res.resto } };
+    }
+    if (res.status === 'partial') {
+        const ok = confirm(`Cliente ha inserito €${(res.inserito||0).toFixed(2)} su €${importoEur.toFixed(2)}.\nAccettare pagamento parziale?`);
+        if (!ok) return null;
+        return { mod: 'CONTANTI', prezzoFinale: res.inserito,
+            meta: { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE, vneStatus: 'partial', vneInserito: res.inserito, vneResto: res.resto } };
+    }
+    if (res.status === 'error') alert('Errore cassa: ' + (res.error || 'sconosciuto'));
+    return null;
+}
+
+function _mostraModalMetodo(importo, label, addBonifico) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+        overlay.innerHTML = `
+            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+                <div style="font:700 16px var(--f);margin-bottom:4px">Come paga?</div>
+                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:16px">${esc(String(label))} — <strong style="color:var(--tx)">€${Number(importo).toFixed(2)}</strong></div>
+                <div style="display:flex;gap:8px;margin-bottom:5px">
+                    <button id="_mpC" class="btn btn-primary" style="flex:1;padding:16px;font-size:22px">💵</button>
+                    <button id="_mpP" class="btn" style="flex:1;padding:16px;font-size:22px;border-color:var(--blu);color:var(--blu)">💳</button>
+                    ${addBonifico ? `<button id="_mpB" class="btn" style="flex:1;padding:16px;font-size:22px;border-color:var(--amb);color:var(--amb)">🏦</button>` : ''}
+                </div>
+                <div style="display:flex;gap:8px;font:400 11px var(--f);color:var(--tx3);margin-bottom:12px">
+                    <span style="flex:1;text-align:center">Contanti</span>
+                    <span style="flex:1;text-align:center">POS</span>
+                    ${addBonifico ? `<span style="flex:1;text-align:center">Bonifico</span>` : ''}
+                </div>
+                <button id="_mpAnn" class="btn" style="width:100%;color:var(--tx3)">Annulla</button>
+            </div>`;
+        document.body.appendChild(overlay);
+        const close = m => { overlay.remove(); resolve(m); };
+        overlay.querySelector('#_mpC').addEventListener('click', () => close('CONTANTI'));
+        overlay.querySelector('#_mpP').addEventListener('click', () => close('POS'));
+        if (addBonifico) overlay.querySelector('#_mpB')?.addEventListener('click', () => close('BONIFICO'));
+        overlay.querySelector('#_mpAnn').addEventListener('click', () => close(null));
+    });
+}

@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db } from '../firebase-config.js';
+import { richiediPagamento } from './cassa-automatica.js';
 
 /* global XLSX */
 
@@ -339,8 +340,7 @@ export function renderSospPage() {
             let btnClienteHtml = '';
             if (filter === 'aperti') {
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap">
-                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px" title="Salda TUTTI i sospesi di questo cliente in CONTANTI e registra l'incasso">💵 Salda Tutto Contanti</button>
-                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px" title="Salda TUTTI i sospesi di questo cliente con POS e registra l'incasso">💳 Salda Tutto POS</button>
+                    <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px" title="Incassa tutti i sospesi di questo cliente">💰 Incassa Tutto</button>
                     <button class="btn btn-fatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;border-color:var(--amb);color:var(--amb)" title="Segna TUTTI come FATTURATI — restano in attesa di pagamento nella tab Fatturati">📄 Segna Fatturato</button>
                 </div>`;
             } else if (filter === 'fatturati') {
@@ -348,9 +348,7 @@ export function renderSospPage() {
                 rows.forEach(r => { const m = getMeseAnno(r.data); if (!mesi[m]) mesi[m] = 0; mesi[m] += r.importo; });
                 const mesiInfo = Object.entries(mesi).map(([m, t]) => `${m}: ${fEur(t)}`).join(' · ');
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="CONTANTI" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO in contanti — registra incasso in Prima Nota">✅ Pagato Contanti</button>
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="POS" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO con POS — registra incasso in Prima Nota">✅ Pagato POS</button>
-                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" data-mod="BONIFICO" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Il cliente ha PAGATO con bonifico — registra incasso in Prima Nota">✅ Pagato Bonifico</button>
+                    <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Registra incasso fatture">💰 Incassato</button>
                     <span style="font:400 10px var(--mono);color:var(--tx2);margin-left:auto">${mesiInfo}</span>
                 </div>`;
             }
@@ -364,7 +362,7 @@ export function renderSospPage() {
                     trHtml += `<tr style="background:var(--amb1)">
                         <td colspan="5" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}</td>
                         <td style="text-align:right;padding-right:10px">
-                            <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" data-mod="BONIFICO" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Conferma pagamento solo per ${mese}">✅ Pagato</button>
+                            <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Incassa ${mese}">💰 Incassa</button>
                         </td>
                     </tr>`;
                     recs.forEach(r => {
@@ -403,9 +401,8 @@ export function renderSospPage() {
                                 <button class="act-btn btn-riapri-pagato" data-sid="${r._sid}" title="Riporta in Aperti" style="color:var(--tx2);font-size:11px;margin-left:4px">↩</button></td>`;
                         } else {
                             azioniHtml = `<td style="white-space:nowrap">
-                                <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="CONTANTI" title="Segna PAGATO in contanti — registra subito l'incasso">💵</button>
-                                <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" data-mod="POS" title="Segna PAGATO con POS — registra subito l'incasso">💳</button>
-                                <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna FATTURATO — resta in attesa di pagamento" style="color:var(--amb)">📄</button>
+                                <button class="act-btn btn-salda-singolo" data-sid="${r._sid}" title="Incassa">💰</button>
+                                <button class="act-btn btn-fatt-singolo" data-sid="${r._sid}" title="Segna fatturato" style="color:var(--amb)">📄</button>
                             </td>`;
                         }
                         trHtml += `<tr>
@@ -437,10 +434,10 @@ export function renderSospPage() {
 
     // ─── EVENT LISTENERS ───
     container.querySelectorAll('.btn-salda-singolo').forEach(btn => {
-        btn.addEventListener('click', () => saldaSingolo(btn.dataset.sid, btn.dataset.mod));
+        btn.addEventListener('click', () => saldaSingolo(btn.dataset.sid));
     });
     container.querySelectorAll('.btn-salda-cli').forEach(btn => {
-        btn.addEventListener('click', () => saldaCliente(btn.dataset.cli, btn.dataset.mod));
+        btn.addEventListener('click', () => saldaCliente(btn.dataset.cli));
     });
     container.querySelectorAll('.btn-fatt-singolo').forEach(btn => {
         btn.addEventListener('click', () => segnaFatturatoSingolo(btn.dataset.sid));
@@ -449,10 +446,10 @@ export function renderSospPage() {
         btn.addEventListener('click', () => segnaFatturatoCliente(btn.dataset.cli));
     });
     container.querySelectorAll('.btn-pagato-cli').forEach(btn => {
-        btn.addEventListener('click', () => segnaPagatoCliente(btn.dataset.cli, btn.dataset.mod));
+        btn.addEventListener('click', () => segnaPagatoCliente(btn.dataset.cli));
     });
     container.querySelectorAll('.btn-pagato-mese').forEach(btn => {
-        btn.addEventListener('click', () => segnaPagatoMese(btn.dataset.cli, btn.dataset.mese, btn.dataset.mod));
+        btn.addEventListener('click', () => segnaPagatoMese(btn.dataset.cli, btn.dataset.mese));
     });
     container.querySelectorAll('.btn-riapri-singolo').forEach(btn => {
         btn.addEventListener('click', () => riapriFatturato(btn.dataset.sid));
@@ -466,33 +463,36 @@ export function renderSospPage() {
 // AZIONI
 // ════════════════════════════════════════════════════════════════════
 
-async function saldaSingolo(sid, mod) {
+async function saldaSingolo(sid) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
+    const pag = await richiediPagamento(r.importo, r.cliente, sid);
+    if (!pag) return;
     r._pagato = true;
-    r._modPag = mod;
+    r._modPag = pag.mod;
     r._dataPag = oggiIta();
     await salvaSospesoFirestore(r);
-    await scriviPrimaNota(r.cliente, r.importo, mod, getMeseAnno(r.data));
+    await scriviPrimaNota(r.cliente, pag.prezzoFinale, pag.mod, getMeseAnno(r.data));
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-async function saldaCliente(cliente, mod) {
+async function saldaCliente(cliente) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
-    if (!confirm(`Saldare ${aperti.length} sospesi di ${cliente} come ${mod}?\nTotale: ${fEur(aperti.reduce((s, r) => s + r.importo, 0))}`)) return;
+    const totale = aperti.reduce((s, r) => s + r.importo, 0);
+    const pag = await richiediPagamento(totale, `${cliente} — ${aperti.length} sospesi`, cliente);
+    if (!pag) return;
 
     const oggi = oggiIta();
-    const totale = aperti.reduce((s, r) => s + r.importo, 0);
     for (const s of aperti) {
         s._pagato = true;
-        s._modPag = mod;
+        s._modPag = pag.mod;
         s._dataPag = oggi;
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, totale, mod, 'Saldo completo');
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Saldo completo');
     renderSospPage();
     updateSospBadge();
     renderCassa();
@@ -523,41 +523,43 @@ async function segnaFatturatoCliente(cliente) {
     updateSospBadge();
 }
 
-async function segnaPagatoCliente(cliente, mod) {
+async function segnaPagatoCliente(cliente) {
     const fatturati = state.localSosp.filter(s => s.cliente === cliente && s._fatturato && !s._pagato);
     if (!fatturati.length) return;
     const totale = fatturati.reduce((s, r) => s + r.importo, 0);
-    if (!confirm(`Confermi PAGAMENTO di ${fatturati.length} sospesi fatturati di ${cliente}?\nTotale: ${fEur(totale)} — Metodo: ${mod}`)) return;
+    const pag = await richiediPagamento(totale, `${cliente} — ${fatturati.length} fatture`, cliente, { addBonifico: true });
+    if (!pag) return;
 
     const oggi = oggiIta();
     for (const s of fatturati) {
         s._pagato = true;
-        s._modPag = mod;
+        s._modPag = pag.mod;
         s._dataPag = oggi;
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, totale, mod, 'Fatture saldate');
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Fatture saldate');
     renderSospPage();
     updateSospBadge();
     renderCassa();
 }
 
-async function segnaPagatoMese(cliente, mese, mod) {
+async function segnaPagatoMese(cliente, mese) {
     const items = state.localSosp.filter(s =>
         s.cliente === cliente && s._fatturato && !s._pagato && getMeseAnno(s.data) === mese
     );
     if (!items.length) return;
     const totale = items.reduce((s, r) => s + r.importo, 0);
-    if (!confirm(`Confermi PAGAMENTO sospesi ${cliente} di ${mese}?\n${items.length} lavaggi — ${fEur(totale)} — ${mod}`)) return;
+    const pag = await richiediPagamento(totale, `${cliente} · ${mese}`, cliente + mese, { addBonifico: true });
+    if (!pag) return;
 
     const oggi = oggiIta();
     for (const s of items) {
         s._pagato = true;
-        s._modPag = mod;
+        s._modPag = pag.mod;
         s._dataPag = oggi;
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, totale, mod, mese);
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, mese);
     renderSospPage();
     updateSospBadge();
     renderCassa();

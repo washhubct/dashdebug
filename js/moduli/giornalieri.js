@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
+import { richiediPagamento } from './cassa-automatica.js';
 
 export function initGiornalieri() {
     // Gestione input data e bottone "Oggi"
@@ -174,33 +175,66 @@ async function addGiornaliero() {
 
 async function checkoutGiornaliero(id) {
     const g = state.giornDB.find(x => x._id === id); if (!g) return;
-    
+
     const now = new Date();
-    const orarioUscitaSuggerito = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const dataUscita = fmtDI(now);
-    
-    const orarioOut = prompt(`Orario di uscita per ${g.vettura} (Targa: ${g.targa})?`, orarioUscitaSuggerito);
-    if (orarioOut === null) return;
+    const nowTime = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
 
-    const prezzoCalcolato = calcPrezzoGiornaliero(g.orarioIn, g.dataIn, orarioOut, dataUscita);
-    
-    let importoConfermato = prompt(`Importo calcolato dal sistema (tolleranza 15m inclusa): €${prezzoCalcolato}\n\nConferma l'importo o digitalo manualmente se vuoi cambiarlo:`, prezzoCalcolato);
-    if (importoConfermato === null) return;
-    
-    const prezzoFinale = parseFloat(importoConfermato.replace(',', '.')) || 0;
+    // Step 1: modal conferma orario + prezzo
+    const step1 = await _mostraModalCheckout(g, nowTime, dataUscita);
+    if (!step1) return;
 
-    let modPagamento = prompt(`Incasso finale: €${prezzoFinale}\nInserisci metodo di pagamento (CONTANTI o POS):`, "CONTANTI");
-    if (modPagamento === null) return;
-    modPagamento = modPagamento.trim().toUpperCase();
-    if (modPagamento !== 'CONTANTI' && modPagamento !== 'POS') modPagamento = 'CONTANTI';
+    // Step 2: modal pagamento
+    const pag = await richiediPagamento(step1.prezzo, g.vettura + ' ' + g.targa, id);
+    if (!pag) return;
 
     try {
-        await fsUpdateDoc(fsDoc(db, "giornalieri", id), { 
-            status: 'OUT', pagamento: modPagamento, dataOut: dataUscita, orarioOut: orarioOut, prezzoFinale: prezzoFinale 
+        await fsUpdateDoc(fsDoc(db, "giornalieri", id), {
+            status: 'OUT', pagamento: pag.mod, dataOut: dataUscita,
+            orarioOut: step1.orarioOut, prezzoFinale: pag.prezzoFinale, ...pag.meta
         });
-        g.status = 'OUT'; g.pagamento = modPagamento; g.dataOut = dataUscita; g.orarioOut = orarioOut; g.prezzoFinale = prezzoFinale;
+        g.status = 'OUT'; g.pagamento = pag.mod; g.dataOut = dataUscita;
+        g.orarioOut = step1.orarioOut; g.prezzoFinale = pag.prezzoFinale;
         renderGiornalieri();
-    } catch (e) { alert("Errore di connessione al Cloud durante il salvataggio."); }
+    } catch (e) { alert("Errore salvataggio."); }
+}
+
+function _mostraModalCheckout(g, nowTime, dataUscita) {
+    return new Promise(resolve => {
+        const prezzoCalcolato = calcPrezzoGiornaliero(g.orarioIn, g.dataIn, nowTime, dataUscita);
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+        overlay.innerHTML = `
+            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:340px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+                <div style="font:700 15px var(--f);margin-bottom:4px">🅿️ Checkout</div>
+                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:16px"><strong>${esc(g.vettura)}</strong> ${esc(g.targa)} — entrato ${g.orarioIn}</div>
+                <div style="display:flex;gap:10px;margin-bottom:12px">
+                    <div class="ff" style="flex:1"><label style="font:600 11px var(--f);color:var(--tx2);display:block;margin-bottom:4px">Orario uscita</label>
+                        <input id="_coOra" type="time" value="${nowTime}" style="width:100%;background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:7px 10px;border-radius:var(--r2);font:500 13px var(--mono);outline:0"></div>
+                    <div class="ff" style="flex:1"><label style="font:600 11px var(--f);color:var(--tx2);display:block;margin-bottom:4px">Importo €</label>
+                        <input id="_coPrezzo" type="number" step="1" value="${prezzoCalcolato}" style="width:100%;background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:7px 10px;border-radius:var(--r2);font:600 14px var(--mono);outline:0"></div>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button id="_coAnn" class="btn" style="flex:1;color:var(--tx3)">Annulla</button>
+                    <button id="_coOk" class="btn btn-primary" style="flex:2">Avanti →</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        // Ricalcola prezzo live se cambia orario
+        overlay.querySelector('#_coOra').addEventListener('change', e => {
+            const p = calcPrezzoGiornaliero(g.orarioIn, g.dataIn, e.target.value, dataUscita);
+            overlay.querySelector('#_coPrezzo').value = p;
+        });
+
+        overlay.querySelector('#_coAnn').addEventListener('click', () => { overlay.remove(); resolve(null); });
+        overlay.querySelector('#_coOk').addEventListener('click', () => {
+            const orarioOut = overlay.querySelector('#_coOra').value;
+            const prezzo = parseFloat(overlay.querySelector('#_coPrezzo').value) || 0;
+            overlay.remove();
+            resolve({ orarioOut, prezzo });
+        });
+    });
 }
 
 async function delGiornaliero(id) {
