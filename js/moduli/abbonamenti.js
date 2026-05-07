@@ -107,7 +107,7 @@ export function renderAbb() {
         }
     }
 
-    if(!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">Nessun risultato</td></tr>'; return; }
+    if(!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">Nessun risultato</td></tr>'; return; }
 
     rows.sort((a,b) => { const da = pDate(a['SCADENZA ABBONAMENTO']), db2 = pDate(b['SCADENZA ABBONAMENTO']); return (da||0) - (db2||0); });
 
@@ -148,7 +148,6 @@ export function renderAbb() {
             <td style="font:500 11px var(--mono)">${esc(targa)}</td>
             <td><span class="badge ${bc}">${bl}</span></td>
             <td style="font-weight:600">€${imp}</td>
-            <td>${pagB}</td>
             <td style="white-space:nowrap">
                 <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
                 <button class="act-btn renew-abb" data-id="${id}" title="Rinnova">↻</button>
