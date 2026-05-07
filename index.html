@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260506v1';
+    var APP_VERSION = '20260506v2';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -213,7 +213,8 @@
 <button class="qbtn">Notte</button>
 <input class="search-box" id="abbSrch" placeholder="Cerca nome, targa, veicolo..." style="margin-left:auto">
 </div>
-<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nome</th><th>Veicolo</th><th>Targa</th><th>Cell.</th><th>Durata</th><th>Inizio</th><th>Scadenza</th><th>€</th><th>Notte</th><th>Pag.</th><th>Mod.</th><th>Note</th><th>Azioni</th></tr></thead><tbody id="abbTb"></tbody></table></div>
+<div id="abbScadAlert" style="display:none;padding:10px 14px;background:rgba(200,168,78,.08);border:1px solid rgba(200,168,78,.3);border-radius:var(--r2);margin-bottom:12px;font:400 12px var(--f)"></div>
+<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nome</th><th>Targa</th><th>Scadenza</th><th>€</th><th>Pagamento</th><th>Azioni</th></tr></thead><tbody id="abbTb"></tbody></table></div>
 </div>
 </div>
 

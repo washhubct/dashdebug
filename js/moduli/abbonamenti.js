@@ -5,6 +5,7 @@ import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { showThankYouToast } from './clienti.js';
+import { richiediPagamento } from './cassa-automatica.js';
 
 let _abbonamentiInitialized = false;
 
@@ -47,6 +48,7 @@ export function initAbbonamenti() {
             const id = btn.dataset.id;
             if(btn.classList.contains('edit-abb')) editAbb(id);
             else if(btn.classList.contains('renew-abb')) renewAbb(id);
+            else if(btn.classList.contains('pay-abb')) pagaAbb(id);
             else if(btn.classList.contains('del-abb')) deleteAbb(id);
         });
     }
@@ -64,83 +66,93 @@ export function renderAbb() {
     const now = new Date();
     const srch = (document.getElementById('abbSrch')?.value || '').toLowerCase();
     let rows = [...state.localAbb];
-    
+
     if(state.abbFilter === 'pagato') rows = rows.filter(r => r.PAGAMENTO === 'SI');
     else if(state.abbFilter === 'nonpagato') rows = rows.filter(r => r.PAGAMENTO !== 'SI');
     else if(state.abbFilter === 'inscad') rows = rows.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) <= 7 && dBetween(now, s) >= -7; });
     else if(state.abbFilter === 'notte') rows = rows.filter(r => r.NOTTE === 'SI');
-    
+
     if(srch) {
-        rows = rows.filter(r => 
+        rows = rows.filter(r =>
             (r['NOME E COGNOME'] || '').toLowerCase().includes(srch) ||
             (r.TARGA || '').toLowerCase().includes(srch) ||
             (r['MODELLO VETTURA'] || '').toLowerCase().includes(srch)
         );
     }
-    
-    const scad = state.localAbb.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) <= 7 && dBetween(now, s) >= -7; });
+
+    const scaduti = state.localAbb.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) < 0; });
+    const inScad  = state.localAbb.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) >= 0 && dBetween(now, s) <= 7; });
+
     const cntEl = document.getElementById('abbCnt');
     if(cntEl) cntEl.textContent = state.localAbb.length + ' totali';
-    
+
     const navBadge = document.getElementById('navScadBadge');
+    const alertCount = scaduti.length + inScad.length;
     if(navBadge) {
-        if(scad.length > 0) { navBadge.textContent = scad.length; navBadge.style.display = ''; } 
+        if(alertCount > 0) { navBadge.textContent = alertCount; navBadge.style.display = ''; }
         else { navBadge.style.display = 'none'; }
     }
 
-    if(!rows.length) { tb.innerHTML = '<tr><td colspan="13" class="empty">Nessun risultato</td></tr>'; return; }
-    
+    // Scaduti alert bar
+    const alertEl = document.getElementById('abbScadAlert');
+    if(alertEl) {
+        if(scaduti.length || inScad.length) {
+            const parts = [];
+            if(scaduti.length) parts.push(`<span style="color:var(--red);font-weight:700">${scaduti.length} scaduti</span>`);
+            if(inScad.length) parts.push(`<span style="color:var(--gold);font-weight:700">${inScad.length} in scadenza</span>`);
+            alertEl.style.display = '';
+            alertEl.innerHTML = `<span style="font:600 12px var(--f)">⚠️ ${parts.join(' · ')}</span>`;
+        } else {
+            alertEl.style.display = 'none';
+        }
+    }
+
+    if(!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty">Nessun risultato</td></tr>'; return; }
+
     rows.sort((a,b) => { const da = pDate(a['SCADENZA ABBONAMENTO']), db2 = pDate(b['SCADENZA ABBONAMENTO']); return (da||0) - (db2||0); });
-    
+
     let html = '';
     rows.forEach(r => {
         const id = r._id;
         const nome = r['NOME E COGNOME'] || '-';
-        const mod = r['MODELLO VETTURA'] || '-';
+        const mod = r['MODELLO VETTURA'] || '';
         const targa = r.TARGA || '-';
-        const cell = r['NUMERO CELL.'] || '-';
-        const dur = r['DURATA ABB.'] || '-';
-        const ini = r['INIZIO ABBONAMENTO'] || '-';
+        const cell = r['NUMERO CELL.'] || '';
         const sca = r['SCADENZA ABBONAMENTO'] || '-';
         const imp = pNum(r.IMPORTO);
-        const notte = r.NOTTE || '-';
         const pag = r.PAGAMENTO || '';
-        const modal = r["MODALITA'"] || '-';
+        const modal = r["MODALITA'"] || '';
         const note = r.NOTE || '';
-        
+        const notte = r.NOTTE === 'SI';
+
         const sd = pDate(sca);
         const days = sd ? dBetween(now, sd) : 999;
-        
+
         let bc = 'g';
-        let bl = 'OK';
-        if(days < -7) { bc = 'r'; bl = 'Scaduto'; } 
-        else if(days < 0) { bc = 'r'; bl = Math.abs(days) + 'gg fa'; } 
-        else if(days <= 7) { bc = 'a'; bl = days + 'gg'; }
-        
-        let scadenzaTesto = sca;
-        if(days <= 7) { scadenzaTesto += ' (' + bl + ')'; }
-        
-        let pagB = '<span class="badge r">NO</span>';
-        if (pag === 'SI') pagB = '<span class="badge g">SI</span>';
-        else if (pag === '') pagB = '<span class="badge a" title="Dato mancante">⚠️</span>';
-        
-        const noteDisp = note ? `<span title="${esc(note)}" style="cursor:help">📝</span>` : '';
-        
+        let bl = sca;
+        if(days < 0) { bc = 'r'; bl = sca + ' (' + Math.abs(days) + 'gg fa)'; }
+        else if(days <= 7) { bc = 'a'; bl = sca + ' (' + days + 'gg)'; }
+
+        let pagB = '';
+        if(pag === 'SI') pagB = `<span class="badge g">SI</span>${modal ? `<br><span style="font-size:10px;color:var(--tx3)">${esc(modal)}</span>` : ''}`;
+        else pagB = `<span class="badge r">NO</span>`;
+
+        const noteDisp = note ? `<span title="${esc(note)}" style="cursor:help;margin-left:4px">📝</span>` : '';
+        const notteDisp = notte ? `<span title="Notte" style="font-size:10px;color:var(--tx3)"> 🌙</span>` : '';
+
         html += `<tr>
-            <td><strong>${esc(nome)}</strong></td>
-            <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis" title="${esc(mod)}">${esc(mod)}</td>
-            <td style="font:400 10px var(--mono)">${esc(targa)}</td>
-            <td style="font-size:11px">${esc(cell)}</td>
-            <td style="font-size:11px">${esc(dur)}</td>
-            <td style="font:400 10px var(--mono)">${ini}</td>
-            <td><span class="badge ${bc}">${scadenzaTesto}</span></td>
+            <td>
+                <strong>${esc(nome)}</strong>${notteDisp}${noteDisp}
+                ${mod ? `<br><span style="font:400 10px var(--f);color:var(--tx3)">${esc(mod)}${cell ? ' · ' + esc(cell) : ''}</span>` : ''}
+            </td>
+            <td style="font:500 11px var(--mono)">${esc(targa)}</td>
+            <td><span class="badge ${bc}">${bl}</span></td>
             <td style="font-weight:600">€${imp}</td>
-            <td>${notte}</td><td>${pagB}</td>
-            <td style="font-size:11px">${esc(modal)}</td>
-            <td>${noteDisp}</td>
+            <td>${pagB}</td>
             <td style="white-space:nowrap">
-                <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button> 
+                <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
                 <button class="act-btn renew-abb" data-id="${id}" title="Rinnova">↻</button>
+                ${pag !== 'SI' ? `<button class="act-btn pay-abb" data-id="${id}" title="Registra pagamento" style="color:var(--grn)">💰</button>` : ''}
                 <button class="act-btn del del-abb" data-id="${id}" title="Elimina">✕</button>
             </td>
         </tr>`;
@@ -291,38 +303,38 @@ function editAbb(id) {
 
 async function renewAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
-    const dur = r['DURATA ABB.'] || '1 MESE'; 
+    const dur = r['DURATA ABB.'] || '1 MESE';
     const imp = pNum(r.IMPORTO);
     const old = pDate(r['SCADENZA ABBONAMENTO']); if(!old) return;
-    
+
     const ns = new Date(old);
     if(dur.includes('ANNO')) ns.setFullYear(ns.getFullYear() + 1);
     else if(dur.includes('8')) ns.setMonth(ns.getMonth() + 8);
     else if(dur.includes('6')) ns.setMonth(ns.getMonth() + 6);
     else if(dur.includes('3')) ns.setMonth(ns.getMonth() + 3);
     else ns.setMonth(ns.getMonth() + 1);
-    
-    if(!confirm(`Rinnovare ${r['NOME E COGNOME']}?\n\nPeriodo: ${d2s(fmtDI(old))} → ${d2s(fmtDI(ns))}\nImporto: €${imp}\nDurata: ${dur}`)) return;
-    
-    // Chiedi se ha già pagato
-    const pagato = confirm(`${r['NOME E COGNOME']} ha già PAGATO il rinnovo di €${imp}?`);
-    
+
+    const scelta = await _mostraModalRinnovo(r, old, ns);
+    if(!scelta) return;
+
     let modalita = '';
     let dataPag = '';
-    if (pagato) {
-        modalita = prompt('Modalità pagamento (CONTANTI, POS, BONIFICO):', 'CONTANTI');
-        if (modalita === null) return;
-        modalita = modalita.trim().toUpperCase();
-        if (!['CONTANTI', 'POS', 'BONIFICO'].includes(modalita)) modalita = 'CONTANTI';
+    let prezzoFinale = imp;
+
+    if(scelta.pagare) {
+        const pag = await richiediPagamento(imp, r['NOME E COGNOME'] + ' — ' + (r.TARGA || ''), id, { addBonifico: true });
+        if(!pag) return;
+        modalita = pag.mod;
+        prezzoFinale = pag.prezzoFinale;
         dataPag = new Date().toLocaleDateString('it-IT');
     }
-    
+
     r['INIZIO ABBONAMENTO'] = d2s(fmtDI(old));
     r['SCADENZA ABBONAMENTO'] = d2s(fmtDI(ns));
-    r.PAGAMENTO = pagato ? 'SI' : '';
+    r.PAGAMENTO = scelta.pagare ? 'SI' : '';
     r["MODALITA'"] = modalita;
     r['DATA PAGAMENTO'] = dataPag;
-    
+
     try {
         await setDoc(fsDoc(db, "abbonamenti", id), {
             'INIZIO ABBONAMENTO': r['INIZIO ABBONAMENTO'],
@@ -332,11 +344,9 @@ async function renewAbb(id) {
             'DATA PAGAMENTO': r['DATA PAGAMENTO']
         }, { merge: true });
     } catch(e) { console.error("Errore rinnovo Firebase:", e); }
-    
-    // Se pagato, scrivi in Prima Nota
-    if (pagato && imp > 0) {
-        // Ringraziamento WhatsApp al rinnovo pagato
-        showThankYouToast(r['NOME E COGNOME'] || '', imp);
+
+    if(scelta.pagare && prezzoFinale > 0) {
+        showThankYouToast(r['NOME E COGNOME'] || '', prezzoFinale);
         try {
             const nome = r['NOME E COGNOME'] || '';
             const targa = r.TARGA || '';
@@ -345,16 +355,93 @@ async function renewAbb(id) {
                 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
                 'PRIMANOTA CLIENTI/FORNITORI': 'RINNOVO ABB. ' + nome + ' (' + targa + ')',
                 Descrizione: 'RINNOVO ABB. ' + nome + ' (' + targa + ') - ' + modalita,
-                ENTRATA: imp, Entrata: imp,
+                ENTRATA: prezzoFinale, Entrata: prezzoFinale,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now()
             });
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
-    
+
     syncAbbToSheet(r, true);
     renderAbb();
     renderCassa();
+}
+
+async function pagaAbb(id) {
+    const r = state.localAbb.find(x => x._id === id); if(!r) return;
+    const imp = pNum(r.IMPORTO);
+    const pag = await richiediPagamento(imp, r['NOME E COGNOME'] + ' — ' + (r.TARGA || ''), id, { addBonifico: true });
+    if(!pag) return;
+
+    const dataPag = new Date().toLocaleDateString('it-IT');
+    r.PAGAMENTO = 'SI';
+    r["MODALITA'"] = pag.mod;
+    r['DATA PAGAMENTO'] = dataPag;
+
+    try {
+        await setDoc(fsDoc(db, "abbonamenti", id), {
+            'PAGAMENTO': 'SI',
+            "MODALITA'": pag.mod,
+            'DATA PAGAMENTO': dataPag
+        }, { merge: true });
+    } catch(e) { console.error("Errore pagamento abbonamento:", e); return; }
+
+    showThankYouToast(r['NOME E COGNOME'] || '', pag.prezzoFinale);
+    try {
+        const nome = r['NOME E COGNOME'] || '';
+        const targa = r.TARGA || '';
+        await fsAddDoc(fsCollection(db, "primaNota"), {
+            DATA: dataPag, dataISO: fmtDI(new Date()),
+            'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
+            'PRIMANOTA CLIENTI/FORNITORI': 'ABBONAMENTO ' + nome + ' (' + targa + ')',
+            Descrizione: 'ABBONAMENTO ' + nome + ' (' + targa + ') - ' + pag.mod,
+            ENTRATA: pag.prezzoFinale, Entrata: pag.prezzoFinale,
+            USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
+            "MODALITA'": pag.mod, timestamp: Date.now()
+        });
+    } catch(e) { console.warn("Errore Prima Nota:", e); }
+
+    syncAbbToSheet(r, true);
+    renderAbb();
+    renderCassa();
+}
+
+function _mostraModalRinnovo(r, oldDate, newDate) {
+    return new Promise(resolve => {
+        const nome = r['NOME E COGNOME'] || '-';
+        const targa = r.TARGA || '-';
+        const dur = r['DURATA ABB.'] || '1 MESE';
+        const imp = pNum(r.IMPORTO);
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+        overlay.innerHTML = `
+            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+                <div style="font:700 15px var(--f);margin-bottom:4px">↻ Rinnovo Abbonamento</div>
+                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:14px"><strong>${esc(nome)}</strong> — ${esc(targa)}</div>
+                <div style="background:var(--bg3);border-radius:var(--r2);padding:12px;margin-bottom:16px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font:400 12px var(--f)">
+                        <span style="color:var(--tx3)">Periodo</span>
+                        <span style="font:500 11px var(--mono)">${d2s(fmtDI(oldDate))} → ${d2s(fmtDI(newDate))}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font:400 12px var(--f)">
+                        <span style="color:var(--tx3)">Durata</span><span>${esc(dur)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:400 12px var(--f)">
+                        <span style="color:var(--tx3)">Importo</span>
+                        <span style="font:700 15px var(--mono)">€${imp}</span>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    <button id="_rnPaga" class="btn btn-primary">💰 Incassa €${imp}</button>
+                    <button id="_rnNoPaga" class="btn" style="color:var(--tx2)">↻ Rinnova senza incassare</button>
+                    <button id="_rnAnn" class="btn" style="color:var(--tx3);font-size:11px">Annulla</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#_rnPaga').addEventListener('click', () => { overlay.remove(); resolve({ pagare: true }); });
+        overlay.querySelector('#_rnNoPaga').addEventListener('click', () => { overlay.remove(); resolve({ pagare: false }); });
+        overlay.querySelector('#_rnAnn').addEventListener('click', () => { overlay.remove(); resolve(null); });
+    });
 }
 
 async function deleteAbb(id) {
