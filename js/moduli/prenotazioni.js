@@ -4,7 +4,7 @@ import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
-import { avviaPagamento, healthBridge } from './cassa-automatica.js';
+import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automatica.js';
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
@@ -438,12 +438,16 @@ export function renderTap() {
     } else {
         inLav.forEach(t => {
             html += `<tr>
-                <td>${t.dataIn}</td>
+                <td style="font:400 11px var(--mono)">${t.dataIn}</td>
                 <td><strong>${esc(t.cliente)}</strong></td>
                 <td>${esc(t.modello)}</td>
-                <td>${esc(t.targa)}</td>
+                <td style="font:500 11px var(--mono)">${esc(t.targa)}</td>
                 <td style="font-weight:600">€${pNum(t.prezzo)}</td>
-                <td><span class="badge g status-tap" style="cursor:pointer" data-id="${t._id}">IN (In lav.)</span></td>
+                <td>
+                    <button class="btn pay-tap" data-id="${t._id}" data-mod="CONTANTI">💵</button>
+                    <button class="btn pay-tap" data-id="${t._id}" data-mod="POS">💳</button>
+                    <button class="btn pay-tap" data-id="${t._id}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>
+                </td>
                 <td><button class="act-btn del del-tap" data-id="${t._id}">✕</button></td></tr>`;
         });
     }
@@ -530,61 +534,58 @@ async function addTap() {
 }
 
 async function handleTapActions(e) {
-    const id = e.target.dataset.id || e.target.closest('button')?.dataset.id;
+    const btn = e.target.closest('button');
+    const id = btn?.dataset.id;
     if (!id) return;
-    if (e.target.classList.contains('status-tap')) toggleTap(id);
-    else if (e.target.closest('.del-tap')) delTap(id);
+    if (btn.classList.contains('pay-tap')) {
+        btn.disabled = true;
+        try { await markPaidTap(id, btn.dataset.mod); } finally { btn.disabled = false; }
+    } else if (btn.classList.contains('del-tap')) {
+        delTap(id);
+    }
 }
 
-async function toggleTap(id) {
+async function markPaidTap(id, modDefault) {
     const t = state.tapDB.find(x => x._id === id);
     if (!t) return;
+
+    let modUp = modDefault;
+    let extraMeta = {};
+    let prezzoFinaleStr = t.prezzo;
+
+    if (modUp === 'CONTANTI') {
+        const pag = await richiediPagamento(parseFloat(t.prezzo) || 0, t.cliente + ' — ' + t.modello, 'TAP-' + id);
+        if (!pag) return;
+        modUp = pag.mod;
+        prezzoFinaleStr = String(pag.prezzoFinale);
+        extraMeta = pag.meta || {};
+    } else if (modUp === 'POS') {
+        modUp = 'POS';
+    }
+
+    const dataOut = new Date().toLocaleDateString('it-IT');
+    const dataISO = fmtDI(new Date());
+    const upd = { status: 'OUT', pagamento: modUp, dataOut, ...extraMeta };
+    if (prezzoFinaleStr !== t.prezzo) upd.prezzo = prezzoFinaleStr;
+
     try {
-        if (t.status === 'IN') {
-            const mod = prompt("Metodo pagamento (CONTANTI, POS, SOSPESO)?", "CONTANTI");
-            if (!mod) return;
-            const modUp = mod.toUpperCase();
+        await fsUpdateDoc(fsDoc(db, "tappezzeria", id), upd);
+        Object.assign(t, upd);
 
-            let extraMeta = {};
-            let prezzoFinaleStr = t.prezzo;
-
-            if (modUp === 'CONTANTI') {
-                const prezzoEur = parseFloat(t.prezzo) || 0;
-                const r = await gestisciCassaContanti(prezzoEur, 'TAP-' + id);
-                if (r.abort) return;
-                if (r.ok) {
-                    extraMeta = r.meta;
-                    if (r.effettivo) prezzoFinaleStr = String(r.effettivo);
-                }
-            }
-
-            const dataOut = new Date().toLocaleDateString('it-IT');
-            const dataISO = fmtDI(new Date());
-            const upd = { status: 'OUT', pagamento: modUp, dataOut: dataOut, ...extraMeta };
-            if (prezzoFinaleStr !== t.prezzo) upd.prezzo = prezzoFinaleStr;
-            await fsUpdateDoc(fsDoc(db, "tappezzeria", id), upd);
-            Object.assign(t, upd);
-
-            // Scrivi in Prima Nota se non è sospeso
-            if (modUp !== 'SOSPESO') {
-                if (modUp !== 'FATTURATO') showThankYouToast(t.cliente, parseFloat(prezzoFinaleStr) || 0);
-                try {
-                    const imp = parseFloat(prezzoFinaleStr) || 0;
-                    await fsAddDoc(fsCollection(db, "primaNota"), {
-                        DATA: dataOut, dataISO: dataISO,
-                        'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO',
-                        'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
-                        Descrizione: 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
-                        ENTRATA: imp, Entrata: imp,
-                        USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
-                        "MODALITA'": modUp, timestamp: Date.now()
-                    });
-                } catch(e) { console.warn("Errore Prima Nota tappezzeria:", e); }
-            }
-        } else {
-            await fsUpdateDoc(fsDoc(db, "tappezzeria", id), { status: 'IN', pagamento: '', dataOut: '' });
-            t.status = 'IN'; t.pagamento = ''; t.dataOut = '';
+        if (modUp !== 'SOSPESO') {
+            showThankYouToast(t.cliente, parseFloat(prezzoFinaleStr) || 0);
+            const imp = parseFloat(prezzoFinaleStr) || 0;
+            await fsAddDoc(fsCollection(db, "primaNota"), {
+                DATA: dataOut, dataISO,
+                'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO',
+                'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
+                Descrizione: 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
+                ENTRATA: imp, Entrata: imp,
+                USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
+                "MODALITA'": modUp, timestamp: Date.now()
+            }).catch(e => console.warn("Errore Prima Nota tappezzeria:", e));
         }
+
         renderTap();
         renderCassa();
     } catch(e) { alert("Errore Cloud"); }
