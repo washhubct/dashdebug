@@ -286,30 +286,24 @@ Creare utenti Firebase Auth per nuovi operatori con custom claim `sedi: ["paesi-
 
 ---
 
-## Domande aperte per Guido
+## Decisioni architetturali (maggio 2026)
 
-1. **Partita IVA:** Lungomare e Paesi Etnei usano la stessa P.IVA o due entità fiscali separate? Questo impatta:
-   - Come viene strutturata la Prima Nota (unico registro vs separato)
-   - Se Michela ha bisogno di report separati per commercialista
-   - Se serve numerazione fatture separata per sede
+1. **Partita IVA:** unica per entrambe le sedi. Prima Nota è un registro unico, filtrato per sede nella vista operativa ma aggregabile per Michela. Nessuna numerazione fatture separata.
 
-2. **Sebastiano:** avrà accesso a Paesi Etnei? O ci sarà un operatore dedicato lì?
+2. **Accesso operatori:** sistema a flag. Ogni utente Firestore Auth ha `sedi: ["lungomare"]` o `sedi: ["paesi-etnei"]` o `sedi: ["lungomare","paesi-etnei"]`. Il selettore sede appare solo se l'utente ha accesso a più sedi. Sebastiano gestisce Lungomare, operatori dedicati a Paesi Etnei.
 
-3. **Timing:** quando si prevede l'apertura di Paesi Etnei? La migrazione dati va fatta prima dell'apertura per non avere record senza `sedeId`.
+3. **Timing apertura:** 1–2 settimane da maggio 2026. Il backfill `sedeId` va eseguito entro fine maggio 2026 prima dell'apertura.
 
-4. **Clienti cross-sede:** un cliente Lungomare che usa anche Paesi Etnei — deve apparire nello storico di entrambe? (risposta probabile: sì, rilevante per VIP pricing)
+4. **Clienti cross-sede:** `clienti` è collection condivisa senza `sedeId`. Un cliente può andare in entrambe le sedi. Lo storico prenotazioni è filtrato per sede nell'operativo, ma il CRM (anagrafica, VIP tier, storico completo) è unico.
 
 ---
 
-## Timeline suggerita
+## Timeline aggiornata
 
-| Fase | Durata stimata | Prerequisito |
-|------|---------------|--------------|
-| Risposta alle domande aperte | — | Decisione Guido |
-| Backfill `sedeId` su record Lungomare | 1h | Export backup |
-| Update query JS + test | 1 sessione | Backfill completato |
-| Update Firestore rules + indici | 1h | Query update |
-| UI selettore sede | 1 sessione | Rules update |
-| Onboarding Paesi Etnei | 30min | Sede operativa |
-
-**Prima di tutto:** rispondere alle domande fiscali (P.IVA unica o doppia).
+| Fase | Durata stimata | Scadenza target |
+|------|---------------|-----------------|
+| Backfill `sedeId` su record Lungomare | 1h | Entro fine maggio 2026 |
+| Update query JS + test | 1 sessione | Prima apertura Paesi Etnei |
+| Update Firestore rules + indici | 1h | Prima apertura Paesi Etnei |
+| UI selettore sede | 1 sessione | Prima apertura Paesi Etnei |
+| Creazione utenti operatori Paesi Etnei | 30min | Giorno apertura |
