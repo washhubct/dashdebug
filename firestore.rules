@@ -5,26 +5,30 @@ rules_version = '2';
 // Project: dashboard-washhub
 //
 // Modello di autorizzazione:
-//   • admin    → amministrazione@avrlogisticarl.com (vede tutto)
-//   • operator → qualsiasi altro utente autenticato
-//                (R/W operativo, niente analitica/storico primaNota, niente log)
-//   • pubblico → non autenticato (solo form prenotazione su prenota.html)
+//   • admin    → email in lista → accesso completo a tutte le sedi
+//   • operator → utente autenticato → accesso solo alla propria sede
+//                (per ora: lungomare; espandibile via /utenti/{uid}.sedi)
+//   • pubblico → non autenticato → solo create su prenotazioni (form prenota.html)
+//
+// Multi-sede: ogni documento operativo deve avere il campo sedeId.
+//   Operatori possono leggere e scrivere solo documenti della propria sede.
+//   Admin ignorano il filtro sede.
 // ═══════════════════════════════════════════════════════════════════
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helper functions ────────────────────────────────────────
+    // ── Helper: autenticazione ───────────────────────────────────
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isAdmin() {
       return isSignedIn()
-             && request.auth.token.email != null
-             && (
-               request.auth.token.email.lower() == 'amministrazione@avrlogisticarl.com'
-               || request.auth.token.email.lower() == 'michela@avrlogisticarl.com'
+          && request.auth.token.email != null
+          && (
+              request.auth.token.email.lower() == 'amministrazione@avrlogisticarl.com'
+              || request.auth.token.email.lower() == 'michela@avrlogisticarl.com'
              );
     }
 
@@ -32,114 +36,161 @@ service cloud.firestore {
       return isSignedIn() && !isAdmin();
     }
 
-    // Timestamp (ms epoch) dell'inizio della giornata corrente (00:00:00 UTC).
-    // Usato per limitare la lettura di primaNota all'operatore al giorno attuale.
-    // NOTA: è UTC-based, per fuso Italia c'è scarto di ~1-2h ai limiti di mezzanotte.
+    // ── Helper: controllo sede ────────────────────────────────────
+    // Admin accede a tutte le sedi.
+    // Operator: solo lungomare per ora.
+    // FASE 2: sostituire con:
+    //   get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data.sedi.hasAny([sedeId])
+    function hasSedeAccess(sedeId) {
+      return isAdmin()
+          || (isOperator() && sedeId == 'lungomare');
+    }
+
+    // Sede valida = uno dei valori noti. Blocca typo e injection.
+    function sedeValida(sedeId) {
+      return sedeId == 'lungomare' || sedeId == 'paesi-etnei';
+    }
+
+    // Write valido: sedeId presente, valido, e utente ha accesso a quella sede.
+    function writeOk() {
+      return request.resource.data.sedeId is string
+          && sedeValida(request.resource.data.sedeId)
+          && hasSedeAccess(request.resource.data.sedeId);
+    }
+
+    // ── Helper: Prima Nota — restrizione lettura operatore ────────
     function startOfDayMs() {
       return request.time.toMillis()
-             - (request.time.hours() * 3600000)
-             - (request.time.minutes() * 60000)
-             - (request.time.seconds() * 1000);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // COLLEZIONI OPERATIVE — operator e admin hanno R/W completo
-    // ═══════════════════════════════════════════════════════════
-    match /abbonamenti/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /tappezzeria/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /clienti/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /sospesi/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /giornalieri/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /uscite/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /presenzeDipendenti/{doc} {
-      allow read, write: if isSignedIn();
-    }
-
-    match /giornateChiuse/{doc} {
-      allow read, write: if isSignedIn();
+           - (request.time.hours()   * 3600000)
+           - (request.time.minutes() * 60000)
+           - (request.time.seconds() * 1000);
     }
 
     // ═══════════════════════════════════════════════════════════
     // PRENOTAZIONI — accesso pubblico per form prenota.html
-    // TODO: migliorare privacy usando query filtrate e/o collezione
-    // aggregata "slotOccupati" (oggi il form pubblico legge tutto).
     // ═══════════════════════════════════════════════════════════
     match /prenotazioni/{doc} {
-      allow read: if true;
-      // Chiunque può creare una prenotazione dal form pubblico.
-      // Update/delete: solo utenti autenticati (operator + admin).
-      allow create: if true;
-      allow update, delete: if isSignedIn();
-    }
-
-    // Giorni di chiusura straordinari — letti dal form pubblico
-    match /chiusure/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // PRIMA NOTA — admin tutto, operator: crea sempre, legge solo oggi
-    // ═══════════════════════════════════════════════════════════
-    match /primaNota/{doc} {
-      // Operator crea nuove righe (incassi) sempre
-      allow create: if isSignedIn();
-
-      // Operator legge solo le righe del giorno corrente.
-      // Admin legge tutto.
-      // Richiede che il documento abbia il campo numerico "timestamp" in ms.
+      // Lettura: admin tutto, operator solo propria sede, pubblico per slot calendario
       allow read: if isAdmin()
-                     || (
-                       isOperator()
-                       && resource.data.timestamp is int
-                       && resource.data.timestamp >= startOfDayMs()
-                     );
+               || (isOperator() && resource.data.sedeId == 'lungomare')
+               || !isSignedIn();
 
-      // Update/delete solo admin (immutabilità della cassa dopo il giorno)
-      allow update, delete: if isAdmin();
+      // Create: gestionale (autenticato + writeOk) o form pubblico (sedeId lungomare)
+      allow create: if (isSignedIn() && writeOk())
+                 || (!isSignedIn() && request.resource.data.sedeId == 'lungomare');
+
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // CONFIG — parametri operativi (es. cassa automatica VNE)
-    // Tutti gli auth leggono (il client web ha bisogno di bridgeUrl/Token).
-    // Solo admin può scrivere: bridgeToken è sensibile.
+    // COLLEZIONI OPERATIVE — read/write filtrato per sede
     // ═══════════════════════════════════════════════════════════
-    match /config/{doc} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+    match /tappezzeria/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // LOG CANCELLAZIONI — admin-only in lettura
-    // L'operator può CREARE log (es. quando cancella una riga) ma
-    // non deve sapere che esistono: read/update/delete bloccati.
-    // ═══════════════════════════════════════════════════════════
+    match /abbonamenti/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
+    match /giornalieri/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
+    match /uscite/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
+    match /sospesi/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
+    match /presenzeDipendenti/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
     match /cancellazioni/{doc} {
-      allow create: if isSignedIn();
+      allow create:         if writeOk();
       allow read, update, delete: if isAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════
-    // DEFAULT DENY — qualsiasi altra collezione resta chiusa
-    // Aggiungere regole esplicite per nuove collezioni.
+    // CLIENTI — condivisi tra sedi, nessun filtro sedeId
+    // ═══════════════════════════════════════════════════════════
+    match /clienti/{doc} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIMA NOTA — admin tutto; operator crea sempre, legge solo oggi
+    // ═══════════════════════════════════════════════════════════
+    match /primaNota/{doc} {
+      allow create: if isSignedIn() && writeOk();
+
+      allow read: if isAdmin()
+               || (isOperator()
+                   && hasSedeAccess(resource.data.sedeId)
+                   && resource.data.timestamp is int
+                   && resource.data.timestamp >= startOfDayMs());
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CONFIG — parametri operativi (cassa automatica VNE)
+    // ═══════════════════════════════════════════════════════════
+    match /config/{doc} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SERVIZI ACCESSORI — admin gestisce, operator legge
+    // ═══════════════════════════════════════════════════════════
+    match /serviziAccessori/{doc} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CHIUSURE — giorni chiusura straordinari (form pubblico legge)
+    // ═══════════════════════════════════════════════════════════
+    match /chiusure/{doc} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // GIORNATE CHIUSE — config calendario prenotazioni
+    // ═══════════════════════════════════════════════════════════
+    match /giornateChiuse/{doc} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // UTENTI — profili sede per Fase 2 multi-sede
+    // Ogni documento leggibile solo dall'utente stesso e dagli admin.
+    // ═══════════════════════════════════════════════════════════
+    match /utenti/{uid} {
+      allow read:  if isAdmin() || request.auth.uid == uid;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DEFAULT DENY
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {
       allow read, write: if false;

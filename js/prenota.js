@@ -161,10 +161,11 @@ form.addEventListener('submit', async (e) => {
             orario: slot,
             cliente: nome,
             vettura: vettura,
-            prezzo: '', 
+            prezzo: '',
             note: noteText,
             saldo: '',
-            saldato: ''
+            saldato: '',
+            sedeId: 'lungomare'
         });
 
         document.getElementById('bookingScreen').style.display = 'none';
