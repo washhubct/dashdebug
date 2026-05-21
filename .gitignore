@@ -20,3 +20,4 @@ node_modules/
 # Firebase service account (NON committare mai)
 *-service-account*.json
 firebase-adminsdk-*.json
+scripts/backup-*.json
