@@ -64,7 +64,7 @@ function initSelezioneSedeUI() {
 
     // Visibile solo agli admin
     if (state.currentUser?.role !== 'admin') return;
-    wrapper.style.display = '';
+    wrapper.style.display = 'block';
 
     // Aggiorna bottoni in base a sedeAttiva corrente
     function aggiornaBtns() {
