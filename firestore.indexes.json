@@ -1,0 +1,29 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "prenotazioni",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sedeId", "order": "ASCENDING" },
+        { "fieldPath": "dataPren", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "prenotazioni",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sedeId", "order": "ASCENDING" },
+        { "fieldPath": "saldo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "primaNota",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sedeId", "order": "ASCENDING" },
+        { "fieldPath": "dataISO", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
