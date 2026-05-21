@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCj0IlKMARo0IxnqaHoN-rSd0HINuwf6Po",
@@ -25,7 +25,8 @@ export {
     getDocs as fsGetDocs, 
     updateDoc as fsUpdateDoc, 
     deleteDoc as fsDeleteDoc, 
-    doc as fsDoc, 
+    doc as fsDoc,
+    getDoc as fsGetDoc,
     onSnapshot as fsOnSnapshot,
     signInWithEmailAndPassword, 
     signOut, 

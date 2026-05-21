@@ -1,7 +1,7 @@
 import { state, CONFIG } from './state.js';
 import { fmtDI } from './utils.js';
 // LE IMPORTAZIONI ESATTE SONO QUI:
-import { fsGetDocs, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, db } from './firebase-config.js';
+import { auth, fsGetDocs, fsGetDoc, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, db } from './firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
 import { initAuth } from './moduli/auth.js';
@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashDates();
 });
 
-document.addEventListener('authSuccess', () => {
+document.addEventListener('authSuccess', async () => {
     document.getElementById('loginScreen').classList.add('out');
     document.getElementById('app').classList.add('show');
 
@@ -52,26 +52,52 @@ document.addEventListener('authSuccess', () => {
         });
     }
 
+    await caricaSedePermesse();
+
     initCassaAutomatica();
     if (state.currentUser?.role === 'admin') initServiziAggiuntivi();
     initSelezioneSedeUI();
     initFirebaseData();
 });
 
+async function caricaSedePermesse() {
+    if (state.currentUser?.role === 'admin') {
+        state.sedePermesse = ['lungomare', 'paesi-etnei'];
+    } else {
+        try {
+            const uid = auth.currentUser?.uid;
+            const snap = uid ? await fsGetDoc(fsDoc(db, 'utenti', uid)) : null;
+            state.sedePermesse = (snap?.exists() && Array.isArray(snap.data().sedi))
+                ? snap.data().sedi
+                : ['lungomare'];
+        } catch {
+            state.sedePermesse = ['lungomare'];
+        }
+    }
+    // Correggi sedeAttiva se non è tra quelle permesse
+    if (!state.sedePermesse.includes(state.sedeAttiva)) {
+        state.sedeAttiva = state.sedePermesse[0];
+        localStorage.setItem('sedeAttiva', state.sedeAttiva);
+    }
+}
+
 function initSelezioneSedeUI() {
     const wrapper = document.getElementById('sbSede');
     if (!wrapper) return;
 
-    // Visibile solo agli admin
-    if (state.currentUser?.role !== 'admin') return;
+    // Nasconde i bottoni delle sedi non permesse
+    wrapper.querySelectorAll('.sb-sede-btn').forEach(btn => {
+        btn.style.display = state.sedePermesse.includes(btn.dataset.sede) ? '' : 'none';
+    });
+
+    // Mostra il selettore solo se l'utente ha accesso a più di una sede
+    if (state.sedePermesse.length < 2) return;
     wrapper.style.display = 'block';
 
-    // Aggiorna bottoni in base a sedeAttiva corrente
     function aggiornaBtns() {
         wrapper.querySelectorAll('.sb-sede-btn').forEach(btn => {
             btn.classList.toggle('on', btn.dataset.sede === state.sedeAttiva);
         });
-        // Aggiorna data-sede sul body per accent colori CSS
         document.body.dataset.sede = state.sedeAttiva;
     }
     aggiornaBtns();
@@ -84,11 +110,9 @@ function initSelezioneSedeUI() {
         localStorage.setItem('sedeAttiva', state.sedeAttiva);
         aggiornaBtns();
 
-        // Ricarica tutti i dati per la nuova sede
         state._historicalLoaded = false;
         await initFirebaseData();
 
-        // Re-render pagina corrente
         const pageAttiva = document.querySelector('.page.show');
         if (pageAttiva) {
             const id = pageAttiva.id.replace('page-', '');

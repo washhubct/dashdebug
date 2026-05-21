@@ -16,6 +16,7 @@ export const state = {
     sospFilter: 'tutti',
     abbEditId: null,
     sedeAttiva: localStorage.getItem('sedeAttiva') || 'lungomare',
+    sedePermesse: [],
     
     // DB Locali
     prenDB: {},

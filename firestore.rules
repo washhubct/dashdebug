@@ -38,12 +38,15 @@ service cloud.firestore {
 
     // ── Helper: controllo sede ────────────────────────────────────
     // Admin accede a tutte le sedi.
-    // Operator: solo lungomare per ora.
-    // FASE 2: sostituire con:
-    //   get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data.sedi.hasAny([sedeId])
+    // Operator: legge sedi[] da /utenti/{uid}. Fallback a 'lungomare' se doc assente.
     function hasSedeAccess(sedeId) {
       return isAdmin()
-          || (isOperator() && sedeId == 'lungomare');
+          || (isOperator()
+              && !exists(/databases/$(database)/documents/utenti/$(request.auth.uid))
+              && sedeId == 'lungomare')
+          || (isOperator()
+              && exists(/databases/$(database)/documents/utenti/$(request.auth.uid))
+              && get(/databases/$(database)/documents/utenti/$(request.auth.uid)).data.sedi.hasAny([sedeId]));
     }
 
     // Sede valida = uno dei valori noti. Blocca typo e injection.
