@@ -181,19 +181,22 @@ function getCutoffISO(days = 400) {
 }
 
 async function loadPrenotazioniFast(cutoff) {
-    // Due query parallele: recenti (per calendario/cassa) + tutti i SOSPESO/FATTURATO (per pagina Sospesi anche storici)
+    // Query single-field (no indice composito): filtro sedeId client-side.
+    // Quando gli indici compositi sono pronti si può tornare al filtro server-side.
     const sede = state.sedeAttiva;
     const [snapRecenti, snapSosp, snapFatt] = await Promise.all([
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("dataPren", ">=", cutoff))),
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("saldo", "==", "SOSPESO"))),
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("saldo", "==", "FATTURATO"))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("dataPren", ">=", cutoff))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "SOSPESO"))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "FATTURATO"))),
     ]);
     state.prenDB = {};
     const seen = new Set();
     const addDoc = docSnap => {
         if (seen.has(docSnap.id)) return;
+        const d = docSnap.data();
+        if (d.sedeId && d.sedeId !== sede) return; // filtro client-side
         seen.add(docSnap.id);
-        const d = docSnap.data(); d._pid = docSnap.id;
+        d._pid = docSnap.id;
         if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
         state.prenDB[d.dataPren].push(d);
     };
@@ -203,9 +206,14 @@ async function loadPrenotazioniFast(cutoff) {
 }
 
 async function loadPrimaNotaFast(cutoff) {
-    const snapPN = await fsGetDocs(query(fsCollection(db, "primaNota"), where("sedeId", "==", state.sedeAttiva), where("dataISO", ">=", cutoff)));
+    const sede = state.sedeAttiva;
+    const snapPN = await fsGetDocs(query(fsCollection(db, "primaNota"), where("dataISO", ">=", cutoff)));
     const pnRows = [];
-    snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
+    snapPN.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d.sedeId && d.sedeId !== sede) return; // filtro client-side
+        pnRows.push(d);
+    });
     state.rawData = { primaNota: { rows: pnRows } };
     console.log(`Prima Nota (ultimi 13m): ${pnRows.length} record`);
 }
