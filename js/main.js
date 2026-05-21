@@ -142,10 +142,11 @@ function getCutoffISO(days = 400) {
 
 async function loadPrenotazioniFast(cutoff) {
     // Due query parallele: recenti (per calendario/cassa) + tutti i SOSPESO/FATTURATO (per pagina Sospesi anche storici)
+    const sede = state.sedeAttiva;
     const [snapRecenti, snapSosp, snapFatt] = await Promise.all([
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("dataPren", ">=", cutoff))),
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "SOSPESO"))),
-        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("saldo", "==", "FATTURATO"))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("dataPren", ">=", cutoff))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("saldo", "==", "SOSPESO"))),
+        fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("saldo", "==", "FATTURATO"))),
     ]);
     state.prenDB = {};
     const seen = new Set();
@@ -162,7 +163,7 @@ async function loadPrenotazioniFast(cutoff) {
 }
 
 async function loadPrimaNotaFast(cutoff) {
-    const snapPN = await fsGetDocs(query(fsCollection(db, "primaNota"), where("dataISO", ">=", cutoff)));
+    const snapPN = await fsGetDocs(query(fsCollection(db, "primaNota"), where("sedeId", "==", state.sedeAttiva), where("dataISO", ">=", cutoff)));
     const pnRows = [];
     snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
     state.rawData = { primaNota: { rows: pnRows } };
@@ -174,9 +175,10 @@ export async function loadHistoricalData() {
     if (state._historicalLoaded) return;
     state._historicalLoaded = true;
     try {
+        const sede = state.sedeAttiva;
         const [snapPren, snapPN] = await Promise.all([
-            fsGetDocs(fsCollection(db, "prenotazioni")),
-            fsGetDocs(fsCollection(db, "primaNota")),
+            fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede))),
+            fsGetDocs(query(fsCollection(db, "primaNota"), where("sedeId", "==", sede))),
         ]);
         // Merge prenotazioni mancanti
         const seen = new Set();
@@ -212,12 +214,12 @@ async function initFirebaseData() {
         const tasks = [
             loadPrenotazioniFast(cutoff),
 
-            fsGetDocs(fsCollection(db, "tappezzeria")).then(snap => {
+            fsGetDocs(query(fsCollection(db, "tappezzeria"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.tapDB = [];
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.tapDB.push(d); });
             }),
 
-            fsGetDocs(fsCollection(db, "giornalieri")).then(snap => {
+            fsGetDocs(query(fsCollection(db, "giornalieri"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.giornDB = [];
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.giornDB.push(d); });
             }),
@@ -226,19 +228,19 @@ async function initFirebaseData() {
             (async () => {
                 state.logDB = [];
                 try {
-                    const snap = await fsGetDocs(fsCollection(db, "cancellazioni"));
+                    const snap = await fsGetDocs(query(fsCollection(db, "cancellazioni"), where("sedeId", "==", state.sedeAttiva)));
                     snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.logDB.push(d); });
                 } catch (logErr) {
                     console.warn("Log cancellazioni non accessibile (permessi):", logErr.message);
                 }
             })(),
 
-            fsGetDocs(fsCollection(db, "uscite")).then(snap => {
+            fsGetDocs(query(fsCollection(db, "uscite"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.usciteDB = [];
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.usciteDB.push(d); });
             }),
 
-            fsGetDocs(fsCollection(db, "sospesi")).then(snap => {
+            fsGetDocs(query(fsCollection(db, "sospesi"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.localSosp = [];
                 snap.forEach(docSnap => {
                     let d = docSnap.data();
@@ -249,7 +251,7 @@ async function initFirebaseData() {
                 });
             }),
 
-            fsGetDocs(fsCollection(db, "abbonamenti")).then(snap => {
+            fsGetDocs(query(fsCollection(db, "abbonamenti"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.localAbb = [];
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.localAbb.push(d); });
             }),
@@ -261,7 +263,7 @@ async function initFirebaseData() {
 
             (async () => {
                 try {
-                    const snap = await fsGetDocs(fsCollection(db, "presenzeDipendenti"));
+                    const snap = await fsGetDocs(query(fsCollection(db, "presenzeDipendenti"), where("sedeId", "==", state.sedeAttiva)));
                     state.presenzeDB = [];
                     snap.forEach(docSnap => state.presenzeDB.push(docSnap.data()));
                     console.log(`Presenze caricate: ${state.presenzeDB.length} record`);

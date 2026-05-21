@@ -106,6 +106,7 @@ export function buildSospesiArray() {
                 cliente: (e.cliente || 'DA PRENOTAZIONI').toUpperCase(),
                 data: date.split('-').reverse().join('/'),
                 vettura: e.vettura || '',
+                targa: e.targa || '',
                 importo: parseFloat(e.prezzo) || 0,
                 note: e.note || '',
                 dataPagamento: '',
@@ -226,6 +227,7 @@ async function salvaSospesoStorico(sospeso) {
             cliente: sospeso.cliente || '',
             data: sospeso.data || '',
             vettura: sospeso.vettura || '',
+            targa: sospeso.targa || '',
             importo: sospeso.importo || 0,
             note: sospeso.note || '',
             origineSid: originalSid,
@@ -234,7 +236,8 @@ async function salvaSospesoStorico(sospeso) {
             dataPagamento: sospeso._dataPag || '',
             fatturato: !!sospeso._fatturato,
             dataFattura: sospeso._dataFatt || '',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            sedeId: state.sedeAttiva
         };
         const ref = await fsAddDoc(fsCollection(db, 'sospesi'), record);
         // Aggiorna il _sid locale per puntare al nuovo record Firestore
@@ -256,7 +259,8 @@ async function scriviPrimaNota(cliente, totale, mod, meseRif) {
             categoria: 'LAVAGGIO',
             modalita: mod,
             centro: 'Lavaggio',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            sedeId: state.sedeAttiva
         });
     } catch (e) {
         console.error('Errore scrittura Prima Nota:', e);
@@ -652,7 +656,7 @@ function esportaExcelSospesi() {
     XLSX.utils.book_append_sheet(wb, wsRiepilogo, 'Riepilogo');
 
     // Foglio dettaglio tutti i sospesi
-    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Importo (€)', 'Note', 'Stato', 'Mod. Pagamento', 'Data Pagamento']];
+    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Targa', 'Importo (€)', 'Note', 'Stato', 'Mod. Pagamento', 'Data Pagamento']];
     filtrati
         .sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0))
         .forEach(s => {
@@ -661,6 +665,7 @@ function esportaExcelSospesi() {
                 s.cliente || '',
                 s.data || '',
                 s.vettura || '',
+                s.targa || '',
                 s.importo || 0,
                 s.note || '',
                 stato,
@@ -669,7 +674,7 @@ function esportaExcelSospesi() {
             ]);
         });
     const wsDettaglio = XLSX.utils.aoa_to_sheet(dettaglioRows);
-    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 16 }];
+    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsDettaglio, 'Dettaglio');
 
     const daLabel = daVal.split('-').reverse().join('');

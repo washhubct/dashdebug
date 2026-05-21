@@ -8,7 +8,7 @@ export async function logDelete(sezione, dettaglio, motivazione) {
     const operatore = state.currentUser ? state.currentUser.user : 'Staff';
     const dataOra = now.toLocaleDateString('it-IT') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
 
-    const obj = { data: dataOra, timestamp: now.getTime(), operatore: operatore, sezione: sezione, dettaglio: dettaglio, motivazione: motivazione };
+    const obj = { data: dataOra, timestamp: now.getTime(), operatore: operatore, sezione: sezione, dettaglio: dettaglio, motivazione: motivazione, sedeId: state.sedeAttiva };
     try {
         const docRef = await fsAddDoc(fsCollection(db, "cancellazioni"), obj);
         obj._id = docRef.id;

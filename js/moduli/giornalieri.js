@@ -151,10 +151,11 @@ async function addGiornaliero() {
         msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Compila Vettura, Targa e Telefono!'; return; 
     }
 
-    const obj = { 
-        dataIn: fmtDI(new Date()), orarioIn: orarioIn, 
-        vettura, targa, telefono, 
-        status: 'IN', pagamento: '', dataOut: '', orarioOut: '', prezzoFinale: 0 
+    const obj = {
+        dataIn: fmtDI(new Date()), orarioIn: orarioIn,
+        vettura, targa, telefono,
+        status: 'IN', pagamento: '', dataOut: '', orarioOut: '', prezzoFinale: 0,
+        sedeId: state.sedeAttiva
     };
 
     try {

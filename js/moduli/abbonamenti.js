@@ -248,7 +248,8 @@ async function saveAbb() {
         "MODALITA'": modalita,
         'DATA PAGAMENTO': d2s(dataPag),
         'CHIAVI/CODICE': document.getElementById('fChiavi').value,
-        'NOTE': document.getElementById('fNote').value.trim()
+        'NOTE': document.getElementById('fNote').value.trim(),
+        sedeId: state.sedeAttiva
     };
 
     const isUpdate = !!state.abbEditId;
@@ -287,7 +288,8 @@ async function saveAbb() {
                 Descrizione: 'ABBONAMENTO ' + nome + ' (' + targa + ') - ' + modalita,
                 ENTRATA: imp, Entrata: imp,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
-                "MODALITA'": modalita, timestamp: Date.now()
+                "MODALITA'": modalita, timestamp: Date.now(),
+                sedeId: state.sedeAttiva
             });
         } catch(e) { console.error("Errore salvataggio Prima Nota:", e); }
     }
@@ -356,7 +358,8 @@ async function renewAbb(id) {
                 Descrizione: 'RINNOVO ABB. ' + nome + ' (' + targa + ') - ' + modalita,
                 ENTRATA: prezzoFinale, Entrata: prezzoFinale,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
-                "MODALITA'": modalita, timestamp: Date.now()
+                "MODALITA'": modalita, timestamp: Date.now(),
+                sedeId: state.sedeAttiva
             });
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
@@ -396,7 +399,8 @@ async function pagaAbb(id) {
             Descrizione: 'ABBONAMENTO ' + nome + ' (' + targa + ') - ' + pag.mod,
             ENTRATA: pag.prezzoFinale, Entrata: pag.prezzoFinale,
             USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
-            "MODALITA'": pag.mod, timestamp: Date.now()
+            "MODALITA'": pag.mod, timestamp: Date.now(),
+            sedeId: state.sedeAttiva
         });
     } catch(e) { console.warn("Errore Prima Nota:", e); }
 

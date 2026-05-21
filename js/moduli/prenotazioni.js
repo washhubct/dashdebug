@@ -175,9 +175,11 @@ async function addPren() {
         cliente: clienteFinale,
         telefono: telefono,
         vettura: normalizeName(inputVett),
+        targa: (document.getElementById('pTarga')?.value.trim() || '').toUpperCase(),
         prezzo: prezzoRaw,
         note: document.getElementById('pNote').value.trim(),
-        saldo: '', saldato: ''
+        saldo: '', saldato: '',
+        sedeId: state.sedeAttiva
     };
 
     try {
@@ -190,7 +192,7 @@ async function addPren() {
         const isNewClient = await autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
 
         renderPren();
-        ['pCliente','pTelefono','pVettura','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
+        ['pCliente','pTelefono','pVettura','pTarga','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
         if (msg) msg.textContent = '';
 
         // UN SOLO toast a seconda che il cliente sia nuovo o già conosciuto.
@@ -512,7 +514,8 @@ async function addTap() {
         targa: normalizeName(document.getElementById('tTarga').value),
         telefono,
         prezzo: prezzoRaw,
-        status: 'IN', pagamento: '', dataOut: ''
+        status: 'IN', pagamento: '', dataOut: '',
+        sedeId: state.sedeAttiva
     };
     try {
         const ref = await fsAddDoc(fsCollection(db, "tappezzeria"), obj);
@@ -582,7 +585,8 @@ async function markPaidTap(id, modDefault) {
                 Descrizione: 'TAPPEZZERIA ' + (t.cliente || '') + ' ' + (t.modello || ''),
                 ENTRATA: imp, Entrata: imp,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
-                "MODALITA'": modUp, timestamp: Date.now()
+                "MODALITA'": modUp, timestamp: Date.now(),
+                sedeId: state.sedeAttiva
             }).catch(e => console.warn("Errore Prima Nota tappezzeria:", e));
         }
 

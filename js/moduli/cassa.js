@@ -182,7 +182,7 @@ async function addUscita() {
     let dStr = document.getElementById('cassaData')?.value;
     if(!desc || !imp) return alert('Inserisci Descrizione e Importo!');
     let now = new Date();
-    let obj = { data: dStr, orario: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'), timestamp: now.getTime(), descrizione: desc, importo: parseFloat(imp.replace(',', '.')), metodo: mod };
+    let obj = { data: dStr, orario: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'), timestamp: now.getTime(), descrizione: desc, importo: parseFloat(imp.replace(',', '.')), metodo: mod, sedeId: state.sedeAttiva };
     try {
         const ref = await fsAddDoc(fsCollection(db, "uscite"), obj);
         obj._id = ref.id;
@@ -199,7 +199,8 @@ async function addUscita() {
                 ENTRATA: 0, Entrata: 0,
                 USCITE: obj.importo, Uscite: obj.importo,
                 SOSPESO: 0, Sospeso: 0,
-                "MODALITA'": mod, timestamp: Date.now()
+                "MODALITA'": mod, timestamp: Date.now(),
+                sedeId: state.sedeAttiva
             });
         } catch(e) { console.warn("Errore Prima Nota uscita:", e); }
         
