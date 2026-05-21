@@ -112,6 +112,15 @@ input, select, textarea { font-family: var(--f); font-size: 16px; -webkit-tap-hi
 .sb-logout:hover { border-color: var(--red); color: var(--red); background: var(--red1); }
 .sb-close { display: none; }
 
+/* Sede selector */
+.sb-sede { display: none; padding: 10px 12px; border-bottom: 1px solid var(--brd); }
+.sb-sede-label { font: 600 9px var(--f); color: var(--tx3); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+.sb-sede-btns { display: flex; gap: 4px; }
+.sb-sede-btn { flex: 1; padding: 6px 4px; border-radius: 8px; border: 1.5px solid var(--brd2); background: var(--bg); font: 500 11px var(--f); color: var(--tx2); cursor: pointer; transition: all .2s; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-sede-btn:hover { border-color: var(--gold); color: var(--gold); }
+.sb-sede-btn.on { background: var(--gold-subtle); border-color: var(--gold-ring); color: var(--gold); font-weight: 600; }
+.sb-sede-btn[data-sede="paesi-etnei"].on { background: rgba(45,45,45,.07); border-color: rgba(45,45,45,.3); color: #2D2D2D; }
+
 /* ═══ MAIN AREA ═══ */
 .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 .topbar { padding: 16px 28px; border-bottom: 1px solid var(--brd); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); flex-shrink: 0; position: sticky; top: 0; z-index: 50; }

@@ -37,16 +37,16 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('authSuccess', () => {
     document.getElementById('loginScreen').classList.add('out');
     document.getElementById('app').classList.add('show');
-    
+
     if (state.currentUser) {
         const sbName = document.getElementById('sbName');
         const sbRole = document.getElementById('sbRole');
         const sbAvatar = document.getElementById('sbAvatar');
-        
+
         if(sbName) sbName.textContent = state.currentUser.user;
         if(sbRole) sbRole.textContent = state.currentUser.label;
         if(sbAvatar) sbAvatar.textContent = state.currentUser.user.charAt(0).toUpperCase();
-        
+
         document.querySelectorAll('.admin-only').forEach(el => {
             el.style.display = state.currentUser.role === 'admin' ? '' : 'none';
         });
@@ -54,8 +54,48 @@ document.addEventListener('authSuccess', () => {
 
     initCassaAutomatica();
     if (state.currentUser?.role === 'admin') initServiziAggiuntivi();
+    initSelezioneSedeUI();
     initFirebaseData();
 });
+
+function initSelezioneSedeUI() {
+    const wrapper = document.getElementById('sbSede');
+    if (!wrapper) return;
+
+    // Visibile solo agli admin
+    if (state.currentUser?.role !== 'admin') return;
+    wrapper.style.display = '';
+
+    // Aggiorna bottoni in base a sedeAttiva corrente
+    function aggiornaBtns() {
+        wrapper.querySelectorAll('.sb-sede-btn').forEach(btn => {
+            btn.classList.toggle('on', btn.dataset.sede === state.sedeAttiva);
+        });
+        // Aggiorna data-sede sul body per accent colori CSS
+        document.body.dataset.sede = state.sedeAttiva;
+    }
+    aggiornaBtns();
+
+    wrapper.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.sb-sede-btn');
+        if (!btn || btn.dataset.sede === state.sedeAttiva) return;
+
+        state.sedeAttiva = btn.dataset.sede;
+        localStorage.setItem('sedeAttiva', state.sedeAttiva);
+        aggiornaBtns();
+
+        // Ricarica tutti i dati per la nuova sede
+        state._historicalLoaded = false;
+        await initFirebaseData();
+
+        // Re-render pagina corrente
+        const pageAttiva = document.querySelector('.page.show');
+        if (pageAttiva) {
+            const id = pageAttiva.id.replace('page-', '');
+            document.dispatchEvent(new CustomEvent('pageChanged', { detail: { pageId: id } }));
+        }
+    });
+}
 
 document.addEventListener('pageChanged', (e) => {
     const id = e.detail.pageId;
