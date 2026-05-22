@@ -93,13 +93,13 @@ dateInput.addEventListener('change', async () => {
         });
 
         slotMsg.textContent = 'Seleziona un orario:';
-        
+
         SLOTS.forEach(slot => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            
+
             const isFull = (countPerSlot[slot] || 0) >= MAX_AUTO_PER_SLOT;
-            
+
             let isPast = false;
             if (selectedDate === localToday) {
                 const now = new Date();
@@ -122,12 +122,17 @@ dateInput.addEventListener('change', async () => {
                     document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
                     btn.classList.add('selected');
                     selectedSlotInput.value = slot;
-                    
+
                     datiSection.style.display = 'block';
+                    setTimeout(() => datiSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
                 });
             }
             slotContainer.appendChild(btn);
         });
+
+        // Scrolla alla sezione slot dopo il rendering — su mobile evita che
+        // gli orari pomeridiani restino fuori dallo schermo senza che l'utente lo sappia
+        setTimeout(() => slotSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
 
     } catch (e) {
         console.error(e);
