@@ -110,6 +110,7 @@ dateInput.addEventListener('change', async () => {
         });
 
         slotMsg.textContent = 'Seleziona un orario:';
+        const slotsWrap = document.getElementById('slotsWrap'); // per gradient fade
 
         SLOTS.forEach(slot => {
             const btn = document.createElement('button');
@@ -147,6 +148,12 @@ dateInput.addEventListener('change', async () => {
             slotContainer.appendChild(btn);
         });
 
+        // Gradient fade se ci sono slot sotto il fold
+        const checkFade = () => {
+            if (slotsWrap) slotsWrap.classList.toggle('has-more', slotContainer.scrollTop < slotContainer.scrollHeight - slotContainer.clientHeight - 4);
+        };
+        slotContainer.addEventListener('scroll', checkFade);
+        checkFade();
         notificaAltezza();
 
     } catch (e) {

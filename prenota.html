@@ -9,7 +9,7 @@
     <title>Prenota Lavaggio - WASH HUB</title>
     <script>
     (function(){
-        var V='20260522d';var K='wh_prenota_v';
+        var V='20260522e';var K='wh_prenota_v';
         try{var l=localStorage.getItem(K);if(l&&l!==V){if('caches'in window)caches.keys().then(function(n){n.forEach(function(x){caches.delete(x);});});localStorage.setItem(K,V);setTimeout(function(){location.reload(true);},50);return;}localStorage.setItem(K,V);}catch(e){}
     })();
     </script>
@@ -37,11 +37,23 @@
         .ff select { cursor: pointer; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235a5a52' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 16px center; background-size: 16px; }
 
         /* SLOTS ORARI */
-        .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 10px; margin-top: 10px; max-height: 280px; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-        /* Scrollbar sottile per non occupare spazio */
-        .slots::-webkit-scrollbar { width: 4px; }
-        .slots::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 4px; }
-        .slot-btn { background: #fff; border: 1px solid var(--brd); border-radius: 6px; padding: 12px 0; font-size: 14px; font-weight: 500; color: var(--tx); cursor: pointer; transition: 0.2s; text-align: center; }
+        .slots-wrap { position: relative; }
+        .slots-wrap::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 40px;
+            background: linear-gradient(transparent, white);
+            pointer-events: none;
+            border-radius: 0 0 6px 6px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .slots-wrap.has-more::after { opacity: 1; }
+        .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; margin-top: 10px; max-height: 45dvh; max-height: 45vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: 4px; }
+        .slots::-webkit-scrollbar { width: 3px; }
+        .slots::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 3px; }
+        .slot-btn { background: #fff; border: 1px solid var(--brd); border-radius: 6px; padding: 11px 0; font-size: 13px; font-weight: 500; color: var(--tx); cursor: pointer; transition: 0.2s; text-align: center; }
         .slot-btn:hover:not(:disabled) { border-color: var(--yel); }
         .slot-btn.selected { background: var(--yel); border-color: var(--yel); color: #1a1a1a; font-weight: 600; }
         .slot-btn:disabled { background: #fafafa; color: #b0b0b0; border-color: #f0f0f0; cursor: not-allowed; text-decoration: line-through; }
@@ -86,7 +98,9 @@
             <div class="ff" id="slotSection">
                 <label>3. Orario *</label>
                 <div id="slotMsg" style="font-size:13px; color:var(--tx2); margin-bottom:10px;">Verifico disponibilità...⏳</div>
-                <div class="slots" id="slotContainer"></div>
+                <div class="slots-wrap" id="slotsWrap">
+                    <div class="slots" id="slotContainer"></div>
+                </div>
                 <input type="hidden" id="selectedSlot" required>
             </div>
 
@@ -112,7 +126,7 @@
     </div>
 </div>
 
-<script type="module" src="js/prenota.js?v=20260522d"></script>
+<script type="module" src="js/prenota.js?v=20260522e"></script>
 
 </body>
 </html>
