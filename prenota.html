@@ -17,8 +17,9 @@
     <style>
         :root { --yel: #f5c518; --yel-deep: #e0b416; --bg: #ffffff; --tx: #1a1a1a; --tx2: #5a5a52; --brd: #e0ddd4; }
         * { box-sizing: border-box; font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; }
-        html, body { height: auto; overflow: visible; }
-        body { background: transparent; color: var(--tx); padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+        /* Fix scroll iOS Safari dentro iframe Wix (scrolling="no" ignorato se body è scroll) */
+        html { height: 100%; }
+        body { background: transparent; color: var(--tx); padding: 10px; display: flex; justify-content: center; align-items: flex-start; height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
 
         /* DESIGN MINIMALE E PULITO (Stile sito web) */
         /* padding-bottom: evita che il widget chat mobile copra l'ultimo slot/bottone */
@@ -109,7 +110,7 @@
     </div>
 </div>
 
-<script type="module" src="js/prenota.js?v=20260522b"></script>
+<script type="module" src="js/prenota.js?v=20260522c"></script>
 
 </body>
 </html>
