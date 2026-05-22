@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 
@@ -80,7 +81,7 @@ function renderInputFields() {
 // ─── CARICA PRESENZE DA FIRESTORE ───
 async function caricaPresenze() {
     try {
-        const snap = await fsGetDocs(fsCollection(db, 'presenzeDipendenti'));
+        const snap = await fsGetDocs(query(fsCollection(db, 'presenzeDipendenti'), where('sedeId', '==', state.sedeAttiva)));
         presenzeLocali = [];
         snap.forEach(docSnap => {
             const d = docSnap.data();
@@ -293,7 +294,8 @@ async function salvaPresenza() {
             data: dataIta,
             dettaglio: dettaglio,
             costoTotale: costoTotale,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            sedeId: state.sedeAttiva
         };
 
         if (esistente && esistente._id) {
