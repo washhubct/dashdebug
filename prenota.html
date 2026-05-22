@@ -17,10 +17,12 @@
     <style>
         :root { --yel: #f5c518; --yel-deep: #e0b416; --bg: #ffffff; --tx: #1a1a1a; --tx2: #5a5a52; --brd: #e0ddd4; }
         * { box-sizing: border-box; font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; }
-        body { background: transparent; color: var(--tx); padding: 10px; display: flex; justify-content: center; }
-        
+        html, body { height: auto; overflow: visible; }
+        body { background: transparent; color: var(--tx); padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+
         /* DESIGN MINIMALE E PULITO (Stile sito web) */
-        .widget { width: 100%; max-width: 550px; background: var(--bg); border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); padding: 32px; }
+        /* padding-bottom: evita che il widget chat mobile copra l'ultimo slot/bottone */
+        .widget { width: 100%; max-width: 550px; background: var(--bg); border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.04); padding: 32px; padding-bottom: 80px; }
         
         .hdr { text-align: center; margin-bottom: 30px; }
         .hdr h2 { font-size: 22px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
@@ -107,7 +109,7 @@
     </div>
 </div>
 
-<script type="module" src="js/prenota.js?v=20260522"></script>
+<script type="module" src="js/prenota.js?v=20260522b"></script>
 
 </body>
 </html>

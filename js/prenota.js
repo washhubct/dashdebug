@@ -51,6 +51,23 @@ const today = new Date();
 const localToday = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
 dateInput.min = localToday;
 
+// ─── IFRAME RESIZE (Wix HTML Component) ──────────────────────────────────────
+// Wix ascolta postMessage({height}) per ridimensionare l'iframe dinamicamente.
+// ResizeObserver invia l'altezza aggiornata ad ogni variazione del DOM
+// (sezioni che appaiono, slot che si popolano, campi dati visibili).
+function notificaAltezza() {
+    const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+    try { window.parent.postMessage(JSON.stringify({ height: h }), '*'); } catch (_) {}
+}
+if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(notificaAltezza).observe(document.body);
+} else {
+    // Fallback: polling ogni 300ms per browser senza ResizeObserver (vecchio Safari)
+    setInterval(notificaAltezza, 300);
+}
+// Notifica iniziale appena la pagina è pronta
+notificaAltezza();
+
 // Carica chiusure all'avvio
 caricaChiusure();
 
@@ -124,15 +141,13 @@ dateInput.addEventListener('change', async () => {
                     selectedSlotInput.value = slot;
 
                     datiSection.style.display = 'block';
-                    setTimeout(() => datiSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+                    notificaAltezza();
                 });
             }
             slotContainer.appendChild(btn);
         });
 
-        // Scrolla alla sezione slot dopo il rendering — su mobile evita che
-        // gli orari pomeridiani restino fuori dallo schermo senza che l'utente lo sappia
-        setTimeout(() => slotSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+        notificaAltezza();
 
     } catch (e) {
         console.error(e);
