@@ -59,7 +59,7 @@ export const smsReminder = onSchedule({
   smsInviatiSnap.forEach(d => giàInviati.add(d.data().telefono))
 
   let inviati = 0
-  for (const [tel, { nome }] : [string, { nome: string }] of daContattare) {
+  for (const [tel, { nome }] of daContattare) {
     if (giàInviati.has(tel)) continue
 
     const nomeDisplay = nome ? nome.split(' ')[0].charAt(0).toUpperCase() + nome.split(' ')[0].slice(1).toLowerCase() : ''
