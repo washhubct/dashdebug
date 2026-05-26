@@ -193,6 +193,30 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // REFERRAL — programma "Porta un amico"
+    // Lettura e scrittura pubblica: il sito crea/aggiorna il codice
+    // ═══════════════════════════════════════════════════════════
+    match /referral/{code} {
+      allow read:           if true;
+      allow create, update: if true;
+      allow delete:         if isAdmin();
+    }
+
+    match /referral/{code}/eventi/{tel} {
+      allow read:           if isAdmin();
+      allow create:         if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SMS LOG — scritto solo da Cloud Function (Admin SDK)
+    // ═══════════════════════════════════════════════════════════
+    match /smsLog/{doc} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {

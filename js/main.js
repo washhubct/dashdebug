@@ -18,6 +18,8 @@ import { initClienti, caricaClienti, renderClienti } from './moduli/clienti.js';
 import { initCassaAutomatica } from './moduli/cassa-automatica.js';
 import { initCassaStato } from './moduli/cassa-stato.js';
 import { initServiziAggiuntivi } from './moduli/servizi-aggiuntivi.js';
+import { initMarketing, renderMarketing } from './moduli/marketing.js';
+import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -31,6 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initPresenze();
     initClienti();
     initCassaStato();
+    initMarketing();
+    initReferralDash();
     initDashDates();
 });
 
@@ -132,6 +136,8 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'presenze') renderPresenze();
     if(id === 'clienti') renderClienti();
     if(id === 'cancellazioni') renderCancellazioni();
+    if(id === 'marketing') renderMarketing();
+    if(id === 'referral') renderReferralDash();
 });
 
 function initDashDates() {

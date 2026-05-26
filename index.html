@@ -93,6 +93,9 @@
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
 <a class="sb-item admin-only" id="nav-cancellazioni"><span class="icon">🗑️</span>Log Cancellazioni</a>
 <a class="sb-item admin-only" id="nav-servizi"><span class="icon">⭐</span>Servizi Aggiuntivi</a>
+<div class="sb-section admin-only">Marketing</div>
+<a class="sb-item admin-only" id="nav-marketing"><span class="icon">📲</span>SMS Reminder</a>
+<a class="sb-item admin-only" id="nav-referral"><span class="icon">🤝</span>Porta un Amico</a>
 </nav>
 <div class="sb-footer">
 <div class="sb-user"><div class="sb-avatar" id="sbAvatar">A</div><div class="sb-user-info"><div class="name" id="sbName">Admin</div><div class="role" id="sbRole">Amministratore</div></div></div>
@@ -559,7 +562,7 @@
 <div class="page" id="page-servizi">
 <div class="sec">
 <h3 style="font:700 15px var(--f);margin-bottom:6px">⭐ Servizi Aggiuntivi</h3>
-<p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:20px">Questi servizi vengono proposti a Sebastiano durante il pagamento. Attiva/disattiva o modifica i prezzi in qualsiasi momento.</p>
+<p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:20px">Questi servizi vengono proposti agli addetti durante il pagamento. Attiva/disattiva o modifica i prezzi in qualsiasi momento.</p>
 
 <div style="background:var(--bg3);border-radius:var(--r);padding:20px;margin-bottom:24px">
 <h4 style="font:600 13px var(--f);margin-bottom:12px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px">Aggiungi nuovo servizio</h4>
@@ -576,9 +579,48 @@
 </div>
 
 </div></div></div>
+
+<div class="page" id="page-marketing">
+<div class="sec">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div>
+  <h3 style="font:700 15px var(--f);margin-bottom:3px">📲 SMS Reminder</h3>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Clienti inattivi da 14+ giorni ricevono automaticamente un SMS alle 09:00 ogni mattina.</p>
+</div>
+<button class="btn" id="btnRfMarketing">↻ Aggiorna</button>
+</div>
+<div class="kpis" id="mktKpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:18px"></div>
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th style="width:130px">Data/Ora</th><th>Telefono</th><th>Tipo</th><th>Data invio</th></tr></thead>
+<tbody id="smsTb"><tr><td colspan="4" class="empty">Carica per vedere i dati</td></tr></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="page" id="page-referral">
+<div class="sec">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+<div>
+  <h3 style="font:700 15px var(--f);margin-bottom:3px">🤝 Porta un Amico</h3>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Ogni codice è generato automaticamente dal numero di telefono del cliente. Visibile su wash-hub.it/referral.</p>
+</div>
+<button class="btn" id="btnRfReferral">↻ Aggiorna</button>
+</div>
+<div class="kpis" id="refKpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:18px"></div>
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Codice</th><th>Telefono titolare</th><th>Referral totali</th><th>In attesa</th></tr></thead>
+<tbody id="refTb"><tr><td colspan="4" class="empty">Carica per vedere i dati</td></tr></tbody>
+</table>
+</div>
+</div>
+</div>
+
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260522a"></script>
+<script type="module" src="js/main.js?v=20260527a"></script>
 
 </body>
 </html>
