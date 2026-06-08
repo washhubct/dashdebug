@@ -17,7 +17,7 @@ export function initCassa() {
         }
     }
 
-    const addUscitaBtn = document.querySelector('#page-cassa .btn-primary');
+    const addUscitaBtn = document.getElementById('addUscitaBtn');
     if (addUscitaBtn) {
         addUscitaBtn.addEventListener('click', addUscita);
     }
