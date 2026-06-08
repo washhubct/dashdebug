@@ -124,6 +124,12 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
     }
 
+    match /incassiManuali/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
     match /cancellazioni/{doc} {
       allow create:         if writeOk();
       allow read, update, delete: if isAdmin();
