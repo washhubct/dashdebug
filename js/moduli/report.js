@@ -220,6 +220,11 @@ export function renderDash() {
 
     const d = calcolaDatiOperativi(fmtDI(state.dateFrom), fmtDI(state.dateTo));
 
+    if (state.sedeAttiva === 'paesi-etnei') {
+        renderDashPaesiEtnei(d);
+        return;
+    }
+
     // --- KPI PRINCIPALI ---
     const mainEl = document.getElementById('dashKpiMain');
     if (mainEl) {
@@ -304,6 +309,153 @@ export function renderDash() {
     }
 
     renderCharts(d);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DASHBOARD ANALITICA — PAESI ETNEI (versione semplificata)
+// ═══════════════════════════════════════════════════════════════════
+function renderDashPaesiEtnei(d) {
+    const fatturato = d.fatIncassiManuali;
+    const totUscite = d.affittoPE + d.costoPersonale;
+    const margine = fatturato - totUscite;
+    const margPct = fatturato > 0 ? ((margine / fatturato) * 100).toFixed(1) : '0.0';
+
+    // --- KPI PRINCIPALI ---
+    const mainEl = document.getElementById('dashKpiMain');
+    if (mainEl) {
+        mainEl.innerHTML = `
+            <div class="kpi g">
+                <div class="kpi-label">Fatturato Incassato</div>
+                <div class="kpi-val">${fEur(fatturato)}</div>
+                <div class="kpi-sub">Contanti ${fEur(d.imContanti)} · POS ${fEur(d.imPos)}</div>
+            </div>
+            <div class="kpi b">
+                <div class="kpi-label">Margine Operativo</div>
+                <div class="kpi-val">${fEur(margine)}</div>
+                <div class="kpi-sub">${margPct}% sul fatturato</div>
+            </div>
+            <div class="kpi" style="border-color:var(--tx2)">
+                <div class="kpi-label">Giorni Periodo</div>
+                <div class="kpi-val">${d.costiFissi.giorni}</div>
+                <div class="kpi-sub">dal ${fmtDI(d.from)}</div>
+            </div>
+            <div class="kpi" style="border-color:var(--tx2)">
+                <div class="kpi-label">Ticket Medio Giornaliero</div>
+                <div class="kpi-val">${fEur(d.costiFissi.giorni > 0 ? fatturato / d.costiFissi.giorni : 0)}</div>
+                <div class="kpi-sub">${d.costiFissi.giorni} giorni nel periodo</div>
+            </div>`;
+    }
+
+    // --- FATTURATO PER CATEGORIA ---
+    const catEl = document.getElementById('dashKpiCat');
+    if (catEl) {
+        catEl.innerHTML = `
+            <div class="kpi" style="border-color:var(--blu)">
+                <div class="kpi-label">🚿 Self-Service</div>
+                <div class="kpi-val" style="color:var(--blu)">${fEur(d.imSelfServ)}</div>
+                <div class="kpi-sub">${fatturato > 0 ? ((d.imSelfServ / fatturato) * 100).toFixed(1) : '0'}% del fatturato</div>
+            </div>
+            <div class="kpi" style="border-color:var(--grn)">
+                <div class="kpi-label">🧽 Lavaggio a Mano</div>
+                <div class="kpi-val" style="color:var(--grn)">${fEur(d.imLavMano)}</div>
+                <div class="kpi-sub">${fatturato > 0 ? ((d.imLavMano / fatturato) * 100).toFixed(1) : '0'}% del fatturato</div>
+            </div>`;
+    }
+
+    // --- USCITE & COSTI ---
+    const uscEl = document.getElementById('dashKpiUsc');
+    if (uscEl) {
+        const dipDetail = Object.entries(d.dettaglioDip).sort((a, b) => b[1] - a[1]).map(([n, v]) => `${n}: ${fEur(v)}`).join(' · ');
+        uscEl.innerHTML = `
+            <div class="kpi r">
+                <div class="kpi-label">👷 Personale</div>
+                <div class="kpi-val">${fEur(d.costoPersonale)}</div>
+                <div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dipDetail || 'Nessun dato presenze'}</div>
+            </div>
+            <div class="kpi r">
+                <div class="kpi-label">🏠 Affitto</div>
+                <div class="kpi-val">${fEur(d.affittoPE)}</div>
+                <div class="kpi-sub">3.000 €/mese pro-rata ${d.costiFissi.giorni}gg</div>
+            </div>`;
+    }
+
+    renderChartsPaesiEtnei(d);
+}
+
+// Grafici PE: bar mensile self/lavaggio a mano + doughnut categorie
+function renderChartsPaesiEtnei(data) {
+    const months = [];
+    const dStart = new Date(state.dateFrom.getFullYear(), state.dateFrom.getMonth(), 1);
+    const end = new Date(state.dateTo.getFullYear(), state.dateTo.getMonth(), 1);
+    const cursor = new Date(dStart);
+    while (cursor <= end) { months.push(gMK(cursor)); cursor.setMonth(cursor.getMonth() + 1); }
+
+    const labels = months.map(m => {
+        const [y, mo] = m.split('-');
+        return CONFIG.MESI_S[parseInt(mo) - 1] + ' ' + y.slice(2);
+    });
+
+    const byM = {};
+    months.forEach(m => byM[m] = { self: 0, mano: 0 });
+
+    (state.incassiManualiDB || []).forEach(i => {
+        const dt = i.dataISO ? new Date(i.dataISO) : null;
+        if (!dt || isNaN(dt.getTime())) return;
+        // Cutoff storico
+        if (i.dataISO < PAESI_ETNEI_START) return;
+        const mk = gMK(dt);
+        if (!byM[mk]) return;
+        const imp = pNum(i.importo);
+        if (i.categoria === 'SELF_SERVICE') byM[mk].self += imp;
+        else if (i.categoria === 'LAVAGGIO_MANO') byM[mk].mano += imp;
+    });
+
+    const opts = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { position: 'bottom', labels: { color: '#5a5a52', font: { size: 10, family: 'DM Sans' }, boxWidth: 10, padding: 12 } } },
+        scales: {
+            x: { grid: { color: '#e0ddd4' }, ticks: { color: '#8a8a80', font: { size: 9, family: 'JetBrains Mono' } } },
+            y: { grid: { color: '#e0ddd4' }, ticks: { color: '#8a8a80', font: { size: 9, family: 'JetBrains Mono' }, callback: v => '€' + v.toLocaleString('it-IT') } }
+        }
+    };
+
+    const ch1El = document.getElementById('ch1');
+    const ch2El = document.getElementById('ch2');
+
+    if (ch1 && ch1El) ch1.destroy();
+    if (ch1El) {
+        ch1 = new Chart(ch1El, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Self-Service', data: months.map(m => byM[m].self), backgroundColor: 'rgba(37,99,235,.7)', borderRadius: 3, barPercentage: .5 },
+                    { label: 'Lavaggio a Mano', data: months.map(m => byM[m].mano), backgroundColor: 'rgba(42,157,92,.65)', borderRadius: 3, barPercentage: .5 },
+                ]
+            },
+            options: { ...opts, plugins: { ...opts.plugins, title: { display: false } } }
+        });
+    }
+
+    if (ch2 && ch2El) ch2.destroy();
+    if (ch2El) {
+        const totSelf = months.reduce((s, m) => s + byM[m].self, 0);
+        const totMano = months.reduce((s, m) => s + byM[m].mano, 0);
+        ch2 = new Chart(ch2El, {
+            type: 'doughnut',
+            data: {
+                labels: ['Self-Service', 'Lavaggio a Mano'],
+                datasets: [{
+                    data: [totSelf, totMano],
+                    backgroundColor: ['rgba(37,99,235,.75)', 'rgba(42,157,92,.7)'],
+                    borderColor: '#fbfaf6',
+                    borderWidth: 2
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { color: '#5a5a52', font: { size: 10, family: 'DM Sans' }, boxWidth: 10, padding: 12 } } } }
+        });
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════
