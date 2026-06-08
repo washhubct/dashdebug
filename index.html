@@ -13,7 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="css/style.css?v=20260608d">
+<link rel="stylesheet" href="css/style.css?v=20260608e">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C8A84E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260608d';
+    var APP_VERSION = '20260608e';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -127,7 +127,7 @@
         <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:22px">
             <div class="kpi" style="border-color:var(--blu)"><div class="kpi-label">🧼 Lavaggi</div><div class="kpi-val" id="cassaCatLav" style="color:var(--blu)">€0</div></div>
             <div class="kpi" style="border-color:var(--amb)"><div class="kpi-label">🪡 Tappezzerie</div><div class="kpi-val" id="cassaCatTap" style="color:var(--amb)">€0</div></div>
-            <div class="kpi" style="border-color:var(--yel)"><div class="kpi-label">🚗 Parcheggio Tot.</div><div class="kpi-val" id="cassaCatPar" style="color:var(--yel)">€0</div></div>
+            <div class="kpi" style="border-color:var(--yel)"><div class="kpi-label">🚗 Parcheggio Tot.</div><div class="kpi-val" id="cassaCatPar" style="color:var(--yel)">€0</div><div class="kpi-sub" id="cassaCatParSub" style="font:400 10px var(--mono);color:var(--tx3);margin-top:2px">Abb. €0 · Ore €0</div></div>
         </div>
         
         <!-- Form Incassi Manuali (solo Paesi Etnei) -->
@@ -651,7 +651,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260608d"></script>
+<script type="module" src="js/main.js?v=20260608e"></script>
 
 </body>
 </html>

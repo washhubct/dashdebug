@@ -42,7 +42,7 @@ export function renderCassa() {
     const dIta = dStr.split('-').reverse().join('/');
     
     let eC = 0, eP = 0, eB = 0;
-    let cLav = 0, cTap = 0, cPar = 0;
+    let cLav = 0, cTap = 0, cParOre = 0, cParAbb = 0;
     let sospGiorno = 0;
     
     // 1. Prenotazioni (Lavaggi)
@@ -83,7 +83,7 @@ export function renderCassa() {
             if(g.pagamento === 'CONTANTI') eC += imp;
             else if(g.pagamento === 'POS') eP += imp;
             else if(g.pagamento === 'BONIFICO') eB += imp;
-            cPar += imp;
+            cParOre += imp;
         }
     });
 
@@ -95,7 +95,7 @@ export function renderCassa() {
             if(mod === 'CONTANTI') eC += imp;
             else if(mod === 'POS') eP += imp;
             else if(mod === 'BONIFICO') eB += imp;
-            cPar += imp;
+            cParAbb += imp;
         }
     });
 
@@ -144,7 +144,8 @@ export function renderCassa() {
     if(document.getElementById('cassaSospGiorno')) document.getElementById('cassaSospGiorno').textContent = fEur(sospGiorno);
     if(document.getElementById('cassaCatLav')) document.getElementById('cassaCatLav').textContent = fEur(cLav);
     if(document.getElementById('cassaCatTap')) document.getElementById('cassaCatTap').textContent = fEur(cTap);
-    if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cPar);
+    if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cParAbb + cParOre);
+    if(document.getElementById('cassaCatParSub')) document.getElementById('cassaCatParSub').textContent = `Abb. ${fEur(cParAbb)} · Ore ${fEur(cParOre)}`;
     if(document.getElementById('uscitaTb')) document.getElementById('uscitaTb').innerHTML = uHtml;
     if(document.getElementById('cassaNetta')) document.getElementById('cassaNetta').textContent = fEur(eC - uC);
 
