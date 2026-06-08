@@ -43,7 +43,15 @@ function inRange(dateStr, from, to) {
 // ═══════════════════════════════════════════════════════════════════
 // CALCOLA DATI OPERATIVI DAL PERIODO (dalle collezioni, non Prima Nota)
 // ═══════════════════════════════════════════════════════════════════
+// A Paesi Etnei abbiamo iniziato a lavorare il 22 maggio 2026:
+// tutto ciò che è prima è storico irrilevante (record di test o di altre sedi).
+const PAESI_ETNEI_START = '2026-05-22';
+
 function calcolaDatiOperativi(fromStr, toStr) {
+    // Cutoff storico solo a Paesi Etnei: il periodo non può iniziare prima del 22/05/2026
+    if (state.sedeAttiva === 'paesi-etnei' && fromStr < PAESI_ETNEI_START) {
+        fromStr = PAESI_ETNEI_START;
+    }
     const from = startOfDay(fromStr);
     const to = endOfDay(toStr);
 
@@ -125,6 +133,19 @@ function calcolaDatiOperativi(fromStr, toStr) {
         else uscContanti += imp;
     });
 
+    // --- INCASSI MANUALI (Paesi Etnei: self-service + lavaggio a mano) ---
+    let imSelfServ = 0, imLavMano = 0, imContanti = 0, imPos = 0;
+    (state.incassiManualiDB || []).forEach(i => {
+        if (!inRange(i.dataISO, from, to)) return;
+        const imp = pNum(i.importo);
+        const mod = (i.metodo || '').toUpperCase();
+        if (mod === 'CONTANTI') imContanti += imp;
+        else if (mod === 'POS') imPos += imp;
+        if (i.categoria === 'SELF_SERVICE') imSelfServ += imp;
+        else if (i.categoria === 'LAVAGGIO_MANO') imLavMano += imp;
+    });
+    const fatIncassiManuali = imContanti + imPos;
+
     // --- PERSONALE (da presenze) ---
     let costoPersonale = 0;
     let dettaglioDip = {};
@@ -163,6 +184,9 @@ function calcolaDatiOperativi(fromStr, toStr) {
     const usciteTot = uscContanti + uscPos;
     const consumabili = fatLavaggio * 0.03;
 
+    // Affitto Paesi Etnei: 3000 €/mese pro-rata
+    const affittoPE = Math.round((3000 / 30) * giorniPeriodo * 100) / 100;
+
     return {
         // Lavaggio
         lavContanti, lavPos, lavSospesi, fatLavaggio, numLavaggi,
@@ -172,6 +196,9 @@ function calcolaDatiOperativi(fromStr, toStr) {
         abbContanti, abbPos, abbBonifico, fatParchAbb, numAbb,
         parContanti, parPos, fatParchOre, numPar,
         fatParchTot,
+        // Incassi manuali (Paesi Etnei)
+        imSelfServ, imLavMano, imContanti, imPos, fatIncassiManuali,
+        affittoPE,
         // Totali
         fatturato, sospesiAperti, numSospesi,
         uscContanti, uscPos, usciteTot,
@@ -434,6 +461,11 @@ export function renderReport() {
 
     const d = calcolaDatiOperativi(fromVal, toVal);
 
+    if (state.sedeAttiva === 'paesi-etnei') {
+        renderReportPaesiEtnei(d);
+        return;
+    }
+
     // Totale uscite COMPLETO (incluso personale)
     const totUscite = d.usciteTot + d.costiFissi.totale + d.consumabili + d.costoPersonale;
     const margine = d.fatturato - totUscite;
@@ -490,6 +522,61 @@ export function renderReport() {
                 return `<tr><td><strong>${esc(cat)}</strong></td><td style="font-weight:600">${fEur(val)}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:${Math.min(pct, 100)}%;height:6px;background:var(--grn);border-radius:3px;min-width:2px"></div><span style="font:400 11px var(--mono);color:var(--tx2)">${pct}%</span></div></td></tr>`;
             }).join('');
             tbEnt.innerHTML += `<tr style="background:var(--bg4)"><td><strong>TOTALE ENTRATE</strong></td><td style="font-weight:700">${fEur(d.fatturato)}</td><td></td></tr>`;
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// REPORT FINANZIARIO — PAESI ETNEI (versione semplificata)
+// Entrate: solo incassi manuali (self-service + lavaggio a mano)
+// Uscite : affitto 3000 €/mese pro-rata + costo personale dalle presenze
+// ═══════════════════════════════════════════════════════════════════
+function renderReportPaesiEtnei(d) {
+    const entrate = d.fatIncassiManuali;
+    const totUscite = d.affittoPE + d.costoPersonale;
+    const margine = entrate - totUscite;
+    const margPct = entrate > 0 ? ((margine / entrate) * 100).toFixed(1) : '0.0';
+
+    const repKpis = document.getElementById('repKpis');
+    if (repKpis) {
+        repKpis.innerHTML = `
+            <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(entrate)}</div><div class="kpi-sub">Periodo: ${d.costiFissi.giorni} giorni</div></div>
+            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Affitto ${fEur(d.affittoPE)} + Personale ${fEur(d.costoPersonale)}</div></div>
+            <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
+            <div class="kpi" style="border-color:var(--tx3)"><div class="kpi-label">Giorni Periodo</div><div class="kpi-val">${d.costiFissi.giorni}</div><div class="kpi-sub">Affitto pro-rata 3.000 €/mese</div></div>`;
+    }
+
+    // --- USCITE ---
+    const uscByCat = {};
+    if (d.costoPersonale > 0) uscByCat['👷 Personale Lavaggio'] = d.costoPersonale;
+    uscByCat['🏠 Affitto (3.000 €/mese pro-rata)'] = d.affittoPE;
+
+    const uscEntries = Object.entries(uscByCat).sort((a, b) => b[1] - a[1]);
+    const tbUsc = document.getElementById('repUscTb');
+    if (tbUsc) {
+        tbUsc.innerHTML = uscEntries.map(([cat, val]) => {
+            const pct = totUscite > 0 ? ((val / totUscite) * 100).toFixed(1) : '0';
+            return `<tr><td><strong>${esc(cat)}</strong></td><td style="font-weight:600">${fEur(val)}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:${Math.min(pct, 100)}%;height:6px;background:var(--red);border-radius:3px;min-width:2px"></div><span style="font:400 11px var(--mono);color:var(--tx2)">${pct}%</span></div></td></tr>`;
+        }).join('');
+        tbUsc.innerHTML += `<tr style="background:var(--bg4)"><td><strong>TOTALE USCITE</strong></td><td style="font-weight:700">${fEur(totUscite)}</td><td style="font:400 10px var(--mono);color:var(--tx3)">Pro-rata ${d.costiFissi.giorni}gg</td></tr>`;
+    }
+
+    // --- ENTRATE per categoria ---
+    const entByCat = {};
+    if (d.imSelfServ > 0) entByCat['🚿 SELF-SERVICE'] = d.imSelfServ;
+    if (d.imLavMano > 0) entByCat['🧽 LAVAGGIO A MANO'] = d.imLavMano;
+
+    const entEntries = Object.entries(entByCat).sort((a, b) => b[1] - a[1]);
+    const tbEnt = document.getElementById('repEntTb');
+    if (tbEnt) {
+        if (entEntries.length === 0) {
+            tbEnt.innerHTML = '<tr><td colspan="3" class="empty">Nessuna entrata nel periodo</td></tr>';
+        } else {
+            tbEnt.innerHTML = entEntries.map(([cat, val]) => {
+                const pct = entrate > 0 ? ((val / entrate) * 100).toFixed(1) : '0';
+                return `<tr><td><strong>${esc(cat)}</strong></td><td style="font-weight:600">${fEur(val)}</td><td><div style="display:flex;align-items:center;gap:8px"><div style="width:${Math.min(pct, 100)}%;height:6px;background:var(--grn);border-radius:3px;min-width:2px"></div><span style="font:400 11px var(--mono);color:var(--tx2)">${pct}%</span></div></td></tr>`;
+            }).join('');
+            tbEnt.innerHTML += `<tr style="background:var(--bg4)"><td><strong>TOTALE ENTRATE</strong></td><td style="font-weight:700">${fEur(entrate)}</td><td></td></tr>`;
         }
     }
 }
