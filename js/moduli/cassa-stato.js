@@ -20,6 +20,12 @@ export function initCassaStato() {
             stopAutoRefresh();
             return;
         }
+        // Rimuovi la card se la sede non ha cassa automatica (es. Paesi Etnei)
+        if (state.sedeAttiva === 'paesi-etnei') {
+            document.getElementById('cassaStatoCard')?.remove();
+            stopAutoRefresh();
+            return;
+        }
         if (state.currentUser?.role !== 'admin') return;
         if (!state.cassaAuto?.enabled) return;
         ensureCard();

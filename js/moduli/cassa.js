@@ -2,6 +2,7 @@ import { db, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc } from '../firebase-conf
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
+import { renderIncassiManuali } from './incassi-manuali.js';
 
 export function initCassa() {
     const cassaData = document.getElementById('cassaData');
@@ -111,6 +112,17 @@ export function renderCassa() {
         }
     });
 
+    // 6. Incassi Manuali (es. Paesi Etnei: self-service + lavaggio a mano)
+    (state.incassiManualiDB || []).forEach(i => {
+        if(i.dataISO !== dStr) return;
+        const imp = pNum(i.importo);
+        const mod = (i.metodo || '').toUpperCase();
+        if(mod === 'CONTANTI') eC += imp;
+        else if(mod === 'POS') eP += imp;
+        else if(mod === 'BONIFICO') eB += imp;
+        cLav += imp;
+    });
+
     // --- Uscite ---
     let uC = 0;
     let uHtml = '';
@@ -138,6 +150,9 @@ export function renderCassa() {
 
     // Tag visivo pagamenti via cassa automatica (non altera i totali sopra)
     renderCassaAutoEntries(prenAutoEntries);
+
+    // Refresh tabella incassi manuali (visibile solo a Paesi Etnei via CSS)
+    renderIncassiManuali();
 }
 
 // Mostra la lista dei pagamenti incassati tramite cassa automatica VNE.

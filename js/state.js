@@ -27,6 +27,7 @@ export const state = {
     localAbb: [],
     localSosp: [],
     presenzeDB: [],
+    incassiManualiDB: [],
     
     // Storico inziale
     storicoSospesi: [

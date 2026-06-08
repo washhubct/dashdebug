@@ -3,16 +3,26 @@ import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebas
 import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 
-// ─── CONFIGURAZIONE DIPENDENTI ───
-const DIPENDENTI = [
-    { nome: 'SONY', modalita: 'BONIFICO', importoDefault: 70 },
-    { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
-    { nome: 'XXX', modalita: 'BONIFICO', importoDefault: 50 },
-    { nome: 'PARAM', modalita: 'CONTANTI', importoDefault: 50 },
-    { nome: 'HAPPY', modalita: 'CONTANTI', importoDefault: 45 },
-    { nome: 'SHENTER', modalita: 'CONTANTI', importoDefault: 45 },
-    { nome: 'MENTA', modalita: 'BONIFICO', importoDefault: 0 }
-];
+// ─── CONFIGURAZIONE DIPENDENTI PER SEDE ───
+const DIPENDENTI_PER_SEDE = {
+    'lungomare': [
+        { nome: 'SONY', modalita: 'BONIFICO', importoDefault: 70 },
+        { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
+        { nome: 'XXX', modalita: 'BONIFICO', importoDefault: 50 },
+        { nome: 'PARAM', modalita: 'CONTANTI', importoDefault: 50 },
+        { nome: 'HAPPY', modalita: 'CONTANTI', importoDefault: 45 },
+        { nome: 'SHENTER', modalita: 'CONTANTI', importoDefault: 45 },
+        { nome: 'MENTA', modalita: 'BONIFICO', importoDefault: 0 }
+    ],
+    'paesi-etnei': [
+        { nome: 'ROCKY', modalita: 'BONIFICO', importoDefault: 0 },
+        { nome: 'OPERATORE 1', modalita: 'CONTANTI', importoDefault: 0 }
+    ]
+};
+
+function getDipendenti() {
+    return DIPENDENTI_PER_SEDE[state.sedeAttiva] || DIPENDENTI_PER_SEDE['lungomare'];
+}
 
 let currentWeekStart = null;
 let presenzeLocali = []; // cache locale delle presenze caricate
@@ -70,10 +80,10 @@ const GIORNI_S = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 function renderInputFields() {
     const container = document.getElementById('prezInputFields');
     if (!container) return;
-    container.innerHTML = DIPENDENTI.map(dip =>
+    container.innerHTML = getDipendenti().map(dip =>
         `<div class="ff" style="width:70px">
             <label>${dip.nome}</label>
-            <input type="number" step="1" id="prez_${dip.nome}" placeholder="${dip.importoDefault}" style="text-align:center">
+            <input type="number" step="1" id="prez_${dip.nome.replace(/\s+/g, '_')}" placeholder="${dip.importoDefault}" style="text-align:center">
         </div>`
     ).join('');
 }
@@ -103,7 +113,10 @@ function getPresenzaByDate(dataISO) {
 // ─── RENDER PAGINA PRESENZE ───
 export async function renderPresenze() {
     if (!currentWeekStart) currentWeekStart = getMonday(new Date());
-    
+
+    // Rigenera i campi input: i dipendenti dipendono dalla sede attiva
+    renderInputFields();
+
     await caricaPresenze();
 
     const days = getWeekDays(currentWeekStart);
@@ -116,12 +129,14 @@ export async function renderPresenze() {
         label.textContent = `${d1.getDate()}/${d1.getMonth() + 1} — ${d2.getDate()}/${d2.getMonth() + 1}/${d2.getFullYear()}`;
     }
 
+    const dipendenti = getDipendenti();
+
     // Header tabella
     const thead = document.getElementById('prezTHead');
     if (thead) {
         thead.innerHTML = `<tr>
             <th style="width:90px">Giorno</th>
-            ${DIPENDENTI.map(d => `<th style="text-align:center;min-width:60px">${d.nome}<br><span style="font-weight:400;font-size:7px;color:var(--tx3)">${d.modalita === 'BONIFICO' ? '🏦' : '💵'}</span></th>`).join('')}
+            ${dipendenti.map(d => `<th style="text-align:center;min-width:60px">${d.nome}<br><span style="font-weight:400;font-size:7px;color:var(--tx3)">${d.modalita === 'BONIFICO' ? '🏦' : '💵'}</span></th>`).join('')}
             <th style="text-align:center">Totale</th>
             <th style="width:60px"></th>
         </tr>`;
@@ -133,7 +148,7 @@ export async function renderPresenze() {
 
     let totSettimanale = 0;
     let totPerDip = {};
-    DIPENDENTI.forEach(d => totPerDip[d.nome] = 0);
+    dipendenti.forEach(d => totPerDip[d.nome] = 0);
 
     let html = '';
     const oggi = fmtDI(new Date());
@@ -149,7 +164,7 @@ export async function renderPresenze() {
         const presenza = getPresenzaByDate(dataISO);
         let totGiorno = 0;
 
-        const cells = DIPENDENTI.map(dip => {
+        const cells = dipendenti.map(dip => {
             const val = presenza?.dettaglio?.[dip.nome] || 0;
             totGiorno += val;
             totPerDip[dip.nome] += val;
@@ -183,7 +198,7 @@ export async function renderPresenze() {
     if (tfoot) {
         tfoot.innerHTML = `<tr style="background:var(--bg4);font-weight:700">
             <td style="font:700 11px var(--mono)">TOTALE</td>
-            ${DIPENDENTI.map(d => `<td style="text-align:center;font:700 12px var(--mono);color:var(--red)">${totPerDip[d.nome] > 0 ? '€' + totPerDip[d.nome] : '—'}</td>`).join('')}
+            ${dipendenti.map(d => `<td style="text-align:center;font:700 12px var(--mono);color:var(--red)">${totPerDip[d.nome] > 0 ? '€' + totPerDip[d.nome] : '—'}</td>`).join('')}
             <td style="text-align:center;font:700 14px var(--f);color:var(--red)">€${totSettimanale}</td>
             <td></td>
         </tr>`;
@@ -224,9 +239,10 @@ function renderRiepilogoMensile(mese, anno) {
     const tb = document.getElementById('prezRiepilogoTb');
     if (!tb) return;
 
+    const dipendenti = getDipendenti();
     const totDip = {};
     const giorniDip = {};
-    DIPENDENTI.forEach(d => { totDip[d.nome] = 0; giorniDip[d.nome] = 0; });
+    dipendenti.forEach(d => { totDip[d.nome] = 0; giorniDip[d.nome] = 0; });
 
     presenzeLocali.forEach(p => {
         const d = p.dataISO ? new Date(p.dataISO) : null;
@@ -243,7 +259,7 @@ function renderRiepilogoMensile(mese, anno) {
     const mesi = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     let totGenerale = 0;
 
-    tb.innerHTML = DIPENDENTI.map(dip => {
+    tb.innerHTML = dipendenti.map(dip => {
         totGenerale += totDip[dip.nome];
         const mod = dip.modalita === 'BONIFICO' ? '<span class="badge b">🏦 Bonifico</span>' : '<span class="badge g">💵 Contanti</span>';
         return `<tr>
@@ -271,10 +287,11 @@ async function salvaPresenza() {
     const dataIta = dataISO.split('-').reverse().join('/');
 
     // Raccogli importi
+    const dipendenti = getDipendenti();
     const dettaglio = {};
     let costoTotale = 0;
-    DIPENDENTI.forEach(dip => {
-        const input = document.getElementById(`prez_${dip.nome}`);
+    dipendenti.forEach(dip => {
+        const input = document.getElementById(`prez_${dip.nome.replace(/\s+/g, '_')}`);
         const val = input ? parseFloat(input.value) || 0 : 0;
         dettaglio[dip.nome] = val;
         costoTotale += val;
@@ -309,8 +326,8 @@ async function salvaPresenza() {
         }
 
         // Pulisci i campi
-        DIPENDENTI.forEach(dip => {
-            const input = document.getElementById(`prez_${dip.nome}`);
+        dipendenti.forEach(dip => {
+            const input = document.getElementById(`prez_${dip.nome.replace(/\s+/g, '_')}`);
             if (input) input.value = '';
         });
 

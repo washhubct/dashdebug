@@ -20,6 +20,7 @@ import { initCassaStato } from './moduli/cassa-stato.js';
 import { initServiziAggiuntivi } from './moduli/servizi-aggiuntivi.js';
 import { initMarketing, renderMarketing } from './moduli/marketing.js';
 import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
+import { initIncassiManuali } from './moduli/incassi-manuali.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -35,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCassaStato();
     initMarketing();
     initReferralDash();
+    initIncassiManuali();
     initDashDates();
 });
 
@@ -94,6 +96,9 @@ function initSelezioneSedeUI() {
         btn.style.display = state.sedePermesse.includes(btn.dataset.sede) ? '' : 'none';
     });
 
+    // Marca sempre il body con la sede attiva (serve al CSS per nascondere/mostrare sezioni)
+    document.body.dataset.sede = state.sedeAttiva;
+
     // Mostra il selettore solo se l'utente ha accesso a più di una sede
     if (state.sedePermesse.length < 2) return;
     wrapper.style.display = 'block';
@@ -118,9 +123,17 @@ function initSelezioneSedeUI() {
         await initFirebaseData();
 
         const pageAttiva = document.querySelector('.page.show');
-        if (pageAttiva) {
-            const id = pageAttiva.id.replace('page-', '');
-            document.dispatchEvent(new CustomEvent('pageChanged', { detail: { pageId: id } }));
+        let pageId = pageAttiva ? pageAttiva.id.replace('page-', '') : null;
+
+        // A Paesi Etnei alcune pagine sono nascoste: redirigi a Cassa
+        const HIDDEN_PE = ['prenotazioni', 'abbonamenti', 'giornalieri', 'sospesi', 'clienti', 'servizi'];
+        if (state.sedeAttiva === 'paesi-etnei' && HIDDEN_PE.includes(pageId)) {
+            goPage('cassa');
+            return;
+        }
+
+        if (pageId) {
+            document.dispatchEvent(new CustomEvent('pageChanged', { detail: { pageId } }));
         }
     });
 }
@@ -309,6 +322,11 @@ async function initFirebaseData() {
                 state.usciteDB = [];
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.usciteDB.push(d); });
             }).catch(e => { console.warn("Uscite non disponibili:", e.message); state.usciteDB = []; }),
+
+            fsGetDocs(query(fsCollection(db, "incassiManuali"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
+                state.incassiManualiDB = [];
+                snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.incassiManualiDB.push(d); });
+            }).catch(e => { console.warn("Incassi manuali non disponibili:", e.message); state.incassiManualiDB = []; }),
 
             fsGetDocs(query(fsCollection(db, "sospesi"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.localSosp = [];

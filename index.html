@@ -13,7 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="css/style.css?v=202604221826">
+<link rel="stylesheet" href="css/style.css?v=20260608">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C8A84E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260522';
+    var APP_VERSION = '20260608';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -130,6 +130,37 @@
             <div class="kpi" style="border-color:var(--yel)"><div class="kpi-label">🚗 Parcheggio Tot.</div><div class="kpi-val" id="cassaCatPar" style="color:var(--yel)">€0</div></div>
         </div>
         
+        <!-- Form Incassi Manuali (solo Paesi Etnei) -->
+        <div class="form-panel show pe-only" style="background:var(--grn1); margin-bottom:14px; border-color:var(--grn)">
+            <h3 style="font:600 13px var(--f);margin-bottom:10px">➕ Registra Incasso Giornaliero</h3>
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                <div class="ff" style="width:170px"><label>Categoria *</label>
+                    <select id="imCategoria">
+                        <option value="SELF_SERVICE">🚿 Self-Service</option>
+                        <option value="LAVAGGIO_MANO">🧽 Lavaggio a Mano</option>
+                    </select>
+                </div>
+                <div class="ff" style="width:120px"><label>Metodo *</label>
+                    <select id="imMetodo">
+                        <option value="CONTANTI">CONTANTI</option>
+                        <option value="POS">POS</option>
+                    </select>
+                </div>
+                <div class="ff" style="width:110px"><label>Importo € *</label><input id="imImporto" type="number" step="0.01" placeholder="0,00"></div>
+                <button class="btn btn-primary" id="imAddBtn" style="height:37px;padding:0 20px">Aggiungi</button>
+            </div>
+        </div>
+
+        <div class="pe-only" style="margin-bottom:20px">
+            <div style="margin-top:6px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Incassi di Giornata</div>
+            <div class="tbl-wrap">
+                <table class="tbl">
+                    <thead><tr><th style="width:70px">Orario</th><th>Categoria</th><th style="width:100px">Metodo</th><th style="width:90px">Importo</th><th style="width:70px">Azioni</th></tr></thead>
+                    <tbody id="imTb"></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="form-panel show" style="background:var(--bg4); margin-bottom:20px">
             <h3 style="font:600 13px var(--f);margin-bottom:10px">➖ Registra Nuova Uscita (Spesa)</h3>
             <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -620,7 +651,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260527a"></script>
+<script type="module" src="js/main.js?v=20260608"></script>
 
 </body>
 </html>

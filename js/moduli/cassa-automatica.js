@@ -107,8 +107,8 @@ async function bridge(path, opts = {}) {
  *                        status ∈ completed | partial | deleted | returned | error | timeout
  */
 export async function avviaPagamento(importoCent, idPrenotazione, cb) {
-    if (!state.cassaAuto.enabled) {
-        cb({ status: 'error', error: 'Cassa automatica disabilitata' });
+    if (!state.cassaAuto.enabled || state.sedeAttiva === 'paesi-etnei') {
+        cb({ status: 'error', error: 'Cassa automatica non disponibile per questa sede' });
         return;
     }
     importoCent = Math.round(Number(importoCent) || 0);
