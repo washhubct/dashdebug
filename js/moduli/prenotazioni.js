@@ -6,6 +6,7 @@ import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
 import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automatica.js';
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
+import { confermaReferral, rollbackReferral } from './referral-confirm.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -342,6 +343,15 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         if (prezzoFinaleStr !== entry.prezzo) upd.prezzo = prezzoFinaleStr;
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), upd);
         Object.assign(entry, upd);
+
+        // Conferma referral (no-op se assente o già confermato)
+        if (entry.referral && entry.referralConfermato !== true) {
+            await confermaReferral(entry);
+            try {
+                await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { referralConfermato: true });
+            } catch (e) { console.warn('referralConfermato flag fail:', e?.message); }
+        }
+
         renderPren();
         showThankYouToast(entry.cliente, pNum(prezzoFinaleStr));
     } catch(e) { alert("Errore Cloud"); }
@@ -353,6 +363,15 @@ async function unmarkPaid(date, pid) {
     try {
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { saldato: '', saldo: '' });
         entry.saldato = ''; entry.saldo = '';
+
+        // Rollback referral se la prenotazione era stata confermata
+        if (entry.referral && entry.referralConfermato === true) {
+            await rollbackReferral(entry);
+            try {
+                await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { referralConfermato: false });
+            } catch (e) { console.warn('referralConfermato rollback fail:', e?.message); }
+        }
+
         renderPren();
     } catch(e) { alert("Errore Cloud"); }
 }

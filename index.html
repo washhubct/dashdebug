@@ -13,7 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="css/style.css?v=20260608e">
+<link rel="stylesheet" href="css/style.css?v=20260609">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C8A84E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260608e';
+    var APP_VERSION = '20260609';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -642,8 +642,8 @@
 <div class="kpis" id="refKpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:18px"></div>
 <div class="tbl-wrap">
 <table class="tbl">
-<thead><tr><th>Codice</th><th>Telefono titolare</th><th>Referral totali</th><th>In attesa</th></tr></thead>
-<tbody id="refTb"><tr><td colspan="4" class="empty">Carica per vedere i dati</td></tr></tbody>
+<thead><tr><th>Codice</th><th>Telefono titolare</th><th>Referral totali</th><th>Confermati</th><th>In attesa</th></tr></thead>
+<tbody id="refTb"><tr><td colspan="5" class="empty">Carica per vedere i dati</td></tr></tbody>
 </table>
 </div>
 </div>
@@ -651,7 +651,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260608e"></script>
+<script type="module" src="js/main.js?v=20260609"></script>
 
 </body>
 </html>
