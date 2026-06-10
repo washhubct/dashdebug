@@ -133,7 +133,13 @@ body[data-sede="paesi-etnei"] #page-sospesi,
 body[data-sede="paesi-etnei"] #nav-clienti,
 body[data-sede="paesi-etnei"] #page-clienti,
 body[data-sede="paesi-etnei"] #nav-servizi,
-body[data-sede="paesi-etnei"] #page-servizi { display: none !important; }
+body[data-sede="paesi-etnei"] #page-servizi,
+body[data-sede="paesi-etnei"] #nav-marketing,
+body[data-sede="paesi-etnei"] #page-marketing,
+body[data-sede="paesi-etnei"] #nav-referral,
+body[data-sede="paesi-etnei"] #page-referral,
+body[data-sede="paesi-etnei"] #nav-vouchers,
+body[data-sede="paesi-etnei"] #page-vouchers { display: none !important; }
 
 /* Sede Paesi Etnei: mostra solo il form incassi manuali nella pagina Cassa */
 body[data-sede="paesi-etnei"] .pe-only { display: block !important; }

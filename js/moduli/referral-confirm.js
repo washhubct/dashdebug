@@ -8,6 +8,7 @@
 
 import { db, fsDoc } from '../firebase-config.js';
 import { setDoc, increment, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+import { creaVoucherReferral } from './vouchers.js';
 
 function getCode(entry) {
     const raw = entry?.referral;
@@ -29,6 +30,14 @@ export async function confermaReferral(entry) {
         entry.referralConfermato = true;
     } catch (e) {
         console.warn('[referral-confirm] errore conferma', code, e?.message);
+    }
+
+    // Genera il voucher per il referrer (best-effort, non blocca il saldo)
+    try {
+        const codiceVoucher = await creaVoucherReferral(entry);
+        if (codiceVoucher) entry.voucherEmesso = codiceVoucher;
+    } catch (e) {
+        console.warn('[referral-confirm] errore voucher', code, e?.message);
     }
 }
 

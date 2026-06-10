@@ -21,6 +21,7 @@ import { initServiziAggiuntivi } from './moduli/servizi-aggiuntivi.js';
 import { initMarketing, renderMarketing } from './moduli/marketing.js';
 import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
 import { initIncassiManuali } from './moduli/incassi-manuali.js';
+import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -36,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCassaStato();
     initMarketing();
     initReferralDash();
+    initVouchers();
     initIncassiManuali();
     initDashDates();
 });
@@ -126,7 +128,7 @@ function initSelezioneSedeUI() {
         let pageId = pageAttiva ? pageAttiva.id.replace('page-', '') : null;
 
         // A Paesi Etnei alcune pagine sono nascoste: redirigi a Cassa
-        const HIDDEN_PE = ['prenotazioni', 'abbonamenti', 'giornalieri', 'sospesi', 'clienti', 'servizi'];
+        const HIDDEN_PE = ['prenotazioni', 'abbonamenti', 'giornalieri', 'sospesi', 'clienti', 'servizi', 'marketing', 'referral', 'vouchers'];
         if (state.sedeAttiva === 'paesi-etnei' && HIDDEN_PE.includes(pageId)) {
             goPage('cassa');
             return;
@@ -151,6 +153,7 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'cancellazioni') renderCancellazioni();
     if(id === 'marketing') renderMarketing();
     if(id === 'referral') renderReferralDash();
+    if(id === 'vouchers') renderVouchers();
 });
 
 function initDashDates() {

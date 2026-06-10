@@ -13,7 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="css/style.css?v=20260609">
+<link rel="stylesheet" href="css/style.css?v=20260610">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#C8A84E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260609';
+    var APP_VERSION = '20260610';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -96,6 +96,7 @@
 <div class="sb-section admin-only">Marketing</div>
 <a class="sb-item admin-only" id="nav-marketing"><span class="icon">📲</span>SMS Reminder</a>
 <a class="sb-item admin-only" id="nav-referral"><span class="icon">🤝</span>Porta un Amico</a>
+<a class="sb-item admin-only" id="nav-vouchers"><span class="icon">🎫</span>Voucher Sconto</a>
 </nav>
 <div class="sb-footer">
 <div class="sb-user"><div class="sb-avatar" id="sbAvatar">A</div><div class="sb-user-info"><div class="name" id="sbName">Admin</div><div class="role" id="sbRole">Amministratore</div></div></div>
@@ -649,9 +650,37 @@
 </div>
 </div>
 
+<div class="page" id="page-vouchers">
+<div class="sec">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+<div>
+  <h3 style="font:700 15px var(--f);margin-bottom:3px">🎫 Voucher Sconto</h3>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Buoni da €5 emessi automaticamente quando un referral viene confermato (lavaggio amico saldato).</p>
+</div>
+<button class="btn" id="vchRefreshBtn">↻ Aggiorna</button>
+</div>
+<div class="kpis" id="vchKpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:18px"></div>
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+  <input class="search-box" id="vchSearch" placeholder="Cerca codice / telefono / referral..." style="flex:1;min-width:200px">
+  <select id="vchFilter" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--mono);outline:0;">
+    <option value="tutti">Tutti</option>
+    <option value="attivo">Solo Attivi</option>
+    <option value="utilizzato">Solo Utilizzati</option>
+    <option value="scaduto">Solo Scaduti</option>
+  </select>
+</div>
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Codice</th><th>Valore</th><th>Telefono</th><th>Da referral</th><th>Stato</th><th>Emesso</th><th>Scade</th></tr></thead>
+<tbody id="vchTb"><tr><td colspan="7" class="empty">Carica per vedere i dati</td></tr></tbody>
+</table>
+</div>
+</div>
+</div>
+
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260609"></script>
+<script type="module" src="js/main.js?v=20260610"></script>
 
 </body>
 </html>

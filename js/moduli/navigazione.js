@@ -98,7 +98,8 @@ export function goPage(id) {
         cancellazioni: ['🗑️', 'Registro Cancellazioni'],
         servizi: ['⭐', 'Servizi Aggiuntivi'],
         marketing: ['📲', 'SMS Reminder'],
-        referral: ['🤝', 'Porta un Amico']
+        referral: ['🤝', 'Porta un Amico'],
+        vouchers: ['🎫', 'Voucher Sconto']
     };
     const t = titles[id] || ['', ''];
 

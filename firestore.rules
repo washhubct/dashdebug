@@ -215,6 +215,19 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // VOUCHERS — buoni sconto referral
+    // read pubblico per validazione codice in /prenota.
+    // create/update solo admin (emissione e marcatura "utilizzato").
+    // list solo admin (sicurezza: niente enumerazione voucher altrui).
+    // ═══════════════════════════════════════════════════════════
+    match /vouchers/{id} {
+      allow get:            if true;
+      allow list:           if isAdmin();
+      allow create, update: if isAdmin();
+      allow delete:         if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // SMS LOG — scritto solo da Cloud Function (Admin SDK)
     // ═══════════════════════════════════════════════════════════
     match /smsLog/{doc} {
