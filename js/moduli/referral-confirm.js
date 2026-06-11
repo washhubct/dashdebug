@@ -56,3 +56,19 @@ export async function rollbackReferral(entry) {
         console.warn('[referral-confirm] errore rollback', code, e?.message);
     }
 }
+
+// Usato quando una prenotazione con referral viene cancellata PRIMA del saldo.
+// Decrementa totale e inAttesa (annulla l'incremento fatto dal sito al booking).
+export async function rollbackReferralNonConfermato(entry) {
+    const code = getCode(entry);
+    if (!code) return;
+    if (entry.referralConfermato === true) return; // se confermato, NON rollback (vedi delPren)
+    try {
+        await setDoc(fsDoc(db, 'referral', code), {
+            totale: increment(-1),
+            inAttesa: increment(-1)
+        }, { merge: true });
+    } catch (e) {
+        console.warn('[referral-confirm] errore rollback non-confermato', code, e?.message);
+    }
+}

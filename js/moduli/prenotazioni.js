@@ -6,9 +6,13 @@ import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
 import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automatica.js';
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
-import { confermaReferral, rollbackReferral } from './referral-confirm.js';
+import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato } from './referral-confirm.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
+
+// Sconto applicato al cliente che USA un codice referral altrui.
+// Cambiare qui se in futuro cambia la promo.
+const SCONTO_REFERRAL_EUR = 5;
 
 // Ritorna true se il telefono ha almeno 9 cifre (ignora spazi, +, -)
 function validaTelefono(tel) {
@@ -93,16 +97,32 @@ export function renderPren() {
                               <button class="btn pay-btn" data-id="${e._pid}" data-mod="POS">💳</button>
                               <button class="btn pay-btn" data-id="${e._pid}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>`;
 
+                // Badge referral: presente sulla prenotazione (dal sito) ma non ancora scontato
+                let refBadge = '';
+                if (e.referral) {
+                    if (e.scontoReferralApplicato === true) {
+                        refBadge = ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;
+                    } else {
+                        refBadge = ` <span class="badge a" title="Codice amico ${esc(e.referral)} — sconto €5 verrà applicato all'inserimento prezzo" style="font-size:9px">REF ${esc(e.referral)} −€5</span>`;
+                    }
+                }
+
+                // Cella prezzo: se sconto applicato, mostra prezzo originale barrato sotto
+                let prezzoCellHtml = prezzo ? '€' + prezzo : '—';
+                if (e.scontoReferralApplicato === true && e.prezzoOrigine) {
+                    prezzoCellHtml = `€${prezzo}<br><span style="font:400 9px var(--mono);color:var(--tx3);text-decoration:line-through">€${pNum(e.prezzoOrigine)}</span>`;
+                }
+
                 html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
-                    <td><strong>${esc(e.cliente || '')}</strong></td>
+                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}</td>
                     <td>${esc(e.vettura || '')}</td>
-                    <td style="font:500 12px var(--mono)">${prezzo ? '€' + prezzo : '—'}</td>
+                    <td style="font:500 12px var(--mono)">${prezzoCellHtml}</td>
                     <td>${pagHtml}</td>
                     <td>${e.saldo ? `<span class="badge ${e.saldo === 'SOSPESO' ? 'a' : 'b'}">${esc(e.saldo)}</span>` : '—'}</td>
                     <td style="font-size:11px;color:var(--tx2)">${esc(e.note || '')}</td>
                     <td>
-                        <button class="act-btn edit-pren" data-id="${e._pid}">✎</button> 
+                        <button class="act-btn edit-pren" data-id="${e._pid}">✎</button>
                         ${e.saldato === 'SI' ? `<button class="act-btn undo-pay" data-id="${e._pid}">↩</button>` : `<button class="act-btn del del-pren" data-id="${e._pid}">✕</button>`}
                     </td></tr>`;
             });
@@ -328,6 +348,14 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         extraMeta.prezzoLavaggio = entry.prezzo;
     }
 
+    // Sconto referral automatico (no-op se già applicato o assente)
+    const sc = applicaScontoReferral(entry, prezzoFinaleStr);
+    if (sc.meta) {
+        prezzoFinaleStr = String(sc.prezzoFinale);
+        Object.assign(extraMeta, sc.meta);
+        alert(`💰 Sconto referral applicato\n\nCodice amico: ${entry.referral}\nPrezzo: €${sc.meta.prezzoOrigine}\nSconto: −€${sc.meta.scontoReferral}\nDa incassare: €${sc.prezzoFinale}`);
+    }
+
     if (mod === 'CONTANTI') {
         const prezzoEur = pNum(prezzoFinaleStr);
         const r = await gestisciCassaContanti(prezzoEur, pid);
@@ -384,6 +412,22 @@ async function delPren(date, pid) {
 
     try {
         await logDelete('PRENOTAZIONI', `${entry.cliente} - ${entry.vettura}`, motivazione);
+
+        // Rollback contatori referral sulla prenotazione cancellata.
+        // - non confermata → decrement totale + inAttesa
+        // - confermata     → log warning, NON tocco (il voucher è già stato emesso
+        //                    e il referrer potrebbe averlo già usato; l'admin
+        //                    può eventualmente invalidare a mano dal pannello Voucher).
+        if (entry.referral) {
+            if (entry.referralConfermato === true) {
+                console.warn('[delPren] prenotazione confermata cancellata, voucher gia\' emesso non viene revocato:', entry.referral);
+            } else {
+                try {
+                    await rollbackReferralNonConfermato(entry);
+                } catch (e) { console.warn('[delPren] rollback referral fail:', e?.message); }
+            }
+        }
+
         await fsDeleteDoc(fsDoc(db, "prenotazioni", pid));
         state.prenDB[date] = state.prenDB[date].filter(e => e._pid !== pid);
         renderPren();
@@ -416,7 +460,16 @@ async function editPren(date, pid) {
         prezzo: prezzoTrim,
         note: nuoveNote.trim()
     };
-    
+
+    // Sconto referral automatico (idempotente).
+    // Si applica solo se la prenotazione ha un codice referral e non è già stato applicato.
+    const sc = applicaScontoReferral(entry, prezzoTrim);
+    if (sc.meta) {
+        updates.prezzo = String(sc.prezzoFinale);
+        Object.assign(updates, sc.meta);
+        alert(`💰 Sconto referral applicato\n\nCodice amico: ${entry.referral}\nPrezzo inserito: €${pNum(prezzoTrim)}\nSconto: −€${sc.meta.scontoReferral}\nPrezzo finale: €${sc.prezzoFinale}`);
+    }
+
     try {
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), updates);
         Object.assign(entry, updates);
@@ -428,6 +481,27 @@ function _parseIta(s) {
     if (!s) return null;
     const [d, m, y] = s.split('/');
     return y ? new Date(+y, +m - 1, +d) : null;
+}
+
+// Applica lo sconto -€5 per chi usa un codice referral altrui (best effort,
+// idempotente: se già applicato non rifa). Ritorna prezzo finale + meta da
+// salvare insieme alla prenotazione.
+function applicaScontoReferral(entry, prezzoBase) {
+    const base = pNum(prezzoBase);
+    if (!entry?.referral) return { prezzoFinale: base, meta: null };
+    if (entry.scontoReferralApplicato === true) return { prezzoFinale: base, meta: null };
+    if (base <= 0) return { prezzoFinale: base, meta: null };
+
+    const sconto = Math.min(SCONTO_REFERRAL_EUR, base);
+    const finale = Math.max(0, base - sconto);
+    return {
+        prezzoFinale: finale,
+        meta: {
+            prezzoOrigine: base,
+            scontoReferral: sconto,
+            scontoReferralApplicato: true
+        }
+    };
 }
 
 export function renderTap() {
