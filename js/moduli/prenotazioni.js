@@ -284,8 +284,24 @@ async function mostraModalServizi(date, pid) {
 
     return new Promise(resolve => {
         const base = pNum(entry.prezzo);
+        // Sconto referral: applicato se la prenotazione ha codice amico e non lo abbiamo già scontato.
+        const scontoAttivo = !!entry.referral && entry.scontoReferralApplicato !== true && base > 0;
+        const calcola = (extraSum) => {
+            const lordo = base + extraSum;
+            const sconto = scontoAttivo ? Math.min(SCONTO_REFERRAL_EUR, lordo) : 0;
+            return { lordo, sconto, netto: Math.max(0, lordo - sconto) };
+        };
+        const iniziale = calcola(0);
+
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+        const scontoRowHtml = scontoAttivo
+            ? `<div id="saScontoRow" style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:var(--amb);font:500 12px var(--f)">
+                   <span>🎁 Sconto referral (${esc(entry.referral)})</span>
+                   <span id="saSconto">−€${iniziale.sconto.toFixed(2)}</span>
+               </div>`
+            : '';
 
         overlay.innerHTML = `
             <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
@@ -302,13 +318,14 @@ async function mostraModalServizi(date, pid) {
                         </label>
                     `).join('')}
                 </div>
+                ${scontoRowHtml}
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border-radius:var(--r2);margin-bottom:14px">
                     <span style="font:500 13px var(--f);color:var(--tx2)">Totale da incassare</span>
-                    <span id="saTot" style="font:700 20px var(--f);color:var(--grn)">€${base.toFixed(2)}</span>
+                    <span id="saTot" style="font:700 20px var(--f);color:var(--grn)">€${iniziale.netto.toFixed(2)}</span>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button id="saSkip" class="btn" style="flex:1;color:var(--tx2)">Solo lavaggio</button>
-                    <button id="saOk" class="btn btn-primary" style="flex:2;font:600 14px var(--f)">Incassa €${base.toFixed(2)}</button>
+                    <button id="saOk" class="btn btn-primary" style="flex:2;font:600 14px var(--f)">Incassa €${iniziale.netto.toFixed(2)}</button>
                 </div>
             </div>`;
 
@@ -316,10 +333,13 @@ async function mostraModalServizi(date, pid) {
 
         overlay.querySelectorAll('.sa-item').forEach(chk => {
             chk.addEventListener('change', () => {
-                let tot = base;
-                overlay.querySelectorAll('.sa-item:checked').forEach(c => tot += parseFloat(c.dataset.prezzo));
-                overlay.querySelector('#saTot').textContent = '€' + tot.toFixed(2);
-                overlay.querySelector('#saOk').textContent = 'Incassa €' + tot.toFixed(2);
+                let extraSum = 0;
+                overlay.querySelectorAll('.sa-item:checked').forEach(c => extraSum += parseFloat(c.dataset.prezzo));
+                const r = calcola(extraSum);
+                overlay.querySelector('#saTot').textContent = '€' + r.netto.toFixed(2);
+                overlay.querySelector('#saOk').textContent = 'Incassa €' + r.netto.toFixed(2);
+                const ss = overlay.querySelector('#saSconto');
+                if (ss) ss.textContent = '−€' + r.sconto.toFixed(2);
             });
         });
 
@@ -348,12 +368,12 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         extraMeta.prezzoLavaggio = entry.prezzo;
     }
 
-    // Sconto referral automatico (no-op se già applicato o assente)
+    // Sconto referral automatico (no-op se già applicato o assente).
+    // L'operatore l'ha già visto nel modal "Servizi aggiuntivi", non rialertiamo.
     const sc = applicaScontoReferral(entry, prezzoFinaleStr);
     if (sc.meta) {
         prezzoFinaleStr = String(sc.prezzoFinale);
         Object.assign(extraMeta, sc.meta);
-        alert(`💰 Sconto referral applicato\n\nCodice amico: ${entry.referral}\nPrezzo: €${sc.meta.prezzoOrigine}\nSconto: −€${sc.meta.scontoReferral}\nDa incassare: €${sc.prezzoFinale}`);
     }
 
     if (mod === 'CONTANTI') {
