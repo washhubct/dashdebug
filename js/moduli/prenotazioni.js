@@ -7,6 +7,7 @@ import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirm
 import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automatica.js';
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato } from './referral-confirm.js';
+import { marcaVoucherUtilizzato, getVoucher } from './vouchers.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -104,6 +105,14 @@ export function renderPren() {
                         refBadge = ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;
                     } else {
                         refBadge = ` <span class="badge a" title="Codice amico ${esc(e.referral)} — sconto €5 verrà applicato all'inserimento prezzo" style="font-size:9px">REF ${esc(e.referral)} −€5</span>`;
+                    }
+                }
+                // Badge voucher
+                if (e.voucherCodice) {
+                    if (e.voucherApplicato === true) {
+                        refBadge += ` <span class="badge g" title="Voucher ${esc(e.voucherCodice)} applicato" style="font-size:9px">🎫 −€${e.scontoVoucher || 5} ✓</span>`;
+                    } else {
+                        refBadge += ` <span class="badge b" title="Voucher ${esc(e.voucherCodice)} pronto al pagamento" style="font-size:9px">🎫 ${esc(e.voucherCodice)}</span>`;
                     }
                 }
 
@@ -282,24 +291,43 @@ async function mostraModalServizi(date, pid) {
     const servizi = await loadServiziAttivi();
     if (servizi.length === 0) return [];
 
+    // Lookup async voucher (valore reale) prima di disegnare il modal
+    let voucherInfo = null;
+    if (entry.voucherCodice && entry.voucherApplicato !== true) {
+        const v = await getVoucher(entry.voucherCodice);
+        if (v && v.stato === 'attivo' && (!v.dataScadenza || v.dataScadenza >= Date.now())) {
+            voucherInfo = { codice: entry.voucherCodice, valore: pNum(v.valore) };
+        }
+    }
+
     return new Promise(resolve => {
         const base = pNum(entry.prezzo);
         // Sconto referral: applicato se la prenotazione ha codice amico e non lo abbiamo già scontato.
-        const scontoAttivo = !!entry.referral && entry.scontoReferralApplicato !== true && base > 0;
+        const scontoRefAttivo = !!entry.referral && entry.scontoReferralApplicato !== true && base > 0;
         const calcola = (extraSum) => {
             const lordo = base + extraSum;
-            const sconto = scontoAttivo ? Math.min(SCONTO_REFERRAL_EUR, lordo) : 0;
-            return { lordo, sconto, netto: Math.max(0, lordo - sconto) };
+            let netto = lordo;
+            const scontoRef = scontoRefAttivo ? Math.min(SCONTO_REFERRAL_EUR, netto) : 0;
+            netto = Math.max(0, netto - scontoRef);
+            const scontoVoucher = voucherInfo ? Math.min(voucherInfo.valore, netto) : 0;
+            netto = Math.max(0, netto - scontoVoucher);
+            return { lordo, scontoRef, scontoVoucher, netto };
         };
         const iniziale = calcola(0);
 
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
 
-        const scontoRowHtml = scontoAttivo
-            ? `<div id="saScontoRow" style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:var(--amb);font:500 12px var(--f)">
+        const scontoRefRowHtml = scontoRefAttivo
+            ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:var(--amb);font:500 12px var(--f)">
                    <span>🎁 Sconto referral (${esc(entry.referral)})</span>
-                   <span id="saSconto">−€${iniziale.sconto.toFixed(2)}</span>
+                   <span id="saScontoRef">−€${iniziale.scontoRef.toFixed(2)}</span>
+               </div>`
+            : '';
+        const scontoVoucherRowHtml = voucherInfo
+            ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:var(--grn);font:500 12px var(--f)">
+                   <span>🎫 Voucher (${esc(voucherInfo.codice)})</span>
+                   <span id="saScontoVoucher">−€${iniziale.scontoVoucher.toFixed(2)}</span>
                </div>`
             : '';
 
@@ -318,7 +346,8 @@ async function mostraModalServizi(date, pid) {
                         </label>
                     `).join('')}
                 </div>
-                ${scontoRowHtml}
+                ${scontoRefRowHtml}
+                ${scontoVoucherRowHtml}
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border-radius:var(--r2);margin-bottom:14px">
                     <span style="font:500 13px var(--f);color:var(--tx2)">Totale da incassare</span>
                     <span id="saTot" style="font:700 20px var(--f);color:var(--grn)">€${iniziale.netto.toFixed(2)}</span>
@@ -338,8 +367,10 @@ async function mostraModalServizi(date, pid) {
                 const r = calcola(extraSum);
                 overlay.querySelector('#saTot').textContent = '€' + r.netto.toFixed(2);
                 overlay.querySelector('#saOk').textContent = 'Incassa €' + r.netto.toFixed(2);
-                const ss = overlay.querySelector('#saSconto');
-                if (ss) ss.textContent = '−€' + r.sconto.toFixed(2);
+                const sr = overlay.querySelector('#saScontoRef');
+                if (sr) sr.textContent = '−€' + r.scontoRef.toFixed(2);
+                const sv = overlay.querySelector('#saScontoVoucher');
+                if (sv) sv.textContent = '−€' + r.scontoVoucher.toFixed(2);
             });
         });
 
@@ -375,6 +406,12 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         prezzoFinaleStr = String(sc.prezzoFinale);
         Object.assign(extraMeta, sc.meta);
     }
+    // Sconto voucher (cumulativo con il referral)
+    const sv = await applicaScontoVoucher(entry, prezzoFinaleStr);
+    if (sv.meta) {
+        prezzoFinaleStr = String(sv.prezzoFinale);
+        Object.assign(extraMeta, sv.meta);
+    }
 
     if (mod === 'CONTANTI') {
         const prezzoEur = pNum(prezzoFinaleStr);
@@ -398,6 +435,17 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
             try {
                 await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { referralConfermato: true });
             } catch (e) { console.warn('referralConfermato flag fail:', e?.message); }
+        }
+
+        // Marca voucher come utilizzato e rimuovi da indice referral
+        if (entry.voucherCodice && entry.voucherApplicato === true && entry.voucherSegnato !== true) {
+            const ok = await marcaVoucherUtilizzato(entry.voucherCodice, pid);
+            if (ok) {
+                try {
+                    await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { voucherSegnato: true });
+                    entry.voucherSegnato = true;
+                } catch (e) { console.warn('voucherSegnato flag fail:', e?.message); }
+            }
         }
 
         renderPren();
@@ -520,6 +568,31 @@ function applicaScontoReferral(entry, prezzoBase) {
             prezzoOrigine: base,
             scontoReferral: sconto,
             scontoReferralApplicato: true
+        }
+    };
+}
+
+// Applica lo sconto del voucher €5 (best effort, idempotente).
+// Async perché deve fetchare /vouchers/{codice} per leggere il valore.
+async function applicaScontoVoucher(entry, prezzoBase) {
+    const base = pNum(prezzoBase);
+    if (!entry?.voucherCodice) return { prezzoFinale: base, meta: null };
+    if (entry.voucherApplicato === true) return { prezzoFinale: base, meta: null };
+    if (base <= 0) return { prezzoFinale: base, meta: null };
+
+    const v = await getVoucher(entry.voucherCodice);
+    if (!v) return { prezzoFinale: base, meta: null };
+    if (v.stato !== 'attivo') return { prezzoFinale: base, meta: null };
+    if (v.dataScadenza && v.dataScadenza < Date.now()) return { prezzoFinale: base, meta: null };
+
+    const valoreV = pNum(v.valore);
+    const sconto = Math.min(valoreV, base);
+    const finale = Math.max(0, base - sconto);
+    return {
+        prezzoFinale: finale,
+        meta: {
+            scontoVoucher: sconto,
+            voucherApplicato: true
         }
     };
 }

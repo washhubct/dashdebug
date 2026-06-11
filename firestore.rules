@@ -221,10 +221,13 @@ service cloud.firestore {
     // list solo admin (sicurezza: niente enumerazione voucher altrui).
     // ═══════════════════════════════════════════════════════════
     match /vouchers/{id} {
-      allow get:            if true;
-      allow list:           if isAdmin();
-      allow create, update: if isAdmin();
-      allow delete:         if isAdmin();
+      allow get:    if true;
+      allow list:   if isAdmin();
+      allow create: if isAdmin();
+      // Update consentito a operatori della stessa sede (per marcare "utilizzato"
+      // al saldo della prenotazione di riscatto).
+      allow update: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow delete: if isAdmin();
     }
 
     // ═══════════════════════════════════════════════════════════

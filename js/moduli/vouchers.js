@@ -18,7 +18,7 @@
 //   - list/create/update sono ammessi solo ad admin (rules)
 
 import { db, fsCollection, fsGetDoc, fsGetDocs, fsDoc } from '../firebase-config.js';
-import { setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+import { setDoc, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 import { state } from '../state.js';
 
 export const VOUCHER_VALORE_DEFAULT = 5;
@@ -97,10 +97,60 @@ export async function creaVoucherReferral(prenEntry) {
 
     try {
         await setDoc(fsDoc(db, 'vouchers', codice), voucher);
+        // Aggiungi anche all'indice pubblico /referral/{code}.vouchersAttivi[]
+        // così il sito può listarli al lookup del titolare (no rules nuove).
+        try {
+            await setDoc(fsDoc(db, 'referral', referralCode), { vouchersAttivi: arrayUnion(codice) }, { merge: true });
+        } catch (e) {
+            console.warn('[vouchers] arrayUnion referral fail', e?.message);
+        }
         console.log('[vouchers] emesso', codice, 'per', telefonoRef, 'da referral', referralCode);
         return codice;
     } catch (e) {
         console.warn('[vouchers] errore creazione', codice, e?.message);
+        return null;
+    }
+}
+
+/**
+ * Marca un voucher come "utilizzato" e lo rimuove dall'indice del referral.
+ * Idempotente: se già utilizzato, non fa nulla.
+ */
+export async function marcaVoucherUtilizzato(codice, prenPid) {
+    if (!codice) return false;
+    try {
+        const snap = await fsGetDoc(fsDoc(db, 'vouchers', codice));
+        if (!snap.exists()) return false;
+        const v = snap.data();
+        if (v.stato === 'utilizzato') return true;
+        await setDoc(fsDoc(db, 'vouchers', codice), {
+            stato: 'utilizzato',
+            dataUso: serverTimestamp(),
+            dataUsoMs: Date.now(),
+            prenotazioneUso: prenPid || null
+        }, { merge: true });
+        if (v.referralCode) {
+            try {
+                await setDoc(fsDoc(db, 'referral', v.referralCode), { vouchersAttivi: arrayRemove(codice) }, { merge: true });
+            } catch (e) { console.warn('[vouchers] arrayRemove referral fail', e?.message); }
+        }
+        return true;
+    } catch (e) {
+        console.warn('[vouchers] marcaUtilizzato fail', codice, e?.message);
+        return false;
+    }
+}
+
+/**
+ * Lookup pubblico singolo voucher per codice. Usato dal sito al riscatto.
+ */
+export async function getVoucher(codice) {
+    if (!codice) return null;
+    try {
+        const snap = await fsGetDoc(fsDoc(db, 'vouchers', codice));
+        if (!snap.exists()) return null;
+        return { _id: snap.id, ...snap.data() };
+    } catch {
         return null;
     }
 }
@@ -186,7 +236,7 @@ function renderVouchersList() {
     righe.sort((a, b) => (b.dataEmissioneMs || 0) - (a.dataEmissioneMs || 0));
 
     if (!righe.length) {
-        tb.innerHTML = '<tr><td colspan="7" class="empty">Nessun voucher</td></tr>';
+        tb.innerHTML = '<tr><td colspan="8" class="empty">Nessun voucher</td></tr>';
         return;
     }
 
@@ -196,15 +246,33 @@ function renderVouchersList() {
                      : s === 'utilizzato' ? '<span class="badge b">USATO</span>'
                      : '<span class="badge" style="background:var(--bg4);color:var(--tx3)">SCADUTO</span>';
 
-    tb.innerHTML = righe.map(v => `
+    tb.innerHTML = righe.map(v => {
+        const stato = statoEffettivo(v);
+        const tel = v.telefono || '';
+        // Bottone WhatsApp solo per voucher attivi con telefono → notifica manuale rapida
+        const waBtn = (stato === 'attivo' && tel.length >= 9)
+            ? `<a class="act-btn" target="_blank" rel="noopener" title="Avvisa il cliente via WhatsApp" style="text-decoration:none" href="${waLink(tel, v._id, +v.valore || 0)}">📱</a>`
+            : '';
+        return `
         <tr>
             <td><code style="font:700 12px var(--mono);color:var(--gold)">${v._id}</code></td>
             <td style="font-weight:600">${fEur(+v.valore || 0)}</td>
-            <td>${v.telefono || '—'}</td>
+            <td>${tel || '—'}</td>
             <td><code style="font:600 11px var(--mono);color:var(--tx2)">${v.referralCode || '—'}</code></td>
-            <td>${badge(statoEffettivo(v))}</td>
+            <td>${badge(stato)}</td>
             <td style="font:400 11px var(--mono);color:var(--tx2)">${fDate(v.dataEmissioneMs)}</td>
             <td style="font:400 11px var(--mono);color:var(--tx2)">${fDate(v.dataScadenza)}</td>
+            <td>${waBtn}</td>
         </tr>
-    `).join('');
+        `;
+    }).join('');
+}
+
+// wa.me link con messaggio pre-compilato. Telefono è di norma 9 cifre IT;
+// se non inizia con prefisso lo prependiamo (+39).
+function waLink(tel, codice, valore) {
+    let n = String(tel).replace(/\D/g, '');
+    if (n.length === 9 || n.length === 10) n = '39' + n;
+    const msg = encodeURIComponent(`Ciao! 🎉 Hai un voucher WASH HUB da €${valore}: ${codice}\n\nUsalo alla prossima prenotazione su https://wash-hub.it/prenota — lo applichiamo in automatico.`);
+    return `https://wa.me/${n}?text=${msg}`;
 }
