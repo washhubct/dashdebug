@@ -510,13 +510,11 @@ function _mostraModalRinnovo(r, oldDate, newDate) {
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px">
                     <button id="_rnPaga" class="btn btn-primary">💰 Incassa €${imp}</button>
-                    <button id="_rnNoPaga" class="btn" style="color:var(--tx2)">↻ Rinnova senza incassare</button>
                     <button id="_rnAnn" class="btn" style="color:var(--tx3);font-size:11px">Annulla</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
         overlay.querySelector('#_rnPaga').addEventListener('click', () => { overlay.remove(); resolve({ pagare: true }); });
-        overlay.querySelector('#_rnNoPaga').addEventListener('click', () => { overlay.remove(); resolve({ pagare: false }); });
         overlay.querySelector('#_rnAnn').addEventListener('click', () => { overlay.remove(); resolve(null); });
     });
 }
