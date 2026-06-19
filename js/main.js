@@ -523,6 +523,7 @@ async function autoChiusuraGiornate() {
             if (uscPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
 
             for (const riga of righe) {
+                riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
                 await fsAddDoc(fsCollection(db, "primaNota"), riga);
             }
 
@@ -645,6 +646,7 @@ async function checkChiusuraOre20() {
         if (uscPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
 
         for (const riga of righe) {
+            riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
             await fsAddDoc(fsCollection(db, "primaNota"), riga);
         }
 
