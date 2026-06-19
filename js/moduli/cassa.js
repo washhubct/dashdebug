@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderIncassiManuali } from './incassi-manuali.js';
+import { isAbbonamentoPN } from './report.js';
 
 export function initCassa() {
     const cassaData = document.getElementById('cassaData');
@@ -87,16 +88,17 @@ export function renderCassa() {
         }
     });
 
-    // 4. Abbonamenti (Parcheggio Abbonati)
-    state.localAbb.forEach(a => {
-        if(a.PAGAMENTO === 'SI' && a['DATA PAGAMENTO'] === dIta) {
-            let imp = pNum(a.IMPORTO);
-            let mod = (a["MODALITA'"] || '').toUpperCase();
-            if(mod === 'CONTANTI') eC += imp;
-            else if(mod === 'POS') eP += imp;
-            else if(mod === 'BONIFICO') eB += imp;
-            cParAbb += imp;
-        }
+    // 4. Abbonamenti (Parcheggio Abbonati) — da PRIMA NOTA (registro immutabile),
+    // così l'incasso del giorno resta anche se l'abbonamento viene poi cancellato/rinnovato.
+    (state.rawData?.primaNota?.rows || []).forEach(r => {
+        if(!isAbbonamentoPN(r)) return;
+        if((r.dataISO || '') !== dStr && String(r.DATA || '') !== dIta) return;
+        let imp = pNum(r.ENTRATA || r.Entrata || 0);
+        let mod = (r["MODALITA'"] || r.Modalita || '').toUpperCase();
+        if(mod === 'CONTANTI') eC += imp;
+        else if(mod === 'POS') eP += imp;
+        else if(mod === 'BONIFICO') eB += imp;
+        cParAbb += imp;
     });
 
     // 5. Sospesi Saldati (pagati oggi)

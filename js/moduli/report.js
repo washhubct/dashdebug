@@ -47,6 +47,17 @@ function inRange(dateStr, from, to) {
 // tutto ciò che è prima è storico irrilevante (record di test o di altre sedi).
 const PAESI_ETNEI_START = '2026-05-22';
 
+// Riga di Prima Nota relativa a un ABBONAMENTO parcheggio (non al parcheggio ad ore).
+// Dentro CENTRO DI COSTO='PARCHEGGIO' convivono abbonamenti (descr. "ABBONAMENTO"/"RINNOVO ABB.")
+// e parcheggio ad ore (cliente "AD ORE"): tutto ciò che NON è "AD ORE" è un abbonamento.
+export function isAbbonamentoPN(r) {
+    if (getCentroCosto(r).toUpperCase() !== 'PARCHEGGIO') return false;
+    const cli = String(r['PRIMANOTA CLIENTI/FORNITORI'] || '').toUpperCase();
+    const desc = getDescrizione(r);
+    if (cli === 'AD ORE' || desc.includes('AD ORE')) return false; // parcheggio ad ore
+    return getEntrata(r) > 0;
+}
+
 function calcolaDatiOperativi(fromStr, toStr) {
     // Cutoff storico solo a Paesi Etnei: il periodo non può iniziare prima del 22/05/2026
     if (state.sedeAttiva === 'paesi-etnei' && fromStr < PAESI_ETNEI_START) {
@@ -87,14 +98,17 @@ function calcolaDatiOperativi(fromStr, toStr) {
     });
 
     // --- PARCHEGGIO ABBONAMENTI ---
+    // Letto dalla PRIMA NOTA (registro immutabile), NON da localAbb: così l'incasso resta
+    // nel report anche se l'abbonamento viene poi cancellato o rinnovato (ogni pagamento
+    // è una riga separata in primaNota e non viene mai riscritto).
     let abbContanti = 0, abbPos = 0, abbBonifico = 0, numAbb = 0;
-    (state.localAbb || []).forEach(a => {
-        if (a.PAGAMENTO !== 'SI') return;
-        const dataPag = a['DATA PAGAMENTO'] || '';
-        if (!inRange(dataPag, from, to)) return;
+    (state.rawData?.primaNota?.rows || []).forEach(r => {
+        if (!isAbbonamentoPN(r)) return;
+        const dt = getDataRecord(r);
+        if (!dt || dt < from || dt > to) return;
         numAbb++;
-        const imp = pNum(a.IMPORTO);
-        const mod = (a["MODALITA'"] || '').toUpperCase();
+        const imp = getEntrata(r);
+        const mod = (r["MODALITA'"] || r.Modalita || '').toUpperCase();
         if (mod === 'CONTANTI') abbContanti += imp;
         else if (mod === 'POS') abbPos += imp;
         else if (mod === 'BONIFICO') abbBonifico += imp;
@@ -498,14 +512,14 @@ function renderCharts(data) {
         if (mod !== 'SOSPESO' && mod !== 'FATTURATO') byM[mk].tap += pNum(t.prezzo);
     });
 
-    // Abbonamenti per mese
-    (state.localAbb || []).forEach(a => {
-        if (a.PAGAMENTO !== 'SI' || !a['DATA PAGAMENTO']) return;
-        const dt = pDate(a['DATA PAGAMENTO']);
-        if (!dt) return;
+    // Abbonamenti per mese — da Prima Nota (coerente col calcolo dei KPI, immune a cancellazioni/rinnovi)
+    (state.rawData?.primaNota?.rows || []).forEach(r => {
+        if (!isAbbonamentoPN(r)) return;
+        const dt = getDataRecord(r);
+        if (!dt || isNaN(dt.getTime())) return;
         const mk = gMK(dt);
         if (!byM[mk]) return;
-        byM[mk].abb += pNum(a.IMPORTO);
+        byM[mk].abb += getEntrata(r);
     });
 
     // Parcheggio ore per mese

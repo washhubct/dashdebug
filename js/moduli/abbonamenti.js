@@ -231,7 +231,16 @@ async function saveAbb() {
     const pagamento = document.getElementById('fPag').value;
     const modalita = document.getElementById('fMod').value;
     const dataPag = document.getElementById('fDataPag').value;
-    
+
+    // Pagamento SI senza data → l'abbonamento sparirebbe da Report e Cassa (filtrano per DATA PAGAMENTO).
+    // Blocca e chiedi di inserirla a mano.
+    if(pagamento === 'SI' && !dataPag) {
+        msg.style.color = 'var(--red)';
+        msg.textContent = '⚠️ Pagamento = SI: inserisci a mano la Data Pagamento (senza, non compare nel report finanziario).';
+        document.getElementById('fDataPag')?.focus();
+        return;
+    }
+
     const rec = {
         'MODELLO VETTURA': document.getElementById('fModello').value.trim(),
         'PROVENIENZA': document.getElementById('fProv').value.trim(),
@@ -281,7 +290,7 @@ async function saveAbb() {
         try {
             const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
             const dataISO = dataPag || fmtDI(new Date());
-            await fsAddDoc(fsCollection(db, "primaNota"), {
+            const pnRow = {
                 DATA: dataPN, dataISO: dataISO,
                 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
                 'PRIMANOTA CLIENTI/FORNITORI': 'ABBONAMENTO ' + nome + ' (' + targa + ')',
@@ -290,7 +299,9 @@ async function saveAbb() {
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva
-            });
+            };
+            await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+            state.rawData?.primaNota?.rows?.push(pnRow);
         } catch(e) { console.error("Errore salvataggio Prima Nota:", e); }
     }
 
@@ -351,7 +362,7 @@ async function renewAbb(id) {
         try {
             const nome = r['NOME E COGNOME'] || '';
             const targa = r.TARGA || '';
-            await fsAddDoc(fsCollection(db, "primaNota"), {
+            const pnRow = {
                 DATA: dataPag, dataISO: fmtDI(new Date()),
                 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
                 'PRIMANOTA CLIENTI/FORNITORI': 'RINNOVO ABB. ' + nome + ' (' + targa + ')',
@@ -360,7 +371,9 @@ async function renewAbb(id) {
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva
-            });
+            };
+            await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+            state.rawData?.primaNota?.rows?.push(pnRow);
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
 
@@ -392,7 +405,7 @@ async function pagaAbb(id) {
     try {
         const nome = r['NOME E COGNOME'] || '';
         const targa = r.TARGA || '';
-        await fsAddDoc(fsCollection(db, "primaNota"), {
+        const pnRow = {
             DATA: dataPag, dataISO: fmtDI(new Date()),
             'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
             'PRIMANOTA CLIENTI/FORNITORI': 'ABBONAMENTO ' + nome + ' (' + targa + ')',
@@ -401,7 +414,9 @@ async function pagaAbb(id) {
             USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
             "MODALITA'": pag.mod, timestamp: Date.now(),
             sedeId: state.sedeAttiva
-        });
+        };
+        await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+        state.rawData?.primaNota?.rows?.push(pnRow);
     } catch(e) { console.warn("Errore Prima Nota:", e); }
 
     syncAbbToSheet(r, true);
