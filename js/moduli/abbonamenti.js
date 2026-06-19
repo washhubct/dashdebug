@@ -86,6 +86,24 @@ export function renderAbb() {
     const cntEl = document.getElementById('abbCnt');
     if(cntEl) cntEl.textContent = state.localAbb.length + ' totali';
 
+    // KPI in alto: totale abbonati + fatturato abbonamenti (somma importi dei pagati)
+    const pagati = state.localAbb.filter(r => r.PAGAMENTO === 'SI');
+    const fatturatoAbb = pagati.reduce((s, r) => s + pNum(r.IMPORTO), 0);
+    const kpiEl = document.getElementById('abbKpis');
+    if(kpiEl) {
+        kpiEl.innerHTML = `
+            <div class="kpi b">
+                <div class="kpi-label">Abbonati Totali</div>
+                <div class="kpi-val">${state.localAbb.length}</div>
+                <div class="kpi-sub">${pagati.length} pagati · ${state.localAbb.length - pagati.length} non pagati</div>
+            </div>
+            <div class="kpi g">
+                <div class="kpi-label">Fatturato Abbonamenti</div>
+                <div class="kpi-val">${fEur(fatturatoAbb)}</div>
+                <div class="kpi-sub">Somma importi degli abbonati pagati</div>
+            </div>`;
+    }
+
     const navBadge = document.getElementById('navScadBadge');
     const alertCount = scaduti.length + inScad.length;
     if(navBadge) {

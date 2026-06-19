@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260617';
+    var APP_VERSION = '20260619';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -224,6 +224,7 @@
 <div class="page" id="page-abbonamenti">
 <div class="sec">
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px"><span class="badge a" id="abbCnt">0</span><button class="btn btn-primary" id="addAbbBtn">+ Nuovo Abbonamento</button></div>
+<div class="kpis" id="abbKpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px"></div>
 <div class="form-panel" id="abbForm">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="font:600 13px var(--f)" id="abbFTitle">Nuovo Abbonamento</h3><button class="btn">✕</button></div>
 <div class="form-grid">
@@ -679,7 +680,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260617"></script>
+<script type="module" src="js/main.js?v=20260619"></script>
 
 </body>
 </html>
