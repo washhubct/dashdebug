@@ -5,7 +5,11 @@ import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { showThankYouToast } from './clienti.js';
-import { richiediPagamento } from './cassa-automatica.js';
+import { richiediPagamento, avviaPagamento, healthBridge } from './cassa-automatica.js';
+
+// Guardia anti doppio-submit: impedisce che un click ripetuto su Salva/Paga/Rinnova
+// registri lo stesso incasso più volte mentre l'operazione async è in corso.
+let _abbBusy = false;
 
 let _abbonamentiInitialized = false;
 
@@ -237,6 +241,9 @@ function calcScad() {
 }
 
 async function saveAbb() {
+    if (_abbBusy) return;
+    _abbBusy = true;
+    try {
     const msg = document.getElementById('abbMsg');
     const nome = document.getElementById('fNome').value.trim();
     const targa = document.getElementById('fTarga').value.trim().toUpperCase();
@@ -280,6 +287,33 @@ async function saveAbb() {
     };
 
     const isUpdate = !!state.abbEditId;
+    // Stato pagamento PRECEDENTE: se l'abbonamento era già registrato come pagato,
+    // un nuovo salvataggio NON deve riscrivere la Prima Nota (causerebbe un doppio incasso).
+    const giaRegistratoPagato = isUpdate && (state.localAbb.find(r => r._id === state.abbEditId)?.PAGAMENTO === 'SI');
+
+    // CONTANTI su pagamento NUOVO → deve passare dalla cassa VNE (come i lavaggi).
+    // Se la VNE non completa l'incasso, NON salviamo nulla.
+    let vneMeta = null;
+    if (pagamento === 'SI' && !giaRegistratoPagato && (modalita || '').toUpperCase() === 'CONTANTI' && state.cassaAuto?.enabled) {
+        const h = await healthBridge();
+        if (!h?.ok || !h?.vne_reachable) {
+            if (!confirm('⚠️ Cassa VNE non raggiungibile. Registrare comunque come contanti manuale?')) {
+                msg.style.color = 'var(--red)'; msg.textContent = 'Annullato: cassa VNE non raggiungibile.'; return;
+            }
+        } else {
+            const res = await new Promise(resolve => avviaPagamento(Math.round(imp * 100), 'ABB-' + (state.abbEditId || targa), resolve));
+            if (res.status === 'completed') {
+                vneMeta = { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE };
+            } else if (res.status === 'partial') {
+                if (!confirm(`Inseriti €${(res.inserito || 0).toFixed(2)} su €${imp.toFixed(2)}. Accettare pagamento parziale?`)) {
+                    msg.style.color = 'var(--red)'; msg.textContent = 'Annullato.'; return;
+                }
+                vneMeta = { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE, vneStatus: 'partial' };
+            } else {
+                msg.style.color = 'var(--red)'; msg.textContent = 'Pagamento VNE non completato — abbonamento NON salvato.'; return;
+            }
+        }
+    }
 
     try {
         if(isUpdate) {
@@ -301,8 +335,9 @@ async function saveAbb() {
 
     syncAbbToSheet(rec, isUpdate);
     
-    // Scrivi in Prima Nota su Firestore quando pagato
-    if(pagamento === 'SI') {
+    // Scrivi in Prima Nota su Firestore SOLO se è un pagamento NUOVO (non già registrato):
+    // evita il doppio incasso quando si ri-salva un abbonamento già pagato.
+    if(pagamento === 'SI' && !giaRegistratoPagato) {
         // Ringraziamento WhatsApp al salvataggio abbonamento pagato
         showThankYouToast(nome, imp);
         try {
@@ -316,7 +351,8 @@ async function saveAbb() {
                 ENTRATA: imp, Entrata: imp,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
-                sedeId: state.sedeAttiva
+                sedeId: state.sedeAttiva,
+                ...(vneMeta || {})
             };
             await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
             state.rawData?.primaNota?.rows?.push(pnRow);
@@ -324,6 +360,7 @@ async function saveAbb() {
     }
 
     setTimeout(() => { hideAbbF(); renderAbb(); renderCassa(); }, 600);
+    } finally { _abbBusy = false; }
 }
 
 function editAbb(id) {
@@ -333,6 +370,8 @@ function editAbb(id) {
 
 async function renewAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
+    const _oggi = new Date().toLocaleDateString('it-IT');
+    if (r.PAGAMENTO === 'SI' && r['DATA PAGAMENTO'] === _oggi && !confirm('⚠️ Questo abbonamento risulta GIÀ pagato oggi. Procedere comunque con un rinnovo/incasso?')) return;
     const dur = r['DURATA ABB.'] || '1 MESE';
     const imp = pNum(r.IMPORTO);
     const old = pDate(r['SCADENZA ABBONAMENTO']); if(!old) return;
@@ -402,6 +441,8 @@ async function renewAbb(id) {
 
 async function pagaAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
+    const _oggi = new Date().toLocaleDateString('it-IT');
+    if (r.PAGAMENTO === 'SI' && r['DATA PAGAMENTO'] === _oggi && !confirm('⚠️ Questo abbonamento risulta GIÀ pagato oggi. Registrare un SECONDO incasso?')) return;
     const imp = pNum(r.IMPORTO);
     const pag = await richiediPagamento(imp, r['NOME E COGNOME'] + ' — ' + (r.TARGA || ''), id, { addBonifico: true });
     if(!pag) return;
