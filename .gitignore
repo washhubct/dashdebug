@@ -12,6 +12,9 @@ bridge-cassa/tls/
 
 # Node
 node_modules/
+functions/.env
+functions/.env.*
+functions/lib/
 
 # Editors
 .vscode/

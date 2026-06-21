@@ -5,6 +5,8 @@ import { defineString } from 'firebase-functions/params'
 import Twilio from 'twilio'
 
 initializeApp()
+
+export * from './fidelai-bridge'
 const db = getFirestore()
 
 const TWILIO_SID = defineString('TWILIO_SID')
@@ -62,10 +64,14 @@ export const smsReminder = onSchedule({
   for (const [tel, { nome }] of daContattare) {
     if (giàInviati.has(tel)) continue
 
+    const telDigits = tel.replace(/\D/g, '')
+    const cardId = telDigits.startsWith('39') && telDigits.length > 10 ? telDigits.slice(2) : telDigits
+    const cardUrl = `https://card.washhub.it/?c=${cardId}`
+
     const nomeDisplay = nome ? nome.split(' ')[0].charAt(0).toUpperCase() + nome.split(' ')[0].slice(1).toLowerCase() : ''
     const messaggio = nomeDisplay
-      ? `Ciao ${nomeDisplay}! 👋 Sono passati un po' di giorni — la tua auto ti aspetta da WASH HUB. Prenota in 2 minuti: https://wash-hub.it/prenota`
-      : `Ciao! 👋 La tua auto ti aspetta da WASH HUB Catania. Prenota in 2 minuti: https://wash-hub.it/prenota`
+      ? `Ciao ${nomeDisplay}! 👋 La tua auto ti aspetta da WASH HUB. Prenota: https://wash-hub.it/prenota  •  Punti & premi: ${cardUrl}`
+      : `Ciao! 👋 La tua auto ti aspetta da WASH HUB. Prenota: https://wash-hub.it/prenota  •  Punti & premi: ${cardUrl}`
 
     try {
       const telFormatted = tel.startsWith('+') ? tel : `+39${tel.replace(/^0/, '')}`
