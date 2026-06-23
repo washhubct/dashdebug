@@ -19,6 +19,11 @@ const REGION = 'europe-west1';
 const functions = getFunctions(undefined, REGION);
 const callSend = httpsCallable(functions, 'whatsappSend');
 
+// Flag temporaneo: la feature è scritta e deployata frontend, ma il backend
+// Meta Cloud API non è ancora configurato (servono token + webhook su Meta).
+// Quando attivo, flippa a false e la UI si accende automaticamente.
+const COMING_SOON = true;
+
 // Template fissi — i nomi devono combaciare con quelli approvati in Meta.
 // La compilazione delle variabili verrà aggiunta in Fase 3 con UI dedicata.
 const TEMPLATES = [
@@ -42,11 +47,35 @@ let initialized = false;
 export function initMessaggi() {
     if (initialized) return;
     initialized = true;
-    requestNotificationPermission();
 
+    if (COMING_SOON) {
+        document.addEventListener('pageChanged', (e) => {
+            if (e.detail.pageId === 'messaggi') renderComingSoon();
+        });
+        return;
+    }
+
+    requestNotificationPermission();
     document.addEventListener('pageChanged', (e) => {
         if (e.detail.pageId === 'messaggi') startChatsListener();
     });
+}
+
+function renderComingSoon() {
+    const page = document.getElementById('page-messaggi');
+    if (!page) return;
+    page.innerHTML = `
+        <div class="sec" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+          <div style="text-align:center;max-width:480px;padding:32px">
+            <div style="font-size:72px;margin-bottom:16px">💬</div>
+            <div style="font:700 22px var(--f);color:var(--tx);margin-bottom:10px">Messaggi WhatsApp</div>
+            <div style="font:500 14px var(--f);color:var(--gold);margin-bottom:18px;letter-spacing:.5px;text-transform:uppercase">Coming Soon</div>
+            <div style="font:400 14px var(--f);color:var(--tx2);line-height:1.55">
+              Stiamo finendo di collegare il canale WhatsApp ufficiale al gestionale.<br><br>
+              Presto da qui potrai vedere e rispondere in tempo reale a tutti i messaggi dei clienti, ricevere notifiche su nuovi messaggi e usare i template approvati.
+            </div>
+          </div>
+        </div>`;
 }
 
 // ─── notifiche browser ───
