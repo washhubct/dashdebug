@@ -239,6 +239,24 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // WHATSAPP CHATS — Meta Cloud API integration
+    // Le chat sono asset condiviso tra operatori (no filtro sede).
+    // Scritture lato client solo per markAsRead / archivia / tag.
+    // I messaggi (sub-collection) sono scritti solo da Cloud Function
+    // (webhook inbound, send outbound) tramite Admin SDK.
+    // ═══════════════════════════════════════════════════════════
+    match /whatsappChats/{phone} {
+      allow read:           if isSignedIn();
+      allow update:         if isSignedIn();
+      allow create, delete: if false;
+
+      match /messages/{msgId} {
+        allow read:  if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // DEFAULT DENY
     // ═══════════════════════════════════════════════════════════
     match /{document=**} {
