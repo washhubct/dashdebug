@@ -7,6 +7,7 @@ import Twilio from 'twilio'
 initializeApp()
 
 export * from './fidelai-bridge'
+export * from './whatsapp'
 const db = getFirestore()
 
 const TWILIO_SID = defineString('TWILIO_SID')
