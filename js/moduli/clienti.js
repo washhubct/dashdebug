@@ -7,8 +7,8 @@ const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
 const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
 
 const WA_TEMPLATES = [
-    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google)',
-      text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nStaff" },
+    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google + card)',
+      text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\n🎁 La tua Fidelity Card Wash Hub:\nhttps://card.washhub.it/?c={telefono}\n\nA presto,\nStaff" },
     { id: 'benvenuto-pren', label: '👋 Benvenuto + conferma prenotazione',
       text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nTi confermiamo la tua prenotazione:\nData: {dataPren}\nOra: {orario}\n\nIntanto, seguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nA presto,\nStaff" },
     { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente (senza prenotazione)',
@@ -29,6 +29,8 @@ function fillTemplate(tpl, cliente, stats, extra) {
     const nomeRaw = cliente.nome || '';
     const firstWord = nomeRaw.split(' ')[0] || nomeRaw;
     const nomeShort = firstWord ? firstWord[0] + firstWord.substring(1).toLowerCase() : '';
+    const telDigits = String(cliente.telefono || '').replace(/\D/g, '');
+    const telCard = telDigits.startsWith('39') && telDigits.length > 10 ? telDigits.slice(2) : telDigits;
     return String(tpl)
         .replace(/{nome}/g, nomeRaw)
         .replace(/{nomeShort}/g, nomeShort)
@@ -36,7 +38,8 @@ function fillTemplate(tpl, cliente, stats, extra) {
         .replace(/{numLavaggi}/g, stats ? stats.numLavaggi : 0)
         .replace(/{ticketMedio}/g, stats ? stats.ticketMedio : 0)
         .replace(/{dataPren}/g, e.dataPren || '')
-        .replace(/{orario}/g, e.orario || '');
+        .replace(/{orario}/g, e.orario || '')
+        .replace(/{telefono}/g, telCard);
 }
 
 let clientiDB = [];
