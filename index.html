@@ -88,6 +88,7 @@
 <a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
 <a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
 <a class="sb-item" id="nav-clienti"><span class="icon">👥</span>Clienti / CRM</a>
+<a class="sb-item" id="nav-messaggi"><span class="icon">💬</span>Messaggi<span class="badge-sm" id="navMessaggiBadge" style="display:none;background:var(--grn1);color:var(--grn)">0</span></a>
 <div class="sb-section admin-only">Finanza & Sicurezza</div>
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
@@ -676,11 +677,61 @@
 </div>
 </div>
 </div>
-</div></div></div>
+</div>
+
+<div class="page" id="page-messaggi">
+<div class="sec msg-page">
+  <div class="msg-layout">
+    <!-- Pane sinistro: lista conversazioni -->
+    <aside class="msg-sidebar">
+      <div class="msg-search-wrap">
+        <input id="msgSearch" class="search-box" placeholder="Cerca per nome, telefono, testo…" autocomplete="off">
+      </div>
+      <div id="msgChatList" class="msg-chat-list">
+        <div class="msg-empty">Caricamento conversazioni…</div>
+      </div>
+    </aside>
+
+    <!-- Pane destro: thread -->
+    <section class="msg-main">
+      <div id="msgEmpty" class="msg-empty-state">
+        <div style="font-size:48px;margin-bottom:12px">💬</div>
+        <div style="font:600 16px var(--f);color:var(--tx)">Seleziona una conversazione</div>
+        <div style="font:400 13px var(--f);color:var(--tx2);margin-top:6px">I messaggi WhatsApp dei clienti compariranno qui in tempo reale.</div>
+      </div>
+
+      <div id="msgThread" class="msg-thread" style="display:none">
+        <header class="msg-thread-head">
+          <button class="msg-back-btn" id="msgBackBtn" title="Indietro">‹</button>
+          <div style="flex:1">
+            <div id="msgThreadName" style="font:600 15px var(--f);color:var(--tx)">—</div>
+            <div id="msgThreadPhone" style="font:400 12px var(--mono);color:var(--tx2)"></div>
+          </div>
+        </header>
+
+        <div id="msgThreadBody" class="msg-thread-body"></div>
+
+        <div id="msgComposer" class="msg-composer" style="display:none">
+          <div id="msgWindowInfo" class="msg-window-info"></div>
+          <div class="msg-composer-row">
+            <select id="msgTplSelect" class="msg-tpl-select"></select>
+          </div>
+          <div class="msg-composer-row">
+            <textarea id="msgTextInput" class="msg-text-input" placeholder="Scrivi un messaggio…" rows="2"></textarea>
+            <button id="msgSendBtn" class="btn btn-primary msg-send-btn">Invia</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</div>
+
+</div></div>
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260619c"></script>
+<script type="module" src="js/main.js?v=20260623a"></script>
 
 </body>
 </html>

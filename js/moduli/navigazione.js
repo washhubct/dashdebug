@@ -94,6 +94,7 @@ export function goPage(id) {
         sospesi: ['⏳', 'Sospesi'],
         presenze: ['👷', 'Presenze Dipendenti'],
         clienti: ['👥', 'Clienti / CRM'],
+        messaggi: ['💬', 'Messaggi WhatsApp'],
         report: ['💰', 'Report Finanziario'],
         cancellazioni: ['🗑️', 'Registro Cancellazioni'],
         servizi: ['⭐', 'Servizi Aggiuntivi'],
