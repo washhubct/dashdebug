@@ -95,6 +95,7 @@ export function goPage(id) {
         presenze: ['👷', 'Presenze Dipendenti'],
         clienti: ['👥', 'Clienti / CRM'],
         messaggi: ['💬', 'Messaggi WhatsApp'],
+        fidelai: ['💎', 'FidelAI — Riscatti & Card'],
         report: ['💰', 'Report Finanziario'],
         cancellazioni: ['🗑️', 'Registro Cancellazioni'],
         servizi: ['⭐', 'Servizi Aggiuntivi'],

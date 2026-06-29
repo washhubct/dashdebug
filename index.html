@@ -89,6 +89,7 @@
 <a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
 <a class="sb-item" id="nav-clienti"><span class="icon">👥</span>Clienti / CRM</a>
 <a class="sb-item" id="nav-messaggi"><span class="icon">💬</span>Messaggi<span class="badge-sm" id="navMessaggiBadge" style="display:none;background:var(--grn1);color:var(--grn)">0</span></a>
+<a class="sb-item" id="nav-fidelai"><span class="icon">💎</span>FidelAI Riscatti</a>
 <div class="sb-section admin-only">Finanza & Sicurezza</div>
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
@@ -727,11 +728,46 @@
 </div>
 </div>
 
+<div class="page" id="page-fidelai">
+<div class="sec">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+<div>
+  <h3 style="font:700 15px var(--f);margin-bottom:3px">💎 FidelAI — Riscatti & Card</h3>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Digita il codice 4 cifre che il cliente ti detta per applicare un riscatto premio. Oppure cerca un cliente per vedere punti e storico.</p>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:12px" id="fidelaiGrid">
+
+  <div style="background:var(--bg3);border-radius:var(--r);padding:22px;border:2px solid var(--gold,#C8A84E)">
+    <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">🎁 Riscatta premio</div>
+    <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:18px">Il cliente apre la card sul telefono, clicca "Riscatta", vede un codice 4 cifre e te lo detta. Tu lo digiti qui.</p>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="fidelaiCodeInput" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="0000" style="flex:1;font:700 28px var(--mono);text-align:center;letter-spacing:14px;padding:14px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);color:var(--tx)">
+      <button class="btn btn-primary" id="fidelaiRedeemBtn" style="padding:0 22px;font:600 14px var(--f)">Applica</button>
+    </div>
+    <div id="fidelaiRedeemResult" style="display:none;padding:14px;border-radius:var(--r2);font:400 13px var(--f);line-height:1.5"></div>
+  </div>
+
+  <div style="background:var(--bg3);border-radius:var(--r);padding:22px">
+    <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">🔍 Cerca cliente</div>
+    <p style="font:400 13px var(--f);color:var(--tx2);margin-bottom:14px">Digita il telefono per vedere punti, premi e ultime transazioni del cliente.</p>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="fidelaiLookupInput" type="tel" inputmode="tel" placeholder="333 1234567" style="flex:1;padding:12px 14px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:500 15px var(--mono);color:var(--tx)">
+      <button class="btn" id="fidelaiLookupBtn" style="padding:0 18px;font:600 13px var(--f)">Cerca</button>
+    </div>
+    <div id="fidelaiLookupResult" style="display:none"></div>
+  </div>
+
+</div>
+</div>
+</div>
+
 </div></div>
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260623b"></script>
+<script type="module" src="js/main.js?v=20260629a"></script>
 
 </body>
 </html>

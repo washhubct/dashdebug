@@ -1,9 +1,13 @@
 /**
  * Bridge dashdebug → FidelAI external API.
  *
- * Triggers Firestore che sincronizzano clienti e registrano transazioni di
- * fedeltà su `fideliai-app` ogni volta che una prenotazione/tappezzeria/
- * abbonamento viene saldata.
+ * Trigger Firestore che registrano transazioni di fedeltà su `fideliai-app`
+ * ogni volta che una prenotazione/tappezzeria/abbonamento viene saldata.
+ *
+ * Regola: i clienti FidelAI esistono SOLO se hanno attivato la card via
+ * card.washhub.it con consenso esplicito. Questo bridge NON crea customer
+ * automaticamente — chiama solo externalRecordTransaction, che skippa
+ * silenziosamente se il customer non esiste o non ha cardAttivata=true.
  *
  * Config:
  *   FIDELAI_API_BASE (param)  — es. https://europe-west1-fideliai-app.cloudfunctions.net
@@ -47,22 +51,6 @@ async function callFidelai(path: string, body: Record<string, unknown>): Promise
   }
 }
 
-async function syncCustomerFromDoc(data: AnyDoc): Promise<string | null> {
-  const phone = normalizePhone(data.telefono)
-  if (!phone) return null
-  const name = (data.nome || data.cliente || '').toString().trim()
-  if (!name) return null
-  await callFidelai('externalSyncCustomer', {
-    merchant: FIDELAI_MERCHANT.value(),
-    customerId: phone,
-    name,
-    phone,
-    sedeId: data.sedeId || null,
-    vetture: Array.isArray(data.vetture) ? data.vetture : undefined,
-  })
-  return phone
-}
-
 function getAmount(data: AnyDoc): number {
   const candidates = [data.prezzo, data.importo, data.totale, data.amount]
   for (const c of candidates) {
@@ -85,45 +73,34 @@ const baseOpts = {
   secrets: [FIDELAI_BRIDGE_SECRET],
 }
 
-// Sync clienti — onCreate nuovo cliente CRM
-export const fidelaiSyncCliente = onDocumentCreated(
-  { document: 'clienti/{id}', ...baseOpts },
-  async (event) => {
-    const data = event.data?.data()
-    if (!data) return
-    try {
-      await syncCustomerFromDoc(data)
-    } catch (err) {
-      console.error('[fidelai] syncCliente failed', event.params.id, err)
-    }
-  }
-)
+async function recordEarn(collection: string, docId: string, data: AnyDoc): Promise<void> {
+  const phone = normalizePhone(data.telefono)
+  if (!phone) return
+  const amount = getAmount(data)
+  if (amount <= 0) return
 
-// Helper per i 3 trigger di pagamento (prenotazioni, tappezzeria, abbonamenti)
-function paymentTrigger(collection: string) {
+  await callFidelai('externalRecordTransaction', {
+    merchant: FIDELAI_MERCHANT.value(),
+    customerId: phone,
+    amount,
+    type: 'earn',
+    sedeId: data.sedeId || null,
+    refId: `${collection}:${docId}`,
+    notes: collection,
+  })
+}
+
+function paymentUpdatedTrigger(collection: string) {
   return onDocumentUpdated(
     { document: `${collection}/{id}`, ...baseOpts },
     async (event) => {
       const before = event.data?.before.data()
       const after = event.data?.after.data()
       if (!after) return
-      if (isPaid(before) || !isPaid(after)) return // ci interessa solo la transizione → pagato
-
-      const amount = getAmount(after)
-      if (amount <= 0) return
+      if (isPaid(before) || !isPaid(after)) return // solo transizione → pagato
 
       try {
-        const cid = await syncCustomerFromDoc(after) // upsert difensivo
-        if (!cid) return
-        await callFidelai('externalRecordTransaction', {
-          merchant: FIDELAI_MERCHANT.value(),
-          customerId: cid,
-          amount,
-          type: 'earn',
-          sedeId: after.sedeId || null,
-          refId: `${collection}:${event.params.id}`,
-          notes: collection,
-        })
+        await recordEarn(collection, event.params.id, after)
       } catch (err) {
         console.error(`[fidelai] ${collection} payment trigger failed`, event.params.id, err)
       }
@@ -131,30 +108,15 @@ function paymentTrigger(collection: string) {
   )
 }
 
-// Stesso pattern: onCreate, nel caso una prenotazione/abbonamento/tappezzeria
-// venga inserita già saldata (es. pagamento immediato in cassa).
-function paymentCreateTrigger(collection: string) {
+function paymentCreatedTrigger(collection: string) {
   return onDocumentCreated(
     { document: `${collection}/{id}`, ...baseOpts },
     async (event) => {
       const after = event.data?.data()
       if (!after || !isPaid(after)) return
 
-      const amount = getAmount(after)
-      if (amount <= 0) return
-
       try {
-        const cid = await syncCustomerFromDoc(after)
-        if (!cid) return
-        await callFidelai('externalRecordTransaction', {
-          merchant: FIDELAI_MERCHANT.value(),
-          customerId: cid,
-          amount,
-          type: 'earn',
-          sedeId: after.sedeId || null,
-          refId: `${collection}:${event.params.id}`,
-          notes: collection,
-        })
+        await recordEarn(collection, event.params.id, after)
       } catch (err) {
         console.error(`[fidelai] ${collection} create trigger failed`, event.params.id, err)
       }
@@ -162,9 +124,9 @@ function paymentCreateTrigger(collection: string) {
   )
 }
 
-export const fidelaiPrenotazioneUpdated = paymentTrigger('prenotazioni')
-export const fidelaiPrenotazioneCreated = paymentCreateTrigger('prenotazioni')
-export const fidelaiTappezzeriaUpdated = paymentTrigger('tappezzeria')
-export const fidelaiTappezzeriaCreated = paymentCreateTrigger('tappezzeria')
-export const fidelaiAbbonamentoUpdated = paymentTrigger('abbonamenti')
-export const fidelaiAbbonamentoCreated = paymentCreateTrigger('abbonamenti')
+export const fidelaiPrenotazioneUpdated = paymentUpdatedTrigger('prenotazioni')
+export const fidelaiPrenotazioneCreated = paymentCreatedTrigger('prenotazioni')
+export const fidelaiTappezzeriaUpdated = paymentUpdatedTrigger('tappezzeria')
+export const fidelaiTappezzeriaCreated = paymentCreatedTrigger('tappezzeria')
+export const fidelaiAbbonamentoUpdated = paymentUpdatedTrigger('abbonamenti')
+export const fidelaiAbbonamentoCreated = paymentCreatedTrigger('abbonamenti')

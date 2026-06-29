@@ -23,6 +23,7 @@ import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js'
 import { initIncassiManuali } from './moduli/incassi-manuali.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 import { initMessaggi } from './moduli/messaggi.js';
+import { initFidelai } from './moduli/fidelai.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initVouchers();
     initIncassiManuali();
     initMessaggi();
+    initFidelai();
     initDashDates();
 });
 
