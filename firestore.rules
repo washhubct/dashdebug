@@ -200,12 +200,27 @@ service cloud.firestore {
 
     // ═══════════════════════════════════════════════════════════
     // REFERRAL — programma "Porta un amico"
-    // Lettura e scrittura pubblica: il sito crea/aggiorna il codice
+    // Lettura pubblica. Il sito (anonimo) può fare SOLO due scritture:
+    //  1) "claim": al primo lookup su /referral salva telefono/codice
+    //     del titolare (una sola volta — telefono non sovrascrivibile)
+    //  2) incremento contatori: esattamente +1 su totale e inAttesa
+    //     alla prenotazione con codice amico valido
+    // Tutto il resto (conferme, rollback, vouchersAttivi) è riservato
+    // agli operatori autenticati del gestionale.
     // ═══════════════════════════════════════════════════════════
     match /referral/{code} {
-      allow read:           if true;
-      allow create, update: if true;
-      allow delete:         if isAdmin();
+      allow read:   if true;
+      allow create: if isSignedIn()
+        || (request.resource.data.keys().hasOnly(['telefono', 'codice', 'primoLookup'])
+            && request.resource.data.codice == code);
+      allow update: if isSignedIn()
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['telefono', 'codice', 'primoLookup'])
+            && !('telefono' in resource.data)
+            && request.resource.data.codice == code)
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totale', 'inAttesa', 'ultimoAggiornamento'])
+            && request.resource.data.totale == resource.data.get('totale', 0) + 1
+            && request.resource.data.inAttesa == resource.data.get('inAttesa', 0) + 1);
+      allow delete: if isAdmin();
     }
 
     match /referral/{code}/eventi/{tel} {
