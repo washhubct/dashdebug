@@ -11,6 +11,44 @@
 
 ---
 
+## 0. Creare l'accesso Meta senza "usare" Facebook (~10 min)
+
+> Il blocco NON è tecnico: serve solo un login Facebook come chiave d'accesso.
+> Meta usa l'account personale FB come identità per TUTTI i suoi strumenti
+> business (Business Manager, developers.facebook.com, WhatsApp Manager).
+> Non esiste modo di amministrare un Meta Business senza un login FB dietro.
+> Ma quell'account serve SOLO come accesso: niente post, niente amici, niente
+> profilo pubblico. Lo crei, lo usi per gestire WhatsApp, e non lo tocchi più.
+
+1. **Account Facebook personale** (login, non social):
+   - https://facebook.com → Crea account con `info@washhub.it` (o mail dedicata)
+   - Nome reale del titolare (Meta verifica identità per i business account)
+   - NON serve completare profilo, foto, amicizie. Ferma appena l'account è attivo.
+   - Attiva la 2FA subito (Impostazioni → Sicurezza): è l'accesso a un canale
+     di produzione, proteggilo come i secret Firebase.
+
+2. **Meta Business Manager**:
+   - https://business.facebook.com → Crea account business
+   - Nome business: `Wash Hub Lungomare`, mail: `info@washhub.it`
+   - Annota il **Business Manager ID** (Impostazioni business → Info azienda)
+
+3. **Verifica business** (serve per uscire dal sandbox e alzare i limiti invio):
+   - Business Settings → Security Center → **Verifica azienda**
+   - Documenti: visura/P.IVA Wash Hub, eventuale utenza intestata
+   - Tempi: 1-3 giorni lavorativi. Puoi iniziare a testare in sandbox nel frattempo.
+
+### Numero di telefono — attenzione (blocco frequente)
+
+- Deve poter ricevere **SMS o chiamata** di verifica.
+- **NON** deve essere già registrato su WhatsApp (né consumer né Business app).
+  Se il numero è già su WhatsApp, va prima eliminato l'account da quel numero.
+- **Google Voice e la maggior parte dei VoIP vengono rifiutati** da Meta.
+  Usa un numero mobile reale dedicato oppure un fisso che riceva la chiamata vocale.
+- Suggerito: una SIM dedicata solo al canale business, non il cellulare personale
+  del titolare (il numero diventa il mittente ufficiale verso i clienti).
+
+---
+
 ## 1. Setup Meta Developer (manuale, ~20 min)
 
 1. https://developers.facebook.com/apps → **Create App** → tipo **Business**
