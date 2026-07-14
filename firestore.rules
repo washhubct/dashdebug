@@ -143,8 +143,22 @@ service cloud.firestore {
     // ALCUN incasso. Il "solo oggi" resta come vista lato client (cutoff),
     // coerente con abbonamenti/uscite/incassiManuali che già leggono per sede.
     // ═══════════════════════════════════════════════════════════
+    // Le righe AGGREGATE di chiusura giornata (INCASSO/TAPPEZZERIA/PARCHEGGIO/
+    // USCITE) le crea SOLO la chiusura giornata, ora riservata all'admin. Blocco
+    // qui la loro creazione ai non-admin: difesa server-side contro i duplicati
+    // generati da client operatore ancora su versione vecchia (bug 14/07/2026).
+    // Le righe individuali (RINNOVO ABB. NOME, TAPPEZZERIA NOME, incassi manuali)
+    // hanno descrizioni diverse e restano consentite agli operatori.
+    function isRigaAggregata() {
+      return request.resource.data.Descrizione in [
+        'INCASSO POS', 'INCASSO CASH',
+        'TAPPEZZERIA POS', 'TAPPEZZERIA CASH',
+        'PARCHEGGIO AD ORE POS', 'PARCHEGGIO AD ORE CASH',
+        'USCITE GIORNATA POS', 'USCITE GIORNATA CASH'
+      ];
+    }
     match /primaNota/{doc} {
-      allow create: if isSignedIn() && writeOk();
+      allow create: if isSignedIn() && writeOk() && (isAdmin() || !isRigaAggregata());
       allow read:   if isSignedIn() && hasSedeAccess(resource.data.sedeId);
       allow update, delete: if isAdmin();
     }
