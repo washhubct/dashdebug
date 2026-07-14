@@ -1,7 +1,7 @@
 import { state, CONFIG } from './state.js';
 import { fmtDI } from './utils.js';
 // LE IMPORTAZIONI ESATTE SONO QUI:
-import { auth, fsGetDocs, fsGetDoc, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, db } from './firebase-config.js';
+import { auth, fsGetDocs, fsGetDoc, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, fsSetDoc, db } from './firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
 import { initAuth, isAdmin } from './moduli/auth.js';
@@ -454,6 +454,12 @@ window.addEventListener('appinstalled', () => {
 // Controlla fino a 7 giorni indietro, solo lun-sab
 // ═══════════════════════════════════════════════════════════════════
 async function autoChiusuraGiornate() {
+    // Chiusura giornata = operazione contabile riservata all'admin. Le rules
+    // permettono solo all'admin di scrivere /giornateChiuse: se la eseguisse un
+    // operatore, marcherebbe le righe in primaNota ma NON riuscirebbe a segnare
+    // la giornata come chiusa → a ogni caricamento le riscriverebbe (bug dei
+    // duplicati massivi risolto il 14/07/2026). Quindi qui esce subito.
+    if (!isAdmin()) return;
     try {
         // Carica il registro delle giornate già chiuse
         const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
@@ -538,9 +544,14 @@ async function autoChiusuraGiornate() {
             if (uscContanti > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
             if (uscPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
 
+            // ID documento DETERMINISTICO: sede_data_tipo. Così una nuova chiusura
+            // della stessa giornata SOVRASCRIVE la riga invece di duplicarla
+            // (idempotenza — evita il ritorno del bug dei duplicati massivi).
             for (const riga of righe) {
                 riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
-                await fsAddDoc(fsCollection(db, "primaNota"), riga);
+                const tipo = (riga.Descrizione || '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
+                const pnId = `${state.sedeAttiva}_${dStr}_${tipo}`;
+                await fsSetDoc(fsDoc(db, "primaNota", pnId), riga);
             }
 
             // Segna giornata chiusa
@@ -574,7 +585,8 @@ function avviaTimerChiusura() {
 
 async function checkChiusuraOre20() {
     if (chiusuraOggiEseguita) return;
-    
+    if (!isAdmin()) return; // chiusura contabile: solo admin (vedi autoChiusuraGiornate)
+
     const now = new Date();
     const ora = now.getHours();
     const giorno = now.getDay(); // 0=dom
@@ -661,9 +673,11 @@ async function checkChiusuraOre20() {
         if (uscContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
         if (uscPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
 
+        // ID deterministico sede_data_tipo → idempotente (vedi autoChiusuraGiornate)
         for (const riga of righe) {
             riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
-            await fsAddDoc(fsCollection(db, "primaNota"), riga);
+            const tipo = (riga.Descrizione || '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
+            await fsSetDoc(fsDoc(db, "primaNota", `${state.sedeAttiva}_${oggi}_${tipo}`), riga);
         }
 
         await fsAddDoc(fsCollection(db, "giornateChiuse"), {

@@ -61,19 +61,6 @@ service cloud.firestore {
           && hasSedeAccess(request.resource.data.sedeId);
     }
 
-    // ── Helper: Prima Nota — restrizione lettura operatore ────────
-    // request.time è UTC. L'attività è in Italia (UTC+1/+2): senza correzione,
-    // i pagamenti fatti tra mezzanotte e le 02:00 ora italiana cadono nel giorno
-    // UTC precedente e l'operatore non potrebbe leggerli (rompendo la query).
-    // Sottraiamo 2h (copre CET e CEST) per ancorare l'inizio giornata all'ora locale.
-    function startOfDayMs() {
-      return request.time.toMillis()
-           - (request.time.hours()   * 3600000)
-           - (request.time.minutes() * 60000)
-           - (request.time.seconds() * 1000)
-           - 7200000;
-    }
-
     // ═══════════════════════════════════════════════════════════
     // PRENOTAZIONI — accesso pubblico per form prenota.html
     // ═══════════════════════════════════════════════════════════
@@ -148,17 +135,17 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PRIMA NOTA — admin tutto; operator crea sempre, legge solo oggi
+    // PRIMA NOTA — lettura per sede (come le altre collezioni operative)
+    // Nota: la restrizione "operatore legge solo oggi" era imposta sul campo
+    // timestamp, ma rendeva IMPOSSIBILE la query list del gestionale: Firestore
+    // rifiuta una query se i suoi filtri (sedeId/dataISO) non garantiscono la
+    // condizione della regola (timestamp). Risultato: l'operatore non vedeva
+    // ALCUN incasso. Il "solo oggi" resta come vista lato client (cutoff),
+    // coerente con abbonamenti/uscite/incassiManuali che già leggono per sede.
     // ═══════════════════════════════════════════════════════════
     match /primaNota/{doc} {
       allow create: if isSignedIn() && writeOk();
-
-      allow read: if isAdmin()
-               || (isOperator()
-                   && hasSedeAccess(resource.data.sedeId)
-                   && resource.data.timestamp is int
-                   && resource.data.timestamp >= startOfDayMs());
-
+      allow read:   if isSignedIn() && hasSedeAccess(resource.data.sedeId);
       allow update, delete: if isAdmin();
     }
 
