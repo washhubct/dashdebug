@@ -62,11 +62,16 @@ service cloud.firestore {
     }
 
     // ── Helper: Prima Nota — restrizione lettura operatore ────────
+    // request.time è UTC. L'attività è in Italia (UTC+1/+2): senza correzione,
+    // i pagamenti fatti tra mezzanotte e le 02:00 ora italiana cadono nel giorno
+    // UTC precedente e l'operatore non potrebbe leggerli (rompendo la query).
+    // Sottraiamo 2h (copre CET e CEST) per ancorare l'inizio giornata all'ora locale.
     function startOfDayMs() {
       return request.time.toMillis()
            - (request.time.hours()   * 3600000)
            - (request.time.minutes() * 60000)
-           - (request.time.seconds() * 1000);
+           - (request.time.seconds() * 1000)
+           - 7200000;
     }
 
     // ═══════════════════════════════════════════════════════════

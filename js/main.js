@@ -4,7 +4,7 @@ import { fmtDI } from './utils.js';
 import { auth, fsGetDocs, fsGetDoc, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, db } from './firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
-import { initAuth } from './moduli/auth.js';
+import { initAuth, isAdmin } from './moduli/auth.js';
 import { initNavigazione, goPage } from './moduli/navigazione.js';
 import { initCassa, renderCassa } from './moduli/cassa.js';
 import { initLog, renderCancellazioni } from './moduli/log.js';
@@ -266,9 +266,13 @@ export async function loadHistoricalData() {
     state._historicalLoaded = true;
     try {
         const sede = state.sedeAttiva;
+        // Prima Nota storica: leggibile solo dall'admin (rules limitano l'operatore
+        // a oggi). Per l'operatore la query fallirebbe e trascinerebbe giù anche le
+        // prenotazioni nel Promise.all → carichiamo la Prima Nota storica solo se admin.
+        const admin = isAdmin();
         const [snapPren, snapPN] = await Promise.all([
             fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede))),
-            fsGetDocs(query(fsCollection(db, "primaNota"), where("sedeId", "==", sede))),
+            admin ? fsGetDocs(query(fsCollection(db, "primaNota"), where("sedeId", "==", sede))) : Promise.resolve(null),
         ]);
         // Merge prenotazioni mancanti
         const seen = new Set();
@@ -279,10 +283,12 @@ export async function loadHistoricalData() {
             if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
             state.prenDB[d.dataPren].push(d);
         });
-        const pnRows = [];
-        snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
-        state.rawData = { primaNota: { rows: pnRows } };
-        console.log(`Storico completo caricato: primaNota ${pnRows.length}`);
+        if (snapPN) {
+            const pnRows = [];
+            snapPN.forEach(docSnap => pnRows.push(docSnap.data()));
+            state.rawData = { primaNota: { rows: pnRows } };
+            console.log(`Storico completo caricato: primaNota ${pnRows.length}`);
+        }
     } catch (e) {
         console.warn("Errore caricamento storico:", e.message);
         state._historicalLoaded = false;
@@ -297,6 +303,12 @@ async function initFirebaseData() {
     if (upd) upd.textContent = 'Sincronizzazione...';
 
     const cutoff = getCutoffISO(400);
+    // Prima Nota: gli operatori possono leggere per rules SOLO i record di oggi
+    // (separazione operatore/admin). Se interrogassimo 400 giorni, la query
+    // conterrebbe record vecchi vietati e Firestore rifiuterebbe TUTTA la query
+    // (permission-denied) → l'operatore non vedrebbe alcun incasso. Quindi per
+    // gli operatori il cutoff Prima Nota è oggi; l'admin mantiene lo storico.
+    const pnCutoff = isAdmin() ? cutoff : fmtDI(new Date());
     state._historicalLoaded = false;
 
     try {
@@ -351,7 +363,7 @@ async function initFirebaseData() {
                 snap.forEach(docSnap => { let d = docSnap.data(); d._id = docSnap.id; state.localAbb.push(d); });
             }).catch(e => { console.warn("Abbonamenti non disponibili:", e.message); state.localAbb = []; }),
 
-            loadPrimaNotaFast(cutoff).catch(pnErr => {
+            loadPrimaNotaFast(pnCutoff).catch(pnErr => {
                 console.warn("Prima Nota Firebase non disponibile:", pnErr.message);
                 if (!state.rawData) state.rawData = { primaNota: { rows: [] } };
             }),
