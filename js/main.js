@@ -310,11 +310,12 @@ async function initFirebaseData() {
     // gli operatori il cutoff Prima Nota è oggi; l'admin mantiene lo storico.
     const pnCutoff = isAdmin() ? cutoff : fmtDI(new Date());
     state._historicalLoaded = false;
+    state._datiIncompleti = false;
 
     try {
         // Tutte le collezioni in parallelo. Ogni task gestisce le sue eccezioni.
         const tasks = [
-            loadPrenotazioniFast(cutoff).catch(e => { console.error("Prenotazioni non caricate:", e.message); state.prenDB = {}; }),
+            loadPrenotazioniFast(cutoff).catch(e => { console.error("Prenotazioni non caricate:", e.message); state.prenDB = {}; state._datiIncompleti = true; }),
 
             fsGetDocs(query(fsCollection(db, "tappezzeria"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.tapDB = [];
@@ -460,13 +461,19 @@ async function autoChiusuraGiornate() {
     // la giornata come chiusa → a ogni caricamento le riscriverebbe (bug dei
     // duplicati massivi risolto il 14/07/2026). Quindi qui esce subito.
     if (!isAdmin()) return;
+    // Se il caricamento prenotazioni è fallito, i totali verrebbero calcolati su
+    // dati vuoti e giorni con incassi reali finirebbero chiusi come "Nessun
+    // movimento" (successo il 13/07/2026). Meglio non chiudere nulla.
+    if (state._datiIncompleti) return;
     try {
         // Carica il registro delle giornate già chiuse
         const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
         const giornateChiuse = new Set();
         snapChiuse.forEach(docSnap => {
             const d = docSnap.data();
-            if (d.data) giornateChiuse.add(d.data);
+            // Marker per-sede: uno di paesi-etnei non deve chiudere lungomare
+            // (e viceversa). I marker storici senza sedeId valgono per tutte.
+            if (d.data && (!d.sedeId || d.sedeId === state.sedeAttiva)) giornateChiuse.add(d.data);
         });
 
         const oggi = new Date();
@@ -529,7 +536,7 @@ async function autoChiusuraGiornate() {
 
             // Nessun movimento? Segna chiusa e vai avanti
             if (totLav === 0 && totPar === 0 && totUsc === 0) {
-                await fsAddDoc(fsCollection(db, "giornateChiuse"), { data: dStr, timestamp: Date.now(), note: 'Nessun movimento' });
+                await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${dStr}`), { data: dStr, sedeId: state.sedeAttiva, timestamp: Date.now(), note: 'Nessun movimento' });
                 continue;
             }
 
@@ -554,9 +561,9 @@ async function autoChiusuraGiornate() {
                 await fsSetDoc(fsDoc(db, "primaNota", pnId), riga);
             }
 
-            // Segna giornata chiusa
-            await fsAddDoc(fsCollection(db, "giornateChiuse"), {
-                data: dStr, timestamp: Date.now(),
+            // Segna giornata chiusa — ID deterministico: mai marker doppi
+            await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${dStr}`), {
+                data: dStr, sedeId: state.sedeAttiva, timestamp: Date.now(),
                 lavContanti, lavPos, tapContanti, tapPos,
                 parContanti, parPos, uscContanti, uscPos,
                 totaleEntrate: totLav + totPar, totaleUscite: totUsc
@@ -586,6 +593,7 @@ function avviaTimerChiusura() {
 async function checkChiusuraOre20() {
     if (chiusuraOggiEseguita) return;
     if (!isAdmin()) return; // chiusura contabile: solo admin (vedi autoChiusuraGiornate)
+    if (state._datiIncompleti) return; // dati incompleti → mai chiudere (vedi autoChiusuraGiornate)
 
     const now = new Date();
     const ora = now.getHours();
@@ -601,7 +609,9 @@ async function checkChiusuraOre20() {
         const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
         let giaChiusa = false;
         snapChiuse.forEach(docSnap => {
-            if (docSnap.data().data === oggi) giaChiusa = true;
+            const d = docSnap.data();
+            // Per-sede come autoChiusuraGiornate; marker storici senza sedeId globali
+            if (d.data === oggi && (!d.sedeId || d.sedeId === state.sedeAttiva)) giaChiusa = true;
         });
         
         if (giaChiusa) {
@@ -657,7 +667,7 @@ async function checkChiusuraOre20() {
         const totUsc = uscContanti + uscPos;
 
         if (totLav === 0 && totPar === 0 && totUsc === 0) {
-            await fsAddDoc(fsCollection(db, "giornateChiuse"), { data: oggi, timestamp: Date.now(), note: 'Nessun movimento' });
+            await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${oggi}`), { data: oggi, sedeId: state.sedeAttiva, timestamp: Date.now(), note: 'Nessun movimento' });
             chiusuraOggiEseguita = true;
             return;
         }
@@ -680,8 +690,8 @@ async function checkChiusuraOre20() {
             await fsSetDoc(fsDoc(db, "primaNota", `${state.sedeAttiva}_${oggi}_${tipo}`), riga);
         }
 
-        await fsAddDoc(fsCollection(db, "giornateChiuse"), {
-            data: oggi, timestamp: Date.now(),
+        await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${oggi}`), {
+            data: oggi, sedeId: state.sedeAttiva, timestamp: Date.now(),
             lavContanti, lavPos, tapContanti, tapPos,
             parContanti, parPos, uscContanti, uscPos,
             totaleEntrate: totLav + totPar, totaleUscite: totUsc
