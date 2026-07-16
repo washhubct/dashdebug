@@ -1,7 +1,7 @@
 import { state, CONFIG } from './state.js';
 import { fmtDI } from './utils.js';
 // LE IMPORTAZIONI ESATTE SONO QUI:
-import { auth, fsGetDocs, fsGetDoc, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc, fsSetDoc, db } from './firebase-config.js';
+import { auth, fsGetDocs, fsGetDoc, fsCollection, fsDoc, db } from './firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 
 import { initAuth, isAdmin } from './moduli/auth.js';
@@ -310,12 +310,11 @@ async function initFirebaseData() {
     // gli operatori il cutoff Prima Nota è oggi; l'admin mantiene lo storico.
     const pnCutoff = isAdmin() ? cutoff : fmtDI(new Date());
     state._historicalLoaded = false;
-    state._datiIncompleti = false;
 
     try {
         // Tutte le collezioni in parallelo. Ogni task gestisce le sue eccezioni.
         const tasks = [
-            loadPrenotazioniFast(cutoff).catch(e => { console.error("Prenotazioni non caricate:", e.message); state.prenDB = {}; state._datiIncompleti = true; }),
+            loadPrenotazioniFast(cutoff).catch(e => { console.error("Prenotazioni non caricate:", e.message); state.prenDB = {}; }),
 
             fsGetDocs(query(fsCollection(db, "tappezzeria"), where("sedeId", "==", state.sedeAttiva))).then(snap => {
                 state.tapDB = [];
@@ -410,11 +409,10 @@ async function initFirebaseData() {
         goPage('cassa');
     }
 
-    // Chiusura automatica giornate precedenti (lun-sab)
-    await autoChiusuraGiornate();
-    
-    // Timer: controlla ogni minuto se sono le 20:00 per chiudere la giornata corrente
-    avviaTimerChiusura();
+    // Chiusura giornate: server-side, Cloud Function `chiusuraGiornaliera`
+    // (ore 21:00 Europe/Rome). Rimossa dal client il 16/07/2026: eseguirla
+    // qui dipendeva dal login e dalla versione JS in cache — fonte dei bug
+    // di duplicazione Prima Nota di luglio 2026.
 }
 
 let deferredPrompt;
@@ -450,257 +448,3 @@ window.addEventListener('appinstalled', () => {
     console.log('Installazione completata');
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// AUTO-CHIUSURA GIORNATE — scrive totali in Prima Nota
-// Controlla fino a 7 giorni indietro, solo lun-sab
-// ═══════════════════════════════════════════════════════════════════
-async function autoChiusuraGiornate() {
-    // Chiusura giornata = operazione contabile riservata all'admin. Le rules
-    // permettono solo all'admin di scrivere /giornateChiuse: se la eseguisse un
-    // operatore, marcherebbe le righe in primaNota ma NON riuscirebbe a segnare
-    // la giornata come chiusa → a ogni caricamento le riscriverebbe (bug dei
-    // duplicati massivi risolto il 14/07/2026). Quindi qui esce subito.
-    if (!isAdmin()) return;
-    // Se il caricamento prenotazioni è fallito, i totali verrebbero calcolati su
-    // dati vuoti e giorni con incassi reali finirebbero chiusi come "Nessun
-    // movimento" (successo il 13/07/2026). Meglio non chiudere nulla.
-    if (state._datiIncompleti) return;
-    try {
-        // Carica il registro delle giornate già chiuse
-        const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
-        const giornateChiuse = new Set();
-        snapChiuse.forEach(docSnap => {
-            const d = docSnap.data();
-            // Marker per-sede: uno di paesi-etnei non deve chiudere lungomare
-            // (e viceversa). I marker storici senza sedeId valgono per tutte.
-            if (d.data && (!d.sedeId || d.sedeId === state.sedeAttiva)) giornateChiuse.add(d.data);
-        });
-
-        const oggi = new Date();
-        
-        for (let i = 1; i <= 7; i++) {
-            const giorno = new Date(oggi);
-            giorno.setDate(giorno.getDate() - i);
-            
-            // Salta la domenica (0 = domenica)
-            if (giorno.getDay() === 0) continue;
-            
-            const dStr = fmtDI(giorno); // YYYY-MM-DD
-            const dIta = dStr.split('-').reverse().join('/'); // DD/MM/YYYY
-            
-            if (giornateChiuse.has(dStr)) continue;
-            
-            // --- TOTALI LAVAGGIO (prenotazioni) ---
-            const prenGiorno = state.prenDB[dStr] || [];
-            let lavContanti = 0, lavPos = 0;
-            prenGiorno.forEach(p => {
-                if (p.saldato === 'SI') {
-                    const imp = parseFloat(p.prezzo) || 0;
-                    if (p.saldo === 'CONTANTI') lavContanti += imp;
-                    else if (p.saldo === 'POS') lavPos += imp;
-                }
-            });
-
-            // --- TOTALI TAPPEZZERIA ---
-            let tapContanti = 0, tapPos = 0;
-            state.tapDB.forEach(t => {
-                if (t.status === 'OUT' && t.dataOut === dIta && t.pagamento !== 'SOSPESO') {
-                    const imp = parseFloat(t.prezzo) || 0;
-                    const mod = (t.pagamento || '').toUpperCase();
-                    if (mod === 'CONTANTI') tapContanti += imp;
-                    else if (mod === 'POS') tapPos += imp;
-                }
-            });
-
-            // --- TOTALI PARCHEGGIO AD ORE ---
-            let parContanti = 0, parPos = 0;
-            state.giornDB.forEach(g => {
-                if (g.status === 'OUT' && g.dataOut === dStr) {
-                    const imp = parseFloat(g.prezzoFinale) || 0;
-                    if (g.pagamento === 'CONTANTI') parContanti += imp;
-                    else if (g.pagamento === 'POS') parPos += imp;
-                }
-            });
-
-            // --- TOTALI USCITE ---
-            let uscContanti = 0, uscPos = 0;
-            state.usciteDB.filter(u => u.data === dStr).forEach(u => {
-                const imp = parseFloat(u.importo) || 0;
-                if (u.metodo === 'CONTANTI') uscContanti += imp;
-                else if (u.metodo === 'POS') uscPos += imp;
-            });
-
-            const totLav = lavContanti + lavPos + tapContanti + tapPos;
-            const totPar = parContanti + parPos;
-            const totUsc = uscContanti + uscPos;
-
-            // Nessun movimento? Segna chiusa e vai avanti
-            if (totLav === 0 && totPar === 0 && totUsc === 0) {
-                await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${dStr}`), { data: dStr, sedeId: state.sedeAttiva, timestamp: Date.now(), note: 'Nessun movimento' });
-                continue;
-            }
-
-            // --- SCRIVI IN PRIMA NOTA ---
-            const righe = [];
-            if (lavContanti > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO CASH', Descrizione: 'INCASSO CASH', ENTRATA: lavContanti, Entrata: lavContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-            if (lavPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO POS', Descrizione: 'INCASSO POS', ENTRATA: lavPos, Entrata: lavPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-            if (tapContanti > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA CASH', Descrizione: 'TAPPEZZERIA CASH', ENTRATA: tapContanti, Entrata: tapContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-            if (tapPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA POS', Descrizione: 'TAPPEZZERIA POS', ENTRATA: tapPos, Entrata: tapPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-            if (parContanti > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE CASH', ENTRATA: parContanti, Entrata: parContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-            if (parPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE POS', ENTRATA: parPos, Entrata: parPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-            if (uscContanti > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-            if (uscPos > 0) righe.push({ DATA: dIta, dataISO: dStr, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-
-            // ID documento DETERMINISTICO: sede_data_tipo. Così una nuova chiusura
-            // della stessa giornata SOVRASCRIVE la riga invece di duplicarla
-            // (idempotenza — evita il ritorno del bug dei duplicati massivi).
-            for (const riga of righe) {
-                riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
-                const tipo = (riga.Descrizione || '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
-                const pnId = `${state.sedeAttiva}_${dStr}_${tipo}`;
-                await fsSetDoc(fsDoc(db, "primaNota", pnId), riga);
-            }
-
-            // Segna giornata chiusa — ID deterministico: mai marker doppi
-            await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${dStr}`), {
-                data: dStr, sedeId: state.sedeAttiva, timestamp: Date.now(),
-                lavContanti, lavPos, tapContanti, tapPos,
-                parContanti, parPos, uscContanti, uscPos,
-                totaleEntrate: totLav + totPar, totaleUscite: totUsc
-            });
-
-            console.log(`✅ Giornata ${dIta} chiusa — Lav: €${totLav} | Par: €${totPar} | Usc: €${totUsc}`);
-        }
-    } catch (e) {
-        console.warn('Errore auto-chiusura giornate:', e.message);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// TIMER CHIUSURA GIORNATA ALLE 20:00
-// Controlla ogni minuto — se sono le 20:00+ e oggi non è stata
-// chiusa, chiude la giornata corrente
-// ═══════════════════════════════════════════════════════════════════
-let chiusuraOggiEseguita = false;
-
-function avviaTimerChiusura() {
-    // Controlla subito se sono già passate le 20:00
-    checkChiusuraOre20();
-    // Poi controlla ogni 60 secondi
-    setInterval(checkChiusuraOre20, 60000);
-}
-
-async function checkChiusuraOre20() {
-    if (chiusuraOggiEseguita) return;
-    if (!isAdmin()) return; // chiusura contabile: solo admin (vedi autoChiusuraGiornate)
-    if (state._datiIncompleti) return; // dati incompleti → mai chiudere (vedi autoChiusuraGiornate)
-
-    const now = new Date();
-    const ora = now.getHours();
-    const giorno = now.getDay(); // 0=dom
-    
-    // Solo lun-sab (1-6) e dopo le 20:00
-    if (giorno === 0 || ora < 20) return;
-    
-    const oggi = fmtDI(now);
-    
-    // Verifica se già chiusa
-    try {
-        const snapChiuse = await fsGetDocs(fsCollection(db, "giornateChiuse"));
-        let giaChiusa = false;
-        snapChiuse.forEach(docSnap => {
-            const d = docSnap.data();
-            // Per-sede come autoChiusuraGiornate; marker storici senza sedeId globali
-            if (d.data === oggi && (!d.sedeId || d.sedeId === state.sedeAttiva)) giaChiusa = true;
-        });
-        
-        if (giaChiusa) {
-            chiusuraOggiEseguita = true;
-            return;
-        }
-        
-        // Chiudi la giornata di oggi
-        const dIta = oggi.split('-').reverse().join('/');
-        
-        // Lavaggi
-        const prenOggi = state.prenDB[oggi] || [];
-        let lavContanti = 0, lavPos = 0;
-        prenOggi.forEach(p => {
-            if (p.saldato === 'SI') {
-                const imp = parseFloat(p.prezzo) || 0;
-                if (p.saldo === 'CONTANTI') lavContanti += imp;
-                else if (p.saldo === 'POS') lavPos += imp;
-            }
-        });
-
-        // Tappezzeria
-        let tapContanti = 0, tapPos = 0;
-        state.tapDB.forEach(t => {
-            if (t.status === 'OUT' && t.dataOut === dIta && t.pagamento !== 'SOSPESO') {
-                const imp = parseFloat(t.prezzo) || 0;
-                const mod = (t.pagamento || '').toUpperCase();
-                if (mod === 'CONTANTI') tapContanti += imp;
-                else if (mod === 'POS') tapPos += imp;
-            }
-        });
-
-        // Parcheggio ad ore
-        let parContanti = 0, parPos = 0;
-        state.giornDB.forEach(g => {
-            if (g.status === 'OUT' && g.dataOut === oggi) {
-                const imp = parseFloat(g.prezzoFinale) || 0;
-                if (g.pagamento === 'CONTANTI') parContanti += imp;
-                else if (g.pagamento === 'POS') parPos += imp;
-            }
-        });
-
-        // Uscite
-        let uscContanti = 0, uscPos = 0;
-        state.usciteDB.filter(u => u.data === oggi).forEach(u => {
-            const imp = parseFloat(u.importo) || 0;
-            if (u.metodo === 'CONTANTI') uscContanti += imp;
-            else if (u.metodo === 'POS') uscPos += imp;
-        });
-
-        const totLav = lavContanti + lavPos + tapContanti + tapPos;
-        const totPar = parContanti + parPos;
-        const totUsc = uscContanti + uscPos;
-
-        if (totLav === 0 && totPar === 0 && totUsc === 0) {
-            await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${oggi}`), { data: oggi, sedeId: state.sedeAttiva, timestamp: Date.now(), note: 'Nessun movimento' });
-            chiusuraOggiEseguita = true;
-            return;
-        }
-
-        // Scrivi in Prima Nota
-        const righe = [];
-        if (lavContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO CASH', Descrizione: 'INCASSO CASH', ENTRATA: lavContanti, Entrata: lavContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-        if (lavPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO POS', Descrizione: 'INCASSO POS', ENTRATA: lavPos, Entrata: lavPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-        if (tapContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA CASH', Descrizione: 'TAPPEZZERIA CASH', ENTRATA: tapContanti, Entrata: tapContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-        if (tapPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA POS', Descrizione: 'TAPPEZZERIA POS', ENTRATA: tapPos, Entrata: tapPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-        if (parContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE CASH', ENTRATA: parContanti, Entrata: parContanti, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-        if (parPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE POS', ENTRATA: parPos, Entrata: parPos, USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-        if (uscContanti > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'CONTANTI', timestamp: Date.now() });
-        if (uscPos > 0) righe.push({ DATA: dIta, dataISO: oggi, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, SOSPESO: 0, Sospeso: 0, "MODALITA'": 'POS', timestamp: Date.now() });
-
-        // ID deterministico sede_data_tipo → idempotente (vedi autoChiusuraGiornate)
-        for (const riga of righe) {
-            riga.sedeId = state.sedeAttiva;   // richiesto dalle Security Rules di primaNota
-            const tipo = (riga.Descrizione || '').replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
-            await fsSetDoc(fsDoc(db, "primaNota", `${state.sedeAttiva}_${oggi}_${tipo}`), riga);
-        }
-
-        await fsSetDoc(fsDoc(db, "giornateChiuse", `${state.sedeAttiva}_${oggi}`), {
-            data: oggi, sedeId: state.sedeAttiva, timestamp: Date.now(),
-            lavContanti, lavPos, tapContanti, tapPos,
-            parContanti, parPos, uscContanti, uscPos,
-            totaleEntrate: totLav + totPar, totaleUscite: totUsc
-        });
-
-        chiusuraOggiEseguita = true;
-        console.log(`✅ Giornata ${dIta} chiusa alle 20:00 — Lav: €${totLav} | Par: €${totPar} | Usc: €${totUsc}`);
-        
-    } catch (e) {
-        console.warn('Errore chiusura ore 20:', e.message);
-    }
-}

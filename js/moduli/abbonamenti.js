@@ -11,6 +11,15 @@ import { richiediPagamento, avviaPagamento, healthBridge } from './cassa-automat
 // registri lo stesso incasso più volte mentre l'operazione async è in corso.
 let _abbBusy = false;
 
+// Riga abbonamento in Prima Nota con ID deterministico: stesso giorno +
+// stessa descrizione + stesso importo = stesso documento. Ri-registrare un
+// pagamento identico sovrascrive (admin) o viene rifiutato dalle rules
+// (operatore, update vietato) invece di creare un doppione (dedup lug 2026).
+async function scriviRigaAbbPrimaNota(pnRow) {
+    const slug = `${pnRow.Descrizione}-${pnRow.ENTRATA}`.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
+    await setDoc(fsDoc(db, "primaNota", `${pnRow.sedeId}_${pnRow.dataISO}_${slug}`), pnRow);
+}
+
 let _abbonamentiInitialized = false;
 
 export function initAbbonamenti() {
@@ -354,7 +363,7 @@ async function saveAbb() {
                 sedeId: state.sedeAttiva,
                 ...(vneMeta || {})
             };
-            await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+            await scriviRigaAbbPrimaNota(pnRow);
             state.rawData?.primaNota?.rows?.push(pnRow);
         } catch(e) { console.error("Errore salvataggio Prima Nota:", e); }
     }
@@ -429,7 +438,7 @@ async function renewAbb(id) {
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva
             };
-            await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+            await scriviRigaAbbPrimaNota(pnRow);
             state.rawData?.primaNota?.rows?.push(pnRow);
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
@@ -474,7 +483,7 @@ async function pagaAbb(id) {
             "MODALITA'": pag.mod, timestamp: Date.now(),
             sedeId: state.sedeAttiva
         };
-        await fsAddDoc(fsCollection(db, "primaNota"), pnRow);
+        await scriviRigaAbbPrimaNota(pnRow);
         state.rawData?.primaNota?.rows?.push(pnRow);
     } catch(e) { console.warn("Errore Prima Nota:", e); }
 

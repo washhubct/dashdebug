@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260716a';
+    var APP_VERSION = '20260716b';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -767,7 +767,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260716a"></script>
+<script type="module" src="js/main.js?v=20260716b"></script>
 
 </body>
 </html>

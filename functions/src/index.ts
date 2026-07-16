@@ -8,6 +8,7 @@ initializeApp()
 
 export * from './fidelai-bridge'
 export * from './fidelai-admin'
+export * from './chiusura'
 // WhatsApp Cloud API in coming-soon: secrets Meta non ancora settati.
 // Riabilitare quando META_WHATSAPP_TOKEN/META_APP_SECRET/META_WEBHOOK_VERIFY_TOKEN/META_PHONE_NUMBER_ID sono configurati.
 // export * from './whatsapp'
