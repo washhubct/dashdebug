@@ -67,14 +67,17 @@ function calcolaDatiOperativi(fromStr, toStr) {
     const to = endOfDay(toStr);
 
     // --- LAVAGGI (da prenotazioni) ---
-    let lavContanti = 0, lavPos = 0, lavSospesi = 0, numLavaggi = 0;
+    let lavContanti = 0, lavPos = 0, lavSospesi = 0, numLavaggi = 0, cashVne = 0;
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         if (!inRange(date, from, to)) continue;
         entries.forEach(p => {
             numLavaggi++;
             const imp = pNum(p.prezzo);
             if (p.saldato === 'SI') {
-                if (p.saldo === 'CONTANTI') lavContanti += imp;
+                if (p.saldo === 'CONTANTI') {
+                    lavContanti += imp;
+                    if (p.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
+                }
                 else if (p.saldo === 'POS') lavPos += imp;
             } else if (p.saldo === 'SOSPESO') {
                 lavSospesi += imp;
@@ -92,7 +95,10 @@ function calcolaDatiOperativi(fromStr, toStr) {
         const imp = pNum(t.prezzo);
         const mod = (t.pagamento || '').toUpperCase();
         if (mod === 'SOSPESO' || mod === 'FATTURATO') tapSospesi += imp;
-        else if (mod === 'CONTANTI') tapContanti += imp;
+        else if (mod === 'CONTANTI') {
+            tapContanti += imp;
+            if (t.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
+        }
         else if (mod === 'POS') tapPos += imp;
         else tapContanti += imp; // default
     });
@@ -113,6 +119,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
         else if (mod === 'POS') abbPos += imp;
         else if (mod === 'BONIFICO') abbBonifico += imp;
         else abbContanti += imp;
+        if (mod !== 'POS' && mod !== 'BONIFICO' && r.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
     });
 
     // --- PARCHEGGIO AD ORE (giornalieri) ---
@@ -122,7 +129,10 @@ function calcolaDatiOperativi(fromStr, toStr) {
         if (!inRange(g.dataOut, from, to)) return;
         numPar++;
         const imp = pNum(g.prezzoFinale);
-        if (g.pagamento === 'CONTANTI') parContanti += imp;
+        if (g.pagamento === 'CONTANTI') {
+            parContanti += imp;
+            if (g.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
+        }
         else if (g.pagamento === 'POS') parPos += imp;
     });
 
@@ -196,6 +206,11 @@ function calcolaDatiOperativi(fromStr, toStr) {
     const fatParchTot = fatParchAbb + fatParchOre;
     const fatturato = fatLavaggio + fatTappezzeria + fatParchTot;
     const usciteTot = uscContanti + uscPos;
+    // Contanti totali del periodo: base per la riconciliazione con la cassa VNE.
+    // cashVne = quota transitata dalla cassa automatica (pagamentoVia='CASSA_AUTO');
+    // i sospesi saldati in contanti non portano il flag e ricadono nei manuali.
+    const cashTotale = lavContanti + tapContanti + abbContanti + parContanti + imContanti;
+    const cashManuale = cashTotale - cashVne;
     const consumabili = fatLavaggio * 0.03;
 
     // Affitto Paesi Etnei: 3000 €/mese pro-rata
@@ -213,6 +228,8 @@ function calcolaDatiOperativi(fromStr, toStr) {
         // Incassi manuali (Paesi Etnei)
         imSelfServ, imLavMano, imContanti, imPos, fatIncassiManuali,
         affittoPE,
+        // Cash (riconciliazione cassa VNE)
+        cashTotale, cashVne, cashManuale,
         // Totali
         fatturato, sospesiAperti, numSospesi,
         uscContanti, uscPos, usciteTot,
@@ -646,7 +663,8 @@ export function renderReport() {
             <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(d.fatturato)}</div><div class="kpi-sub">Periodo: ${d.costiFissi.giorni} giorni</div></div>
             <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Personale ${fEur(d.costoPersonale)} + Fissi ${fEur(d.costiFissi.totale)} + Operative ${fEur(d.usciteTot)} + Cons. ${fEur(d.consumabili)}</div></div>
             <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
-            <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(sospesiTotali)}</div><div class="kpi-sub">${d.numSospesi} in attesa</div></div>`;
+            <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(sospesiTotali)}</div><div class="kpi-sub">${d.numSospesi} in attesa</div></div>
+            <div class="kpi" style="border-color:#C8A84E"><div class="kpi-label">💵 Pagamenti Cash</div><div class="kpi-val">${fEur(d.cashTotale)}</div><div class="kpi-sub">🏧 Cassa VNE ${fEur(d.cashVne)} · Manuali ${fEur(d.cashManuale)}</div></div>`;
     }
 
     // Dettaglio uscite CON personale
