@@ -160,6 +160,10 @@ async function salvaSospesoFirestore(sospeso) {
             if (sospeso._pagato) {
                 updateData.saldato = 'SI';
                 updateData.saldo = sospeso._modPag || 'CONTANTI';
+                if (sospeso._pagamentoVia) {
+                    updateData.pagamentoVia = sospeso._pagamentoVia;
+                    if (sospeso._idVNE) updateData.idVNE = sospeso._idVNE;
+                }
             } else if (sospeso._fatturato) {
                 updateData.saldo = 'FATTURATO';
             }
@@ -184,6 +188,10 @@ async function salvaSospesoFirestore(sospeso) {
             const updateData = {};
             if (sospeso._pagato) {
                 updateData.pagamento = sospeso._modPag || 'CONTANTI';
+                if (sospeso._pagamentoVia) {
+                    updateData.pagamentoVia = sospeso._pagamentoVia;
+                    if (sospeso._idVNE) updateData.idVNE = sospeso._idVNE;
+                }
             } else if (sospeso._fatturato) {
                 updateData.pagamento = 'FATTURATO';
             }
@@ -209,6 +217,10 @@ async function salvaSospesoFirestore(sospeso) {
             updateData.pagato = true;
             updateData.modPagamento = sospeso._modPag || '';
             updateData.dataPagamento = sospeso._dataPag || '';
+            if (sospeso._pagamentoVia) {
+                updateData.pagamentoVia = sospeso._pagamentoVia;
+                if (sospeso._idVNE) updateData.idVNE = sospeso._idVNE;
+            }
         }
         await fsUpdateDoc(ref, updateData);
     } catch (e) {
@@ -234,6 +246,7 @@ async function salvaSospesoStorico(sospeso) {
             pagato: !!sospeso._pagato,
             modPagamento: sospeso._modPag || '',
             dataPagamento: sospeso._dataPag || '',
+            ...(sospeso._pagamentoVia ? { pagamentoVia: sospeso._pagamentoVia, idVNE: sospeso._idVNE || '' } : {}),
             fatturato: !!sospeso._fatturato,
             dataFattura: sospeso._dataFatt || '',
             timestamp: Date.now(),
@@ -249,7 +262,7 @@ async function salvaSospesoStorico(sospeso) {
     }
 }
 
-async function scriviPrimaNota(cliente, totale, mod, meseRif) {
+async function scriviPrimaNota(cliente, totale, mod, meseRif, meta = {}) {
     try {
         await fsAddDoc(fsCollection(db, 'primaNota'), {
             data: new Date().toLocaleDateString('it-IT'),
@@ -260,7 +273,8 @@ async function scriviPrimaNota(cliente, totale, mod, meseRif) {
             modalita: mod,
             centro: 'Lavaggio',
             timestamp: Date.now(),
-            sedeId: state.sedeAttiva
+            sedeId: state.sedeAttiva,
+            ...(meta.pagamentoVia ? { pagamentoVia: meta.pagamentoVia, idVNE: meta.idVNE || '' } : {})
         });
     } catch (e) {
         console.error('Errore scrittura Prima Nota:', e);
@@ -475,8 +489,10 @@ async function saldaSingolo(sid) {
     r._pagato = true;
     r._modPag = pag.mod;
     r._dataPag = oggiIta();
+    r._pagamentoVia = pag.meta?.pagamentoVia || '';
+    r._idVNE = pag.meta?.idVNE || '';
     await salvaSospesoFirestore(r);
-    await scriviPrimaNota(r.cliente, pag.prezzoFinale, pag.mod, getMeseAnno(r.data));
+    await scriviPrimaNota(r.cliente, pag.prezzoFinale, pag.mod, getMeseAnno(r.data), pag.meta);
     renderSospPage();
     updateSospBadge();
     renderCassa();
@@ -494,9 +510,11 @@ async function saldaCliente(cliente) {
         s._pagato = true;
         s._modPag = pag.mod;
         s._dataPag = oggi;
+        s._pagamentoVia = pag.meta?.pagamentoVia || '';
+        s._idVNE = pag.meta?.idVNE || '';
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Saldo completo');
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Saldo completo', pag.meta);
     renderSospPage();
     updateSospBadge();
     renderCassa();
@@ -539,9 +557,11 @@ async function segnaPagatoCliente(cliente) {
         s._pagato = true;
         s._modPag = pag.mod;
         s._dataPag = oggi;
+        s._pagamentoVia = pag.meta?.pagamentoVia || '';
+        s._idVNE = pag.meta?.idVNE || '';
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Fatture saldate');
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Fatture saldate', pag.meta);
     renderSospPage();
     updateSospBadge();
     renderCassa();
@@ -561,9 +581,11 @@ async function segnaPagatoMese(cliente, mese) {
         s._pagato = true;
         s._modPag = pag.mod;
         s._dataPag = oggi;
+        s._pagamentoVia = pag.meta?.pagamentoVia || '';
+        s._idVNE = pag.meta?.idVNE || '';
         await salvaSospesoFirestore(s);
     }
-    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, mese);
+    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, mese, pag.meta);
     renderSospPage();
     updateSospBadge();
     renderCassa();
@@ -576,13 +598,15 @@ async function riapriPagato(sid) {
     r._pagato = false;
     r._modPag = '';
     r._dataPag = '';
+    r._pagamentoVia = '';
+    r._idVNE = '';
     try {
         if (sid.startsWith('PREN-')) {
-            await fsUpdateDoc(fsDoc(db, 'prenotazioni', sid.replace('PREN-', '')), { saldo: 'SOSPESO', saldato: '' });
+            await fsUpdateDoc(fsDoc(db, 'prenotazioni', sid.replace('PREN-', '')), { saldo: 'SOSPESO', saldato: '', pagamentoVia: '', idVNE: '' });
         } else if (sid.startsWith('TAP-')) {
-            await fsUpdateDoc(fsDoc(db, 'tappezzeria', sid.replace('TAP-', '')), { pagamento: 'SOSPESO' });
+            await fsUpdateDoc(fsDoc(db, 'tappezzeria', sid.replace('TAP-', '')), { pagamento: 'SOSPESO', pagamentoVia: '', idVNE: '' });
         } else {
-            await fsUpdateDoc(fsDoc(db, 'sospesi', sid), { pagato: false, modPagamento: '', dataPagamento: '' });
+            await fsUpdateDoc(fsDoc(db, 'sospesi', sid), { pagato: false, modPagamento: '', dataPagamento: '', pagamentoVia: '', idVNE: '' });
         }
     } catch(e) {
         console.warn('Errore riapri pagato:', e.message);
