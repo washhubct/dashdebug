@@ -149,8 +149,11 @@ service cloud.firestore {
     // generati da client operatore ancora su versione vecchia (bug 14/07/2026).
     // Le righe individuali (RINNOVO ABB. NOME, TAPPEZZERIA NOME, incassi manuali)
     // hanno descrizioni diverse e restano consentite agli operatori.
+    // NB: .get() e non accesso diretto — le righe "Incasso sospesi" (sospesi.js)
+    // hanno solo `descrizione` minuscola: il campo assente faceva ERRORE di rule
+    // e negava la create agli operatori (bug scoperto 26/07/2026, €62 mai registrati).
     function isRigaAggregata() {
-      return request.resource.data.Descrizione in [
+      return request.resource.data.get('Descrizione', '') in [
         'INCASSO POS', 'INCASSO CASH',
         'TAPPEZZERIA POS', 'TAPPEZZERIA CASH',
         'PARCHEGGIO AD ORE POS', 'PARCHEGGIO AD ORE CASH',
