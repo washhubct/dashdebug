@@ -622,7 +622,7 @@ export function renderTap() {
 
     let html = '';
     if (inLav.length === 0) {
-        html = '<tr><td colspan="7" class="empty">Nessuna tappezzeria in lavorazione</td></tr>';
+        html = '<tr><td colspan="8" class="empty">Nessuna tappezzeria in lavorazione</td></tr>';
     } else {
         inLav.forEach(t => {
             html += `<tr>
@@ -631,6 +631,7 @@ export function renderTap() {
                 <td>${esc(t.modello)}</td>
                 <td style="font:500 11px var(--mono)">${esc(t.targa)}</td>
                 <td style="font-weight:600">€${pNum(t.prezzo)}</td>
+                <td style="font-size:11px;color:var(--tx2)">${esc(t.note || '')}</td>
                 <td>
                     <button class="btn pay-tap" data-id="${t._id}" data-mod="CONTANTI">💵</button>
                     <button class="btn pay-tap" data-id="${t._id}" data-mod="POS">💳</button>
@@ -651,7 +652,7 @@ export function renderTap() {
 
     if (outData.length > 0) {
         let outHtml = `<div style="margin-top:14px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">✅ Completate ${selDataIta}</div>
-        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Entrata</th><th>Uscita</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Pagamento</th></tr></thead><tbody>`;
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Entrata</th><th>Uscita</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Note</th><th>Pagamento</th></tr></thead><tbody>`;
         outData.forEach(t => {
             outHtml += `<tr style="opacity:0.6">
                 <td>${t.dataIn}</td>
@@ -660,6 +661,7 @@ export function renderTap() {
                 <td>${esc(t.modello)}</td>
                 <td>${esc(t.targa)}</td>
                 <td style="font-weight:600">€${pNum(t.prezzo)}</td>
+                <td style="font-size:11px;color:var(--tx2)">${esc(t.note || '')}</td>
                 <td><span class="badge ${t.pagamento === 'SOSPESO' ? 'a' : 'b'}">${t.pagamento || '—'}</span></td>
             </tr>`;
         });
@@ -700,6 +702,7 @@ async function addTap() {
         targa: normalizeName(document.getElementById('tTarga').value),
         telefono,
         prezzo: prezzoRaw,
+        note: (document.getElementById('tNote')?.value || '').trim(),
         status: 'IN', pagamento: '', dataOut: '',
         sedeId: state.sedeAttiva
     };
@@ -714,7 +717,7 @@ async function addTap() {
         const isNewClient = await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
 
         renderTap();
-        ['tCliente','tModello','tTarga','tTelefono','tPrezzo'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+        ['tCliente','tModello','tTarga','tTelefono','tPrezzo','tNote'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
 
         // Se è un nuovo cliente con telefono valido nel CRM, propone benvenuto
         if (isNewClient) showWelcomeToast(obj.cliente);

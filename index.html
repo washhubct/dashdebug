@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260726a';
+    var APP_VERSION = '20260730a';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -381,7 +381,7 @@
 </div>
 <div class="tbl-wrap">
   <table class="tbl">
-    <thead><tr><th>Data IN</th><th>Cliente</th><th>Modello</th><th>Targa</th><th style="width:80px">Prezzo €</th><th style="width:160px">Pagamento</th><th style="width:60px">Azioni</th></tr></thead>
+    <thead><tr><th>Data IN</th><th>Cliente</th><th>Modello</th><th>Targa</th><th style="width:80px">Prezzo €</th><th>Note</th><th style="width:160px">Pagamento</th><th style="width:60px">Azioni</th></tr></thead>
     <tbody id="tapTb"></tbody>
   </table>
 </div>
@@ -394,6 +394,7 @@
     <div class="ff" style="width:110px"><label>Targa *</label><input id="tTarga" style="text-transform:uppercase" placeholder="AA000AA"></div>
     <div class="ff" style="width:130px"><label>Telefono</label><input id="tTelefono" type="tel" placeholder="Es: 3331234567"></div>
     <div class="ff" style="width:80px"><label>Prezzo € *</label><input id="tPrezzo" type="number" step="1"></div>
+    <div class="ff" style="width:150px"><label>Note</label><input id="tNote" placeholder="Opzionale"></div>
     <button class="btn btn-primary" style="height:37px;padding:0 20px">Registra IN</button>
   </div>
   <div class="form-msg" id="tapMsg"></div>
@@ -767,7 +768,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260726a"></script>
+<script type="module" src="js/main.js?v=20260730a"></script>
 
 </body>
 </html>
