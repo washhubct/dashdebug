@@ -291,13 +291,29 @@ function renderRiepilogoMensile(mese, anno) {
         ...exDipendenti.sort().map(n => ({ nome: n, mod: '<span class="badge" title="Non più in organico">👋 ex</span>' })),
     ];
 
+    // "Da pagare" = giornate NON marcate pagate su TUTTO lo storico (il
+    // pagamento è a quindicina, può stare a cavallo di più mesi)
+    const daPagare = {};
+    presenzeLocali.forEach(p => {
+        if (!p.dettaglio) return;
+        for (const [nome, val] of Object.entries(p.dettaglio)) {
+            const v = pNum(val);
+            if (v <= 0) continue;
+            if (p.pagati && p.pagati[nome]) continue; // già saldata
+            daPagare[nome] = (daPagare[nome] || 0) + v;
+        }
+    });
+
     tb.innerHTML = righe.map(dip => {
         totGenerale += totDip[dip.nome];
+        const dovuto = daPagare[dip.nome] || 0;
         return `<tr>
             <td><strong>${dip.nome}</strong></td>
             <td>${dip.mod}</td>
             <td style="text-align:center">${giorniDip[dip.nome]}</td>
             <td style="font:700 13px var(--f);color:var(--red)">${fEur(totDip[dip.nome])}</td>
+            <td style="font:700 13px var(--f);color:${dovuto > 0 ? 'var(--amb)' : 'var(--grn)'}">${dovuto > 0 ? fEur(dovuto) : '✓ saldato'}</td>
+            <td>${dovuto > 0 ? `<button class="btn btn-paga-dip" data-nome="${dip.nome}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Segna pagato</button>` : ''}</td>
         </tr>`;
     }).join('');
 
@@ -305,7 +321,35 @@ function renderRiepilogoMensile(mese, anno) {
         <td colspan="2"><strong>TOTALE ${mesi[mese].toUpperCase()} ${anno}</strong></td>
         <td></td>
         <td style="font:700 14px var(--f);color:var(--red)">${fEur(totGenerale)}</td>
+        <td colspan="2"></td>
     </tr>`;
+
+    tb.querySelectorAll('.btn-paga-dip').forEach(btn => {
+        btn.addEventListener('click', () => segnaPagatoDipendente(btn.dataset.nome));
+    });
+}
+
+// Quindicina: marca come PAGATE tutte le giornate non saldate del dipendente
+// (su tutto lo storico), con la data odierna. Il "Da pagare" torna a zero.
+async function segnaPagatoDipendente(nome) {
+    const daSaldare = presenzeLocali.filter(p =>
+        p.dettaglio && pNum(p.dettaglio[nome]) > 0 && !(p.pagati && p.pagati[nome])
+    );
+    if (!daSaldare.length) return;
+    const totale = daSaldare.reduce((s, p) => s + pNum(p.dettaglio[nome]), 0);
+    const prima = daSaldare.map(p => p.dataISO).sort()[0].split('-').reverse().join('/');
+    if (!confirm(`Segnare PAGATO ${nome}?\n${daSaldare.length} giornate dal ${prima} — totale ${fEur(totale)}`)) return;
+
+    const oggi = new Date().toLocaleDateString('it-IT');
+    for (const p of daSaldare) {
+        if (!p._id) continue;
+        const pagati = { ...(p.pagati || {}), [nome]: oggi };
+        try {
+            await fsUpdateDoc(fsDoc(db, 'presenzeDipendenti', p._id), { pagati });
+            p.pagati = pagati;
+        } catch (e) { console.warn('segna pagato fallito', p.dataISO, e?.message); }
+    }
+    renderRiepilogoMensile(riepMese, riepAnno);
 }
 
 // ─── SALVA PRESENZA GIORNATA ───
