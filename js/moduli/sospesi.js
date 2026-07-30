@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
-import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db } from '../firebase-config.js';
+import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db, ficCall } from '../firebase-config.js';
 import { richiediPagamento } from './cassa-automatica.js';
 
 /* global XLSX */
@@ -212,6 +212,7 @@ async function salvaSospesoFirestore(sospeso) {
         if (sospeso._fatturato) {
             updateData.fatturato = true;
             updateData.dataFattura = sospeso._dataFatt || '';
+            if (sospeso._ficDocId) { updateData.ficDocId = sospeso._ficDocId; updateData.ficNumero = sospeso._ficNumero ?? null; }
         }
         if (sospeso._pagato) {
             updateData.pagato = true;
@@ -247,6 +248,7 @@ async function salvaSospesoStorico(sospeso) {
             modPagamento: sospeso._modPag || '',
             dataPagamento: sospeso._dataPag || '',
             ...(sospeso._pagamentoVia ? { pagamentoVia: sospeso._pagamentoVia, idVNE: sospeso._idVNE || '' } : {}),
+            ...(sospeso._ficDocId ? { ficDocId: sospeso._ficDocId, ficNumero: sospeso._ficNumero ?? null } : {}),
             fatturato: !!sospeso._fatturato,
             dataFattura: sospeso._dataFatt || '',
             timestamp: Date.now(),
@@ -360,6 +362,7 @@ export function renderSospPage() {
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap">
                     <button class="btn btn-salda-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px" title="Incassa tutti i sospesi di questo cliente">💰 Incassa Tutto</button>
                     <button class="btn btn-fatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;border-color:var(--amb);color:var(--amb)" title="Segna TUTTI come FATTURATI — restano in attesa di pagamento nella tab Fatturati">📄 Segna Fatturato</button>
+                    <button class="btn btn-ficfatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;border-color:var(--blu);color:var(--blu)" title="Crea la fattura su Fatture in Cloud coi dati fiscali del CRM e segna i sospesi come fatturati">🧾 Fattura FIC</button>
                 </div>`;
             } else if (filter === 'fatturati') {
                 const mesi = {};
@@ -463,6 +466,9 @@ export function renderSospPage() {
     container.querySelectorAll('.btn-fatt-cli').forEach(btn => {
         btn.addEventListener('click', () => segnaFatturatoCliente(btn.dataset.cli));
     });
+    container.querySelectorAll('.btn-ficfatt-cli').forEach(btn => {
+        btn.addEventListener('click', () => fatturaFICCliente(btn.dataset.cli));
+    });
     container.querySelectorAll('.btn-pagato-cli').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoCliente(btn.dataset.cli));
     });
@@ -528,6 +534,53 @@ async function segnaFatturatoSingolo(sid) {
     await salvaSospesoFirestore(r);
     renderSospPage();
     updateSospBadge();
+}
+
+// Crea la fattura reale su Fatture in Cloud (dati fiscali dal CRM = fonte unica)
+// e segna i sospesi come fatturati con il riferimento al documento FIC.
+async function fatturaFICCliente(cliente) {
+    const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
+    if (!aperti.length) return;
+    const totale = aperti.reduce((s, r) => s + (parseFloat(r.importo) || 0), 0);
+
+    const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(cliente).toUpperCase());
+    const anag = {
+        nome: (crm?.denominazione || crm?.nome || cliente).toUpperCase(),
+        piva: crm?.piva || '',
+        sdi: crm?.codDestinatario || '',
+        pec: crm?.pec || '',
+        indirizzo: crm?.sedeLegale || ''
+    };
+    if (!anag.piva) {
+        const ok = confirm(`⚠️ ${cliente} non ha la P.IVA nel CRM.\nSe esiste già su Fatture in Cloud lo cerco per nome, altrimenti verrebbe creato SENZA dati fiscali.\n\nMeglio completare prima l'anagrafica in Clienti/CRM. Procedere comunque?`);
+        if (!ok) return;
+    }
+    if (!confirm(`Creare la fattura su Fatture in Cloud per ${cliente}?\n${aperti.length} lavorazioni — totale ${fEur(totale)}\n\nLa fattura NON viene inviata a SDI: revisione e invio dal pannello FIC.`)) return;
+
+    const righe = aperti.map(s => ({
+        descrizione: `Lavaggio ${s.vettura || ''} ${s.targa || ''} — ${s.data}`.replace(/\s+/g, ' ').trim(),
+        importo: parseFloat(s.importo) || 0
+    }));
+
+    try {
+        const res = await ficCall('fatturaSospesi', { cliente: anag, righe, note: `Sospesi ${cliente}` });
+        const oggi = oggiIta();
+        for (const s of aperti) {
+            s._fatturato = true;
+            s._dataFatt = oggi;
+            s._ficDocId = res.ficDocId || null;
+            s._ficNumero = res.numero ?? null;
+            await salvaSospesoFirestore(s);
+        }
+        alert(`✅ Fattura n. ${res.numero ?? '—'} creata su Fatture in Cloud — ${fEur(res.totale ?? totale)}` +
+              (res.clienteCreato ? `\n(cliente creato su FIC coi dati del CRM)` : '') +
+              `\nRicordati l'invio SDI dal pannello FIC.`);
+        renderSospPage();
+        updateSospBadge();
+    } catch (e) {
+        console.error('[FIC] fattura sospesi', e);
+        alert('❌ Fattura in Cloud: ' + (e.message || 'errore sconosciuto'));
+    }
 }
 
 async function segnaFatturatoCliente(cliente) {

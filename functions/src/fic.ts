@@ -20,8 +20,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 const REGION = 'europe-west1'
 const FIC_API = 'https://api-v2.fattureincloud.it'
-const OAUTH_SCOPE = 'entity.clients:a issued_documents.invoices:a'
-const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com']
+const OAUTH_SCOPE = 'entity.clients:a issued_documents.invoices:a settings:r'
 
 const secretsRef = () => getFirestore().doc('secrets/fic')
 
@@ -138,10 +137,43 @@ async function getVat22(): Promise<number> {
   return v22.id
 }
 
+/**
+ * Cerca il cliente su FIC per P.IVA (match esatto) o nome; se assente lo crea
+ * coi dati del CRM dashboard. Ritorna { id, name, creato }.
+ */
+async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean }> {
+  const piva = String(c.piva || '').replace(/\s/g, '')
+  let q = piva ? `vat_number = '${piva}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
+  const found = await fic(`/entities/clients?q=${encodeURIComponent(q)}`)
+  const match = (found?.data || [])[0]
+  if (match) return { id: match.id, name: match.name, creato: false }
+
+  const body = {
+    data: {
+      name: c.nome,
+      vat_number: piva || undefined,
+      tax_code: c.cf || undefined,
+      address_street: c.indirizzo || undefined,
+      address_postal_code: c.cap || undefined,
+      address_city: c.citta || undefined,
+      address_province: c.provincia || undefined,
+      country: 'Italia',
+      ei_code: c.sdi || undefined,       // codice destinatario SDI
+      certified_email: c.pec || undefined,
+      type: piva ? 'company' : 'person',
+    },
+  }
+  const created = await fic('/entities/clients', { method: 'POST', body })
+  const nc = created?.data
+  if (!nc?.id) throw new HttpsError('internal', 'Creazione cliente FIC fallita')
+  return { id: nc.id, name: nc.name, creato: true }
+}
+
 export const ficApi = onCall({ region: REGION }, async (request) => {
+  // Fatturazione aperta a tutti gli utenti autenticati del gestionale
+  // (operatore compreso, richiesta del titolare 30/07).
   const email = (request.auth?.token?.email || '').toLowerCase()
   if (!email) throw new HttpsError('unauthenticated', 'Login richiesto')
-  if (!ADMIN_EMAILS.includes(email)) throw new HttpsError('permission-denied', 'Solo admin')
 
   const { action, payload = {} } = request.data || {}
 
@@ -159,11 +191,15 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
     }
 
     case 'fatturaSospesi': {
-      // payload: { clienteFicId, righe: [{descrizione, importo}], note? }
-      const { clienteFicId, righe, note } = payload
-      if (!clienteFicId || !Array.isArray(righe) || righe.length === 0) {
-        throw new HttpsError('invalid-argument', 'clienteFicId e righe richiesti')
+      // payload: { cliente: {nome, piva?, cf?, indirizzo?, cap?, citta?, provincia?, sdi?, pec?},
+      //            righe: [{descrizione, importo}], note? }
+      // Il cliente viene cercato su FIC per P.IVA (o nome) e creato coi dati
+      // del CRM se assente: la dashboard è la fonte dell'anagrafica.
+      const { cliente, righe, note } = payload
+      if (!cliente?.nome || !Array.isArray(righe) || righe.length === 0) {
+        throw new HttpsError('invalid-argument', 'cliente.nome e righe richiesti')
       }
+      const entity = await upsertClienteFIC(cliente)
       const vatId = await getVat22()
       const items = righe.map((r: any) => ({
         name: String(r.descrizione || 'Lavaggio'),
@@ -171,19 +207,23 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
         gross_price: Number(r.importo) || 0,
         vat: { id: vatId },
       }))
+      const totale = Math.round(righe.reduce((s: number, r: any) => s + (Number(r.importo) || 0), 0) * 100) / 100
+      const oggi = new Date().toISOString().slice(0, 10)
       const body = {
         data: {
           type: 'invoice',
-          entity: { id: clienteFicId },
-          date: new Date().toISOString().slice(0, 10),
+          entity: { id: entity.id, name: entity.name },
+          date: oggi,
+          use_gross_prices: true,
           items_list: items,
+          payments_list: [{ amount: totale, due_date: oggi, status: 'not_paid' }],
           visible_subject: note || 'Servizi autolavaggio — sospesi',
-          e_invoice: false, // bozza: revisione e invio SDI dal pannello FIC
+          e_invoice: false, // niente invio SDI automatico: revisione e invio dal pannello FIC
         },
       }
       const data = await fic('/issued_documents', { method: 'POST', body })
       const doc = data?.data
-      return { ok: true, ficDocId: doc?.id, numero: doc?.number ?? null, totale: doc?.amount_gross ?? null, url: doc?.url ?? null }
+      return { ok: true, ficDocId: doc?.id, numero: doc?.number ?? null, totale: doc?.amount_gross ?? null, clienteFicId: entity.id, clienteCreato: entity.creato }
     }
 
     case 'statoFattura': {

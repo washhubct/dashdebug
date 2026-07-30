@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-functions.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCj0IlKMARo0IxnqaHoN-rSd0HINuwf6Po",
@@ -15,6 +16,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const functions = getFunctions(app, 'europe-west1');
+
+// Fatture in Cloud: wrapper della callable ficApi (functions/src/fic.ts)
+export const ficCall = (action, payload = {}) =>
+    httpsCallable(functions, 'ficApi')({ action, payload }).then(r => r.data);
 
 // Esportiamo usando i "soprannomi" (aliases) esatti richiesti dai moduli!
 export { 
