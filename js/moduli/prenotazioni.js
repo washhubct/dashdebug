@@ -366,9 +366,12 @@ function chiediFatturaAlPagamento(entry) {
     });
 }
 
-// Fattura immediata su FIC per prenotazione flaggata 🧾, chiamata al saldo.
+// Fattura immediata su FIC per record flaggato 🧾, chiamata al saldo.
+// Vale per prenotazioni (default) e tappezzeria (opts.collection/label).
 // Il pagamento è già salvato: un errore qui NON lo blocca, avvisa soltanto.
-async function creaFatturaImmediata(entry, pid, importo) {
+async function creaFatturaImmediata(entry, docId, importo, opts = {}) {
+    const collection = opts.collection || 'prenotazioni';
+    const label = opts.label || 'Lavaggio';
     const df = entry.datiFattura || {};
     const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(entry.cliente || '').toUpperCase());
     const anag = {
@@ -378,14 +381,16 @@ async function creaFatturaImmediata(entry, pid, importo) {
         pec: df.pec || crm?.pec || '',
         indirizzo: df.sede || crm?.sedeLegale || '',
     };
-    const dataIta = (entry.dataPren || '').split('-').reverse().join('/');
+    const dataIta = collection === 'prenotazioni'
+        ? (entry.dataPren || '').split('-').reverse().join('/')
+        : (entry.dataOut || new Date().toLocaleDateString('it-IT'));
     try {
         const res = await ficCall('fatturaSospesi', {
             cliente: anag,
-            righe: [{ descrizione: `Lavaggio ${entry.vettura || ''} ${entry.targa || ''} — ${dataIta}`.replace(/\s+/g, ' ').trim(), importo }],
-            note: `Lavaggio del ${dataIta}`,
+            righe: [{ descrizione: `${label} ${entry.vettura || entry.modello || ''} ${entry.targa || ''} — ${dataIta}`.replace(/\s+/g, ' ').trim(), importo }],
+            note: `${label} del ${dataIta}`,
         });
-        await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
+        await fsUpdateDoc(fsDoc(db, collection, docId), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
         entry.ficDocId = res.ficDocId || null;
         entry.ficNumero = res.numero ?? null;
         alert(`🧾 Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? importo)}` +
@@ -806,7 +811,7 @@ export function renderTap() {
         inLav.forEach(t => {
             html += `<tr>
                 <td style="font:400 11px var(--mono)">${t.dataIn}</td>
-                <td><strong>${esc(t.cliente)}</strong></td>
+                <td><strong>${esc(t.cliente)}</strong>${t.richiedeFattura ? (t.ficNumero ? ` <span title="Fattura n. ${esc(String(t.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
                 <td>${esc(t.modello)}</td>
                 <td style="font:500 11px var(--mono)">${esc(t.targa)}</td>
                 <td style="font-weight:600">€${pNum(t.prezzo)}</td>
@@ -836,7 +841,7 @@ export function renderTap() {
             outHtml += `<tr style="opacity:0.6">
                 <td>${t.dataIn}</td>
                 <td>${t.dataOut || '—'}</td>
-                <td>${esc(t.cliente)}</td>
+                <td>${esc(t.cliente)}${t.ficNumero ? ` <span title="Fattura n. ${esc(String(t.ficNumero))}">🧾✅</span>` : ''}</td>
                 <td>${esc(t.modello)}</td>
                 <td>${esc(t.targa)}</td>
                 <td style="font-weight:600">€${pNum(t.prezzo)}</td>
@@ -920,6 +925,20 @@ async function markPaidTap(id, modDefault) {
     const t = state.tapDB.find(x => x._id === id);
     if (!t) return;
 
+    // Popup richiesta fattura al pagamento (come i lavaggi)
+    if ((modDefault === 'CONTANTI' || modDefault === 'POS') && !t.richiedeFattura) {
+        const rf = await chiediFatturaAlPagamento(t);
+        if (rf === null) return; // annullato: non incassare
+        if (rf.fattura) {
+            try {
+                await fsUpdateDoc(fsDoc(db, 'tappezzeria', id), { richiedeFattura: true, datiFattura: rf.dati });
+                t.richiedeFattura = true;
+                t.datiFattura = rf.dati;
+                await salvaDatiFiscaliCRM(t.cliente, rf.dati);
+            } catch (e) { console.warn('flag fattura tappezzeria:', e?.message); }
+        }
+    }
+
     let modUp = modDefault;
     let extraMeta = {};
     let prezzoFinaleStr = t.prezzo;
@@ -956,6 +975,11 @@ async function markPaidTap(id, modDefault) {
                 "MODALITA'": modUp, timestamp: Date.now(),
                 sedeId: state.sedeAttiva
             }).catch(e => console.warn("Errore Prima Nota tappezzeria:", e));
+        }
+
+        // Fattura immediata anche per tappezzeria flaggata 🧾
+        if (t.richiedeFattura && !t.ficDocId && (modUp === 'CONTANTI' || modUp === 'POS')) {
+            await creaFatturaImmediata(t, id, parseFloat(prezzoFinaleStr) || 0, { collection: 'tappezzeria', label: 'Tappezzeria' });
         }
 
         renderTap();
