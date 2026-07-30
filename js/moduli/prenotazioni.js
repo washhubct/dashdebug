@@ -1,4 +1,4 @@
-import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
 import { logDelete } from './log.js';
@@ -51,6 +51,32 @@ export function initPrenotazioni() {
 
     document.getElementById('prenTb')?.addEventListener('click', handlePrenActions);
     document.getElementById('tapTb')?.addEventListener('click', handleTapActions);
+
+    // Flag richiesta fattura: mostra i dati fiscali, precompilati dal CRM se noti
+    document.getElementById('pFattura')?.addEventListener('change', (e) => {
+        const panel = document.getElementById('pFattDati');
+        if (!panel) return;
+        if (e.target.value === 'SI') {
+            panel.style.display = 'flex';
+            prefillDatiFattura();
+        } else {
+            panel.style.display = 'none';
+        }
+    });
+}
+
+// Precompila i dati fiscali dal CRM per il nominativo digitato (se già salvati)
+function prefillDatiFattura() {
+    const nome = (document.getElementById('pCliente')?.value || '').trim().toUpperCase();
+    if (!nome) return;
+    const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === nome);
+    if (!crm) return;
+    const setIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+    setIfEmpty('pFDen', crm.denominazione);
+    setIfEmpty('pFPiva', crm.piva);
+    setIfEmpty('pFSdi', crm.codDestinatario);
+    setIfEmpty('pFPec', crm.pec);
+    setIfEmpty('pFSede', crm.sedeLegale);
 }
 
 function moveDate(days) {
@@ -124,7 +150,7 @@ export function renderPren() {
 
                 html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
-                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}</td>
+                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
                     <td>${esc(e.vettura || '')}</td>
                     <td style="font:500 12px var(--mono)">${prezzoCellHtml}</td>
                     <td>${pagHtml}</td>
@@ -195,6 +221,21 @@ async function addPren() {
     const prezzoNum = parseFloat(prezzoRaw.replace(',', '.'));
     if (isNaN(prezzoNum) || prezzoNum < 0) return showErr('⚠️ Prezzo non valido (es. 25 oppure 25,50)', 'pPrezzo');
 
+    // Richiesta fattura: valida i dati fiscali minimi
+    const richiedeFattura = document.getElementById('pFattura')?.value === 'SI';
+    let datiFattura = null;
+    if (richiedeFattura) {
+        datiFattura = {
+            denominazione: (document.getElementById('pFDen')?.value || '').trim().toUpperCase(),
+            piva: (document.getElementById('pFPiva')?.value || '').trim(),
+            sdi: (document.getElementById('pFSdi')?.value || '').trim().toUpperCase(),
+            pec: (document.getElementById('pFPec')?.value || '').trim(),
+            sede: (document.getElementById('pFSede')?.value || '').trim(),
+        };
+        if (!datiFattura.denominazione) return showErr('⚠️ Fattura richiesta: inserisci la denominazione', 'pFDen');
+        if (!/^\d{11}$/.test(datiFattura.piva)) return showErr('⚠️ Fattura richiesta: P.IVA di 11 cifre obbligatoria', 'pFPiva');
+    }
+
     // Hard autocomplete: se esistono clienti simili, forza scelta o conferma "nuovo"
     const clienteFinale = await checkClienteDuplicato(inputNome);
     if (clienteFinale === null) return; // utente ha annullato
@@ -209,7 +250,8 @@ async function addPren() {
         prezzo: prezzoRaw,
         note: document.getElementById('pNote').value.trim(),
         saldo: '', saldato: '',
-        sedeId: state.sedeAttiva
+        sedeId: state.sedeAttiva,
+        ...(richiedeFattura ? { richiedeFattura: true, datiFattura } : {})
     };
 
     try {
@@ -221,8 +263,14 @@ async function addPren() {
         // Auto-salva cliente nel CRM con telefono; isNew = true se creato ora
         const isNewClient = await autoSalvaCliente(obj.cliente, obj.vettura, '', obj.telefono);
 
+        // Cliente con richiesta fattura: dati fiscali salvati sul CRM una volta
+        // sola — ai prossimi lavaggi il pannello si precompila da solo.
+        if (richiedeFattura) await salvaDatiFiscaliCRM(obj.cliente, datiFattura);
+
         renderPren();
-        ['pCliente','pTelefono','pVettura','pTarga','pPrezzo','pNote'].forEach(id => document.getElementById(id).value = '');
+        ['pCliente','pTelefono','pVettura','pTarga','pPrezzo','pNote','pFDen','pFPiva','pFSdi','pFPec','pFSede'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const pFat = document.getElementById('pFattura');
+        if (pFat) { pFat.value = ''; document.getElementById('pFattDati').style.display = 'none'; }
         if (msg) msg.textContent = '';
 
         // UN SOLO toast a seconda che il cliente sia nuovo o già conosciuto.
@@ -236,6 +284,56 @@ async function addPren() {
             showConfirmPrenToast(obj.cliente, dataIta, obj.orario);
         }
     } catch(e) { console.error(e); }
+}
+
+// Scrive i dati fiscali sul record CRM del cliente (creato poco prima da
+// autoSalvaCliente se nuovo): fonte unica per le prossime fatture.
+async function salvaDatiFiscaliCRM(nomeCliente, df) {
+    try {
+        const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(nomeCliente).toUpperCase());
+        if (!crm || !crm._id) return;
+        const upd = {
+            denominazione: df.denominazione,
+            piva: df.piva,
+            codDestinatario: df.sdi || crm.codDestinatario || '',
+            pec: df.pec || crm.pec || '',
+            sedeLegale: df.sede || crm.sedeLegale || '',
+        };
+        if (!crm.tipo || crm.tipo === 'privato') upd.tipo = 'fattura';
+        await fsUpdateDoc(fsDoc(db, 'clienti', crm._id), upd);
+        Object.assign(crm, upd);
+    } catch (e) { console.warn('salvataggio dati fiscali CRM:', e?.message); }
+}
+
+// Fattura immediata su FIC per prenotazione flaggata 🧾, chiamata al saldo.
+// Il pagamento è già salvato: un errore qui NON lo blocca, avvisa soltanto.
+async function creaFatturaImmediata(entry, pid, importo) {
+    const df = entry.datiFattura || {};
+    const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(entry.cliente || '').toUpperCase());
+    const anag = {
+        nome: (df.denominazione || crm?.denominazione || entry.cliente || '').toUpperCase(),
+        piva: df.piva || crm?.piva || '',
+        sdi: df.sdi || crm?.codDestinatario || '',
+        pec: df.pec || crm?.pec || '',
+        indirizzo: df.sede || crm?.sedeLegale || '',
+    };
+    const dataIta = (entry.dataPren || '').split('-').reverse().join('/');
+    try {
+        const res = await ficCall('fatturaSospesi', {
+            cliente: anag,
+            righe: [{ descrizione: `Lavaggio ${entry.vettura || ''} ${entry.targa || ''} — ${dataIta}`.replace(/\s+/g, ' ').trim(), importo }],
+            note: `Lavaggio del ${dataIta}`,
+        });
+        await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
+        entry.ficDocId = res.ficDocId || null;
+        entry.ficNumero = res.numero ?? null;
+        alert(`🧾 Fattura n. ${res.numero ?? '—'} creata su Fatture in Cloud — ${fEur(res.totale ?? importo)}` +
+              (res.clienteCreato ? '\n(cliente creato su FIC coi dati inseriti)' : '') +
+              `\nInvio SDI dal pannello FIC.`);
+    } catch (e) {
+        console.error('[FIC] fattura immediata', e);
+        alert('⚠️ Pagamento salvato ma fattura NON creata:\n' + (e.message || 'errore sconosciuto') + '\n\nRiprova con ↩ e ripaga, oppure creala dal pannello FIC.');
+    }
 }
 
 // Wrappa avviaPagamento in Promise per uso await
@@ -446,6 +544,11 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
                     entry.voucherSegnato = true;
                 } catch (e) { console.warn('voucherSegnato flag fail:', e?.message); }
             }
+        }
+
+        // Fattura immediata: prenotazione flaggata 🧾 → fattura FIC al saldo
+        if (entry.richiedeFattura && !entry.ficDocId && (mod === 'CONTANTI' || mod === 'POS')) {
+            await creaFatturaImmediata(entry, pid, pNum(prezzoFinaleStr));
         }
 
         renderPren();

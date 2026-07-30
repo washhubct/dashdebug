@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260730b';
+    var APP_VERSION = '20260730c';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -371,7 +371,16 @@
 <div class="ff" style="width:100px"><label>Targa</label><input id="pTarga" placeholder="Es: AB123CD" style="text-transform:uppercase"></div>
 <div class="ff" style="width:80px"><label>Prezzo € *</label><input id="pPrezzo" type="number" step="1"></div>
 <div class="ff" style="width:150px"><label>Note</label><input id="pNote" placeholder="Opzionale"></div>
+<div class="ff" style="width:90px"><label>🧾 Fattura</label><select id="pFattura"><option value="">No</option><option value="SI">Sì</option></select></div>
 <button class="btn btn-primary" style="height:37px;padding:0 20px">Aggiungi</button>
+</div>
+<div id="pFattDati" style="display:none;flex-wrap:wrap;gap:10px;margin-top:12px;padding:12px;border:1px dashed var(--blu);border-radius:var(--r2);background:var(--bg4)">
+  <div style="flex-basis:100%;font:600 11px var(--f);color:var(--blu);text-transform:uppercase;letter-spacing:.5px">🧾 Dati fatturazione — salvati sul cliente, la prossima volta si compilano da soli</div>
+  <div class="ff" style="flex:1;min-width:200px"><label>Denominazione / Ragione sociale *</label><input id="pFDen" style="text-transform:uppercase" placeholder="Es: MARIO ROSSI SRL"></div>
+  <div class="ff" style="width:130px"><label>P.IVA *</label><input id="pFPiva" maxlength="11" placeholder="11 cifre"></div>
+  <div class="ff" style="width:100px"><label>Cod. SDI</label><input id="pFSdi" maxlength="7" style="text-transform:uppercase" placeholder="A1B2C3D"></div>
+  <div class="ff" style="flex:1;min-width:170px"><label>PEC</label><input id="pFPec" type="email" placeholder="fatture@pec.it"></div>
+  <div class="ff" style="flex:2;min-width:220px"><label>Sede legale</label><input id="pFSede" placeholder="Via Roma 1, 95100 Catania (CT)"></div>
 </div>
 <div class="form-msg" id="prenMsg"></div>
 </div>
@@ -768,7 +777,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260730b"></script>
+<script type="module" src="js/main.js?v=20260730c"></script>
 
 </body>
 </html>
