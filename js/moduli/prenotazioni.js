@@ -305,6 +305,67 @@ async function salvaDatiFiscaliCRM(nomeCliente, df) {
     } catch (e) { console.warn('salvataggio dati fiscali CRM:', e?.message); }
 }
 
+// Popup al pagamento: "il cliente richiede fattura?" — un click per dire no,
+// dati fiscali precompilati dal CRM per dire sì. Ritorna:
+//   { fattura: false }        → prosegui senza fattura
+//   { fattura: true, dati }   → salva flag+dati e prosegui (fattura al saldo)
+//   null                      → operatore ha annullato: NON pagare
+function chiediFatturaAlPagamento(entry) {
+    return new Promise(resolve => {
+        const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(entry.cliente || '').toUpperCase());
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+        const f = (v) => esc(v || '');
+        overlay.innerHTML = `
+        <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+            <div style="font:700 16px var(--f);margin-bottom:4px">🧾 Il cliente richiede fattura?</div>
+            <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:14px">${esc(entry.cliente || '')} — <strong style="color:var(--tx)">€${pNum(entry.prezzo)}</strong></div>
+            <div id="_rfBtns" style="display:flex;gap:8px">
+                <button id="_rfNo" class="btn btn-primary" style="flex:2;padding:14px">No, solo scontrino</button>
+                <button id="_rfSi" class="btn" style="flex:1;padding:14px;border-color:var(--blu);color:var(--blu)">🧾 Sì</button>
+            </div>
+            <div id="_rfForm" style="display:none;margin-top:14px">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    <input id="_rfDen" placeholder="Denominazione / Ragione sociale *" value="${f(crm?.denominazione)}" style="text-transform:uppercase;background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:9px 12px;border-radius:var(--r2);font:500 13px var(--f);outline:0">
+                    <div style="display:flex;gap:8px">
+                        <input id="_rfPiva" placeholder="P.IVA (11 cifre) *" maxlength="11" value="${f(crm?.piva)}" style="flex:1;background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:9px 12px;border-radius:var(--r2);font:500 13px var(--mono);outline:0">
+                        <input id="_rfSdi" placeholder="Cod. SDI" maxlength="7" value="${f(crm?.codDestinatario)}" style="width:110px;text-transform:uppercase;background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:9px 12px;border-radius:var(--r2);font:500 13px var(--mono);outline:0">
+                    </div>
+                    <input id="_rfPec" type="email" placeholder="PEC" value="${f(crm?.pec)}" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:9px 12px;border-radius:var(--r2);font:500 13px var(--f);outline:0">
+                    <input id="_rfSede" placeholder="Sede legale (Via, CAP Città)" value="${f(crm?.sedeLegale)}" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:9px 12px;border-radius:var(--r2);font:500 13px var(--f);outline:0">
+                </div>
+                <div id="_rfErr" style="color:var(--red);font:400 12px var(--f);min-height:16px;margin-top:6px"></div>
+                <div style="display:flex;gap:8px">
+                    <button id="_rfAnnulla" class="btn" style="flex:1;color:var(--tx3)">Annulla</button>
+                    <button id="_rfOk" class="btn btn-primary" style="flex:2">Conferma e incassa</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.appendChild(overlay);
+        const close = (v) => { overlay.remove(); resolve(v); };
+        overlay.querySelector('#_rfNo').addEventListener('click', () => close({ fattura: false }));
+        overlay.querySelector('#_rfSi').addEventListener('click', () => {
+            overlay.querySelector('#_rfBtns').style.display = 'none';
+            overlay.querySelector('#_rfForm').style.display = 'block';
+            overlay.querySelector('#_rfDen').focus();
+        });
+        overlay.querySelector('#_rfAnnulla').addEventListener('click', () => close(null));
+        overlay.querySelector('#_rfOk').addEventListener('click', () => {
+            const dati = {
+                denominazione: overlay.querySelector('#_rfDen').value.trim().toUpperCase(),
+                piva: overlay.querySelector('#_rfPiva').value.trim(),
+                sdi: overlay.querySelector('#_rfSdi').value.trim().toUpperCase(),
+                pec: overlay.querySelector('#_rfPec').value.trim(),
+                sede: overlay.querySelector('#_rfSede').value.trim(),
+            };
+            const err = overlay.querySelector('#_rfErr');
+            if (!dati.denominazione) { err.textContent = '⚠️ Denominazione obbligatoria'; return; }
+            if (!/^\d{11}$/.test(dati.piva)) { err.textContent = '⚠️ P.IVA di 11 cifre obbligatoria'; return; }
+            close({ fattura: true, dati });
+        });
+    });
+}
+
 // Fattura immediata su FIC per prenotazione flaggata 🧾, chiamata al saldo.
 // Il pagamento è già salvato: un errore qui NON lo blocca, avvisa soltanto.
 async function creaFatturaImmediata(entry, pid, importo) {
@@ -509,6 +570,21 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
     if (sv.meta) {
         prezzoFinaleStr = String(sv.prezzoFinale);
         Object.assign(extraMeta, sv.meta);
+    }
+
+    // Il cliente può chiedere la fattura anche al momento del pagamento:
+    // popup rapido (No = un click). Se la prenotazione era già flaggata 🧾, salta.
+    if ((mod === 'CONTANTI' || mod === 'POS') && !entry.richiedeFattura) {
+        const rf = await chiediFatturaAlPagamento(entry);
+        if (rf === null) return; // annullato: non incassare
+        if (rf.fattura) {
+            try {
+                await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), { richiedeFattura: true, datiFattura: rf.dati });
+                entry.richiedeFattura = true;
+                entry.datiFattura = rf.dati;
+                await salvaDatiFiscaliCRM(entry.cliente, rf.dati);
+            } catch (e) { console.warn('flag fattura al pagamento:', e?.message); }
+        }
     }
 
     if (mod === 'CONTANTI') {
