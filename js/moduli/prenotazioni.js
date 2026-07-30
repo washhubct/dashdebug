@@ -327,9 +327,9 @@ async function creaFatturaImmediata(entry, pid, importo) {
         await fsUpdateDoc(fsDoc(db, 'prenotazioni', pid), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
         entry.ficDocId = res.ficDocId || null;
         entry.ficNumero = res.numero ?? null;
-        alert(`🧾 Fattura n. ${res.numero ?? '—'} creata su Fatture in Cloud — ${fEur(res.totale ?? importo)}` +
+        alert(`🧾 Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? importo)}` +
               (res.clienteCreato ? '\n(cliente creato su FIC coi dati inseriti)' : '') +
-              `\nInvio SDI dal pannello FIC.`);
+              (res.inviata ? '\n📤 Inviata a SDI automaticamente.' : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
     } catch (e) {
         console.error('[FIC] fattura immediata', e);
         alert('⚠️ Pagamento salvato ma fattura NON creata:\n' + (e.message || 'errore sconosciuto') + '\n\nRiprova con ↩ e ripaga, oppure creala dal pannello FIC.');

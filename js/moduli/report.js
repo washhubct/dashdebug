@@ -67,7 +67,9 @@ function calcolaDatiOperativi(fromStr, toStr) {
     const to = endOfDay(toStr);
 
     // --- LAVAGGI (da prenotazioni) ---
-    let lavContanti = 0, lavPos = 0, lavSospesi = 0, numLavaggi = 0, cashVne = 0;
+    // BONIFICO: mai sui lavaggi diretti (solo contanti/POS), ma un sospeso
+    // saldato via bonifico riporta la prenotazione a saldo='BONIFICO'.
+    let lavContanti = 0, lavPos = 0, lavBonifico = 0, lavSospesi = 0, numLavaggi = 0, cashVne = 0;
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         if (!inRange(date, from, to)) continue;
         entries.forEach(p => {
@@ -79,6 +81,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
                     if (p.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
                 }
                 else if (p.saldo === 'POS') lavPos += imp;
+                else if (p.saldo === 'BONIFICO' || p.saldo === 'FATTURA') lavBonifico += imp;
             } else if (p.saldo === 'SOSPESO') {
                 lavSospesi += imp;
             }
@@ -86,7 +89,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
     }
 
     // --- TAPPEZZERIA ---
-    let tapContanti = 0, tapPos = 0, tapSospesi = 0, numTap = 0;
+    let tapContanti = 0, tapPos = 0, tapBonifico = 0, tapSospesi = 0, numTap = 0;
     (state.tapDB || []).forEach(t => {
         if (t.status !== 'OUT') return;
         const dataOut = t.dataOut || '';
@@ -100,6 +103,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
             if (t.pagamentoVia === 'CASSA_AUTO') cashVne += imp;
         }
         else if (mod === 'POS') tapPos += imp;
+        else if (mod === 'BONIFICO' || mod === 'FATTURA') tapBonifico += imp;
         else tapContanti += imp; // default
     });
 
@@ -199,8 +203,8 @@ function calcolaDatiOperativi(fromStr, toStr) {
     costiFissi.totale = costiFissi.affitto + costiFissi.operatore + costiFissi.luce + costiFissi.acqua + costiFissi.assicurazione;
 
     // --- TOTALI ---
-    const fatLavaggio = lavContanti + lavPos;
-    const fatTappezzeria = tapContanti + tapPos;
+    const fatLavaggio = lavContanti + lavPos + lavBonifico;
+    const fatTappezzeria = tapContanti + tapPos + tapBonifico;
     const fatParchAbb = abbContanti + abbPos + abbBonifico;
     const fatParchOre = parContanti + parPos;
     const fatParchTot = fatParchAbb + fatParchOre;
@@ -218,9 +222,9 @@ function calcolaDatiOperativi(fromStr, toStr) {
 
     return {
         // Lavaggio
-        lavContanti, lavPos, lavSospesi, fatLavaggio, numLavaggi,
+        lavContanti, lavPos, lavBonifico, lavSospesi, fatLavaggio, numLavaggi,
         // Tappezzeria
-        tapContanti, tapPos, tapSospesi, fatTappezzeria, numTap,
+        tapContanti, tapPos, tapBonifico, tapSospesi, fatTappezzeria, numTap,
         // Parcheggio
         abbContanti, abbPos, abbBonifico, fatParchAbb, numAbb,
         parContanti, parPos, fatParchOre, numPar,

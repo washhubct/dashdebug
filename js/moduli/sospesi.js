@@ -490,7 +490,7 @@ export function renderSospPage() {
 async function saldaSingolo(sid) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
-    const pag = await richiediPagamento(r.importo, r.cliente, sid);
+    const pag = await richiediPagamento(r.importo, r.cliente, sid, { addBonifico: true });
     if (!pag) return;
     r._pagato = true;
     r._modPag = pag.mod;
@@ -508,7 +508,7 @@ async function saldaCliente(cliente) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
     const totale = aperti.reduce((s, r) => s + r.importo, 0);
-    const pag = await richiediPagamento(totale, `${cliente} — ${aperti.length} sospesi`, cliente);
+    const pag = await richiediPagamento(totale, `${cliente} — ${aperti.length} sospesi`, cliente, { addBonifico: true });
     if (!pag) return;
 
     const oggi = oggiIta();
@@ -572,9 +572,9 @@ async function fatturaFICCliente(cliente) {
             s._ficNumero = res.numero ?? null;
             await salvaSospesoFirestore(s);
         }
-        alert(`✅ Fattura n. ${res.numero ?? '—'} creata su Fatture in Cloud — ${fEur(res.totale ?? totale)}` +
+        alert(`✅ Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? totale)}` +
               (res.clienteCreato ? `\n(cliente creato su FIC coi dati del CRM)` : '') +
-              `\nRicordati l'invio SDI dal pannello FIC.`);
+              (res.inviata ? `\n📤 Inviata a SDI automaticamente.` : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
         renderSospPage();
         updateSospBadge();
     } catch (e) {

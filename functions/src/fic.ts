@@ -218,12 +218,25 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
           items_list: items,
           payments_list: [{ amount: totale, due_date: oggi, status: 'not_paid' }],
           visible_subject: note || 'Servizi autolavaggio — sospesi',
-          e_invoice: false, // niente invio SDI automatico: revisione e invio dal pannello FIC
+          e_invoice: true,
         },
       }
       const data = await fic('/issued_documents', { method: 'POST', body })
       const doc = data?.data
-      return { ok: true, ficDocId: doc?.id, numero: doc?.number ?? null, totale: doc?.amount_gross ?? null, clienteFicId: entity.id, clienteCreato: entity.creato }
+
+      // Invio immediato a SDI (richiesta titolare 30/07: niente approvazione
+      // una a una). Se fallisce la fattura resta creata su FIC, da inviare da lì.
+      let inviata = false
+      let invioErrore: string | null = null
+      try {
+        await fic(`/issued_documents/${doc.id}/e_invoice/send`, { method: 'POST' })
+        inviata = true
+      } catch (e: any) {
+        invioErrore = String(e.message || e).slice(0, 300)
+        console.error('[fic] invio SDI fallito per doc', doc?.id, invioErrore)
+      }
+
+      return { ok: true, ficDocId: doc?.id, numero: doc?.number ?? null, totale: doc?.amount_gross ?? null, clienteFicId: entity.id, clienteCreato: entity.creato, inviata, invioErrore }
     }
 
     case 'statoFattura': {
