@@ -80,8 +80,10 @@ function getMonday(d) {
 }
 
 function getWeekDays(monday) {
+    // Lungomare: lun-sab. Paesi Etnei: lun-dom (self-service aperto 7/7).
+    const nGiorni = state.sedeAttiva === 'paesi-etnei' ? 7 : 6;
     const days = [];
-    for (let i = 0; i < 6; i++) { // lun-sab
+    for (let i = 0; i < nGiorni; i++) {
         const d = new Date(monday);
         d.setDate(d.getDate() + i);
         days.push(d);
@@ -140,7 +142,7 @@ export async function renderPresenze() {
     // Label settimana
     const label = document.getElementById('prezWeekLabel');
     if (label) {
-        const d1 = days[0], d2 = days[5];
+        const d1 = days[0], d2 = days[days.length - 1];
         label.textContent = `${d1.getDate()}/${d1.getMonth() + 1} — ${d2.getDate()}/${d2.getMonth() + 1}/${d2.getFullYear()}`;
     }
 
@@ -173,8 +175,9 @@ export async function renderPresenze() {
         const giorno = GIORNI_S[day.getDay()];
         const isOggi = dataISO === oggi;
         const isDomenica = day.getDay() === 0;
-        
-        if (isDomenica) return; // skip domenica
+
+        // Domenica esclusa solo a Lungomare (Paesi Etnei apre 7/7)
+        if (isDomenica && state.sedeAttiva !== 'paesi-etnei') return;
 
         const presenza = getPresenzaByDate(dataISO);
         let totGiorno = 0;
