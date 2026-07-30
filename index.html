@@ -26,7 +26,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260730f';
+    var APP_VERSION = '20260730g';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -477,7 +477,12 @@
 <div class="form-msg" id="prezMsg"></div>
 </div>
 
-<div style="margin-top:20px;margin-bottom:8px;font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Riepilogo Mensile per Dipendente</div>
+<div style="margin-top:20px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+  <span style="font:600 12px var(--f);color:var(--tx2);text-transform:uppercase;letter-spacing:0.5px">Riepilogo Mensile per Dipendente</span>
+  <button class="btn" id="prezMesePrev" style="padding:2px 10px;font-size:12px">◀</button>
+  <span id="prezMeseLabel" style="font:700 12px var(--f);min-width:110px;text-align:center"></span>
+  <button class="btn" id="prezMeseNext" style="padding:2px 10px;font-size:12px">▶</button>
+</div>
 <div class="tbl-wrap">
 <table class="tbl">
 <thead><tr><th>Dipendente</th><th>Modalità</th><th>Giorni</th><th>Totale Mese</th></tr></thead>
@@ -777,7 +782,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260730f"></script>
+<script type="module" src="js/main.js?v=20260730g"></script>
 
 </body>
 </html>

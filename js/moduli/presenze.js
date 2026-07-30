@@ -25,6 +25,9 @@ function getDipendenti() {
 }
 
 let currentWeekStart = null;
+// Mese/anno mostrati nel riepilogo mensile (navigabili con ◀ ▶)
+let riepMese = new Date().getMonth();
+let riepAnno = new Date().getFullYear();
 let presenzeLocali = []; // cache locale delle presenze caricate
 
 // ─── INIT ───
@@ -46,6 +49,18 @@ export function initPresenze() {
         renderPresenze();
     });
     document.getElementById('prezSaveBtn')?.addEventListener('click', salvaPresenza);
+
+    // Navigazione mese del riepilogo (per vedere anche i mesi passati)
+    document.getElementById('prezMesePrev')?.addEventListener('click', () => {
+        riepMese--;
+        if (riepMese < 0) { riepMese = 11; riepAnno--; }
+        renderRiepilogoMensile(riepMese, riepAnno);
+    });
+    document.getElementById('prezMeseNext')?.addEventListener('click', () => {
+        riepMese++;
+        if (riepMese > 11) { riepMese = 0; riepAnno++; }
+        renderRiepilogoMensile(riepMese, riepAnno);
+    });
 
     // Setta data di oggi nel form
     const prezData = document.getElementById('prezData');
@@ -225,8 +240,8 @@ export async function renderPresenze() {
     const kpiMese = document.getElementById('prezKpiMese');
     if (kpiMese) kpiMese.textContent = fEur(costoMese);
 
-    // Riepilogo mensile per dipendente
-    renderRiepilogoMensile(meseCorrente, annoCorrente);
+    // Riepilogo mensile per dipendente (mese navigabile con ◀ ▶)
+    renderRiepilogoMensile(riepMese, riepAnno);
 
     // Listener elimina
     tbody.querySelectorAll('.del-prez').forEach(btn => {
@@ -239,32 +254,48 @@ function renderRiepilogoMensile(mese, anno) {
     const tb = document.getElementById('prezRiepilogoTb');
     if (!tb) return;
 
+    const lbl = document.getElementById('prezMeseLabel');
+    if (lbl) {
+        const mesiS = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+        lbl.textContent = `${mesiS[mese]} ${anno}`;
+    }
+
     const dipendenti = getDipendenti();
     const totDip = {};
     const giorniDip = {};
     dipendenti.forEach(d => { totDip[d.nome] = 0; giorniDip[d.nome] = 0; });
 
+    // Include anche dipendenti non più in organico ma presenti nei record
+    // del mese (es. Sebastiano nei mesi prima di luglio 2026)
+    const exDipendenti = [];
     presenzeLocali.forEach(p => {
         const d = p.dataISO ? new Date(p.dataISO) : null;
         if (!d || d.getMonth() !== mese || d.getFullYear() !== anno) return;
         if (!p.dettaglio) return;
         for (const [nome, val] of Object.entries(p.dettaglio)) {
-            if (totDip[nome] !== undefined) {
-                totDip[nome] += pNum(val);
-                if (pNum(val) > 0) giorniDip[nome]++;
+            if (totDip[nome] === undefined) {
+                totDip[nome] = 0;
+                giorniDip[nome] = 0;
+                exDipendenti.push(nome);
             }
+            totDip[nome] += pNum(val);
+            if (pNum(val) > 0) giorniDip[nome]++;
         }
     });
 
     const mesi = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
     let totGenerale = 0;
 
-    tb.innerHTML = dipendenti.map(dip => {
+    const righe = [
+        ...dipendenti.map(d => ({ nome: d.nome, mod: d.modalita === 'BONIFICO' ? '<span class="badge b">🏦 Bonifico</span>' : '<span class="badge g">💵 Contanti</span>' })),
+        ...exDipendenti.sort().map(n => ({ nome: n, mod: '<span class="badge" title="Non più in organico">👋 ex</span>' })),
+    ];
+
+    tb.innerHTML = righe.map(dip => {
         totGenerale += totDip[dip.nome];
-        const mod = dip.modalita === 'BONIFICO' ? '<span class="badge b">🏦 Bonifico</span>' : '<span class="badge g">💵 Contanti</span>';
         return `<tr>
             <td><strong>${dip.nome}</strong></td>
-            <td>${mod}</td>
+            <td>${dip.mod}</td>
             <td style="text-align:center">${giorniDip[dip.nome]}</td>
             <td style="font:700 13px var(--f);color:var(--red)">${fEur(totDip[dip.nome])}</td>
         </tr>`;
