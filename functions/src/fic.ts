@@ -192,10 +192,13 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
 
     case 'fatturaSospesi': {
       // payload: { cliente: {nome, piva?, cf?, indirizzo?, cap?, citta?, provincia?, sdi?, pec?},
-      //            righe: [{descrizione, importo}], note? }
+      //            righe: [{descrizione, importo}], note?, metodoPagamento? }
       // Il cliente viene cercato su FIC per P.IVA (o nome) e creato coi dati
       // del CRM se assente: la dashboard è la fonte dell'anagrafica.
-      const { cliente, righe, note } = payload
+      // metodoPagamento: codice SDI (MP01 contanti, MP05 bonifico, MP08 carta) —
+      // obbligatorio nella fattura elettronica; default MP05 (sospesi a rimessa).
+      const { cliente, righe, note, metodoPagamento } = payload
+      const mp = ['MP01', 'MP05', 'MP08'].includes(metodoPagamento) ? metodoPagamento : 'MP05'
       if (!cliente?.nome || !Array.isArray(righe) || righe.length === 0) {
         throw new HttpsError('invalid-argument', 'cliente.nome e righe richiesti')
       }
@@ -219,6 +222,7 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
           payments_list: [{ amount: totale, due_date: oggi, status: 'not_paid' }],
           visible_subject: note || 'Servizi autolavaggio — sospesi',
           e_invoice: true,
+          ei_data: { payment_method: mp },
         },
       }
       const data = await fic('/issued_documents', { method: 'POST', body })

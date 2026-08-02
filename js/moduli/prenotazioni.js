@@ -384,11 +384,15 @@ async function creaFatturaImmediata(entry, docId, importo, opts = {}) {
     const dataIta = collection === 'prenotazioni'
         ? (entry.dataPren || '').split('-').reverse().join('/')
         : (entry.dataOut || new Date().toLocaleDateString('it-IT'));
+    // Metodo pagamento per la fattura elettronica: MP01 contanti, MP08 carta
+    const modPag = (entry.saldo || entry.pagamento || '').toUpperCase();
+    const metodoPagamento = modPag === 'POS' ? 'MP08' : 'MP01';
     try {
         const res = await ficCall('fatturaSospesi', {
             cliente: anag,
             righe: [{ descrizione: `${label} ${entry.vettura || entry.modello || ''} ${entry.targa || ''} — ${dataIta}`.replace(/\s+/g, ' ').trim(), importo }],
             note: `${label} del ${dataIta}`,
+            metodoPagamento,
         });
         await fsUpdateDoc(fsDoc(db, collection, docId), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
         entry.ficDocId = res.ficDocId || null;
