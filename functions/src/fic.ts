@@ -141,18 +141,33 @@ async function getVat22(): Promise<number> {
  * Cerca il cliente su FIC per P.IVA (match esatto) o nome; se assente lo crea
  * coi dati del CRM dashboard. Ritorna { id, name, creato }.
  */
-async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean }> {
+async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean }> {
   const piva = String(c.piva || '').replace(/\s/g, '')
+  const cf = String(c.cf || '').replace(/\s/g, '')
   let q = piva ? `vat_number = '${piva}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
   const found = await fic(`/entities/clients?q=${encodeURIComponent(q)}`)
   const match = (found?.data || [])[0]
-  if (match) return { id: match.id, name: match.name, creato: false }
+  if (match) {
+    // Entity esistente ma anagrafica monca: integra dal CRM (fonte unica).
+    // Senza P.IVA/CF sull'entity l'invio SDI viene rifiutato (visto 03/08).
+    const patch: Record<string, unknown> = {}
+    if (piva && !match.vat_number) patch.vat_number = piva
+    if ((cf || piva) && !match.tax_code) patch.tax_code = cf || piva
+    if (c.sdi && !match.ei_code) patch.ei_code = c.sdi
+    if (c.pec && !match.certified_email) patch.certified_email = c.pec
+    if (c.indirizzo && !match.address_street) patch.address_street = c.indirizzo
+    if (Object.keys(patch).length > 0) {
+      await fic(`/entities/clients/${match.id}`, { method: 'PUT', body: { data: patch } })
+    }
+    const haFiscali = !!(match.vat_number || match.tax_code || patch.vat_number || patch.tax_code)
+    return { id: match.id, name: match.name, creato: false, haFiscali }
+  }
 
   const body = {
     data: {
       name: c.nome,
       vat_number: piva || undefined,
-      tax_code: c.cf || undefined,
+      tax_code: cf || piva || undefined, // per le aziende il CF coincide con la P.IVA
       address_street: c.indirizzo || undefined,
       address_postal_code: c.cap || undefined,
       address_city: c.citta || undefined,
@@ -166,7 +181,7 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
   const created = await fic('/entities/clients', { method: 'POST', body })
   const nc = created?.data
   if (!nc?.id) throw new HttpsError('internal', 'Creazione cliente FIC fallita')
-  return { id: nc.id, name: nc.name, creato: true }
+  return { id: nc.id, name: nc.name, creato: true, haFiscali: !!(piva || cf) }
 }
 
 export const ficApi = onCall({ region: REGION }, async (request) => {
@@ -203,6 +218,12 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
         throw new HttpsError('invalid-argument', 'cliente.nome e righe richiesti')
       }
       const entity = await upsertClienteFIC(cliente)
+      // Senza P.IVA/CF la fattura si creerebbe ma SDI la rifiuterebbe:
+      // meglio bloccare subito con un messaggio actionable.
+      if (!entity.haFiscali) {
+        throw new HttpsError('failed-precondition',
+          `Il cliente "${entity.name}" non ha P.IVA né Codice Fiscale (né su FIC né nel CRM). Completa l'anagrafica in Clienti/CRM e riprova.`)
+      }
       const vatId = await getVat22()
       const items = righe.map((r: any) => ({
         name: String(r.descrizione || 'Lavaggio'),
