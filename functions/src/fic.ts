@@ -141,9 +141,20 @@ async function getVat22(): Promise<number> {
  * Cerca il cliente su FIC per P.IVA (match esatto) o nome; se assente lo crea
  * coi dati del CRM dashboard. Ritorna { id, name, creato }.
  */
+// "Via Taormina 13/C, 95027 San Gregorio di Catania (CT)" → componenti SDI.
+// Il CAP a 5 cifre fa da separatore; la provincia è l'eventuale (XX) finale.
+function parseIndirizzo(raw: unknown): { street?: string; cap?: string; city?: string; prov?: string } {
+  const s = String(raw || '').trim()
+  if (!s) return {}
+  const m = s.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\))?$/)
+  if (!m) return { street: s }
+  return { street: m[1].replace(/,$/, '').trim(), cap: m[2], city: m[3].trim(), prov: m[4]?.toUpperCase() }
+}
+
 async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean }> {
   const piva = String(c.piva || '').replace(/\s/g, '')
   const cf = String(c.cf || '').replace(/\s/g, '')
+  const addr = parseIndirizzo(c.indirizzo)
   let q = piva ? `vat_number = '${piva}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
   const found = await fic(`/entities/clients?q=${encodeURIComponent(q)}`)
   const match = (found?.data || [])[0]
@@ -155,7 +166,12 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
     if ((cf || piva) && !match.tax_code) patch.tax_code = cf || piva
     if (c.sdi && !match.ei_code) patch.ei_code = c.sdi
     if (c.pec && !match.certified_email) patch.certified_email = c.pec
-    if (c.indirizzo && !match.address_street) patch.address_street = c.indirizzo
+    if (addr.street && !match.address_street) {
+      patch.address_street = addr.street
+      if (addr.cap) patch.address_postal_code = addr.cap
+      if (addr.city) patch.address_city = addr.city
+      if (addr.prov) patch.address_province = addr.prov
+    }
     if (Object.keys(patch).length > 0) {
       await fic(`/entities/clients/${match.id}`, { method: 'PUT', body: { data: patch } })
     }
@@ -168,10 +184,10 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
       name: c.nome,
       vat_number: piva || undefined,
       tax_code: cf || piva || undefined, // per le aziende il CF coincide con la P.IVA
-      address_street: c.indirizzo || undefined,
-      address_postal_code: c.cap || undefined,
-      address_city: c.citta || undefined,
-      address_province: c.provincia || undefined,
+      address_street: addr.street || undefined,
+      address_postal_code: addr.cap || c.cap || undefined,
+      address_city: addr.city || c.citta || undefined,
+      address_province: addr.prov || c.provincia || undefined,
       country: 'Italia',
       ei_code: c.sdi || undefined,       // codice destinatario SDI
       certified_email: c.pec || undefined,
