@@ -126,14 +126,15 @@ export const ficOauthCallback = onRequest({ region: REGION }, async (req, res) =
 
 // ───────────────────────── API callable ─────────────────────────
 
-/** Cache aliquota 22% (id vat_type della company). */
-let vat22Id: number | null = null
+/** Cache aliquota 22% per companyId (l'id vat_type cambia da azienda ad azienda). */
+const vat22ByCompany: Record<number, number> = {}
 async function getVat22(): Promise<number> {
-  if (vat22Id !== null) return vat22Id
+  const { companyId } = await getAccessToken()
+  if (vat22ByCompany[companyId] !== undefined) return vat22ByCompany[companyId]
   const data = await fic('/info/vat_types')
   const v22 = (data?.data || []).find((v: any) => v.value === 22)
   if (!v22) throw new HttpsError('internal', 'Aliquota IVA 22% non trovata tra le vat_types FIC')
-  vat22Id = v22.id
+  vat22ByCompany[companyId] = v22.id
   return v22.id
 }
 
