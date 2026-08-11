@@ -16,7 +16,7 @@ const DIPENDENTI_PER_SEDE = {
     ],
     'paesi-etnei': [
         { nome: 'ROCKY', modalita: 'BONIFICO', importoDefault: 0 },
-        { nome: 'OPERATORE 1', modalita: 'CONTANTI', importoDefault: 0 }
+        { nome: 'MINTA', modalita: 'CONTANTI', importoDefault: 0 }
     ]
 };
 
