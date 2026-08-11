@@ -2,7 +2,16 @@
 export function pNum(v) {
     if (typeof v === 'number') return v;
     if (!v) return 0;
-    return parseFloat(String(v).replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+    let s = String(v).replace(/[€\s]/g, '');
+    if (s.includes(',')) {
+        // Formato italiano: punto = migliaia, virgola = decimali ("1.000,50")
+        s = s.replace(/\./g, '').replace(',', '.');
+    } else if (!/^\d+\.\d{1,2}$/.test(s)) {
+        // Punto seguito da 1-2 cifre finali = decimale ("20.9", "20.90"): non toccarlo.
+        // Altrimenti ("1.000") il punto è separatore migliaia: rimuovilo.
+        s = s.replace(/\./g, '');
+    }
+    return parseFloat(s) || 0;
 }
 
 // Converte una stringa in oggetto Date
