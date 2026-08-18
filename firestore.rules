@@ -116,6 +116,13 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
     }
 
+    // Acconti dipendenti (anticipi su stipendio, scalati al "Segna pagato")
+    match /acconti/{doc} {
+      allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create:         if writeOk();
+      allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+
     match /incassiManuali/{doc} {
       allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
       allow create:         if writeOk();
