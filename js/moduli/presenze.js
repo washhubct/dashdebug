@@ -1,4 +1,4 @@
-import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc, fsSetDoc } from '../firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
@@ -29,6 +29,7 @@ let currentWeekStart = null;
 let riepMese = new Date().getMonth();
 let riepAnno = new Date().getFullYear();
 let presenzeLocali = []; // cache locale delle presenze caricate
+let accontiLocali = {}; // nome → importo residuo (anticipi su stipendio, collection `acconti`)
 
 // ─── INIT ───
 export function initPresenze() {
@@ -119,6 +120,18 @@ async function caricaPresenze() {
         state.presenzeDB = [...presenzeLocali];
     } catch (e) {
         console.warn('Errore caricamento presenze:', e);
+    }
+
+    // Acconti: try separato — se la collection non è leggibile le presenze restano ok
+    try {
+        const snapA = await fsGetDocs(query(fsCollection(db, 'acconti'), where('sedeId', '==', state.sedeAttiva)));
+        accontiLocali = {};
+        snapA.forEach(docSnap => {
+            const a = docSnap.data();
+            if (pNum(a.importo) > 0) accontiLocali[a.nome] = pNum(a.importo);
+        });
+    } catch (e) {
+        console.warn('Errore caricamento acconti:', e);
     }
 }
 
@@ -310,13 +323,26 @@ function renderRiepilogoMensile(mese, anno) {
     tb.innerHTML = righe.map(dip => {
         totGenerale += totDip[dip.nome];
         const dovuto = daPagare[dip.nome] || 0;
+        const acconto = accontiLocali[dip.nome] || 0;
+        const netto = dovuto - acconto; // >0 = da versare, <0 = resta in acconto
+        let cellaPagare;
+        if (dovuto <= 0) {
+            cellaPagare = acconto > 0
+                ? `<span style="color:var(--grn)">✓ in acconto ${fEur(acconto)}</span>`
+                : `<span style="color:var(--grn)">✓ saldato</span>`;
+        } else if (netto > 0) {
+            cellaPagare = `<span style="color:var(--amb)">${fEur(netto)}</span>` +
+                (acconto > 0 ? `<br><span style="font:400 9px var(--f);color:var(--tx3)">−${fEur(acconto)} acconto</span>` : '');
+        } else {
+            cellaPagare = `<span style="color:var(--grn)">✓ coperto da acconto${netto < 0 ? ` (resta ${fEur(-netto)})` : ''}</span>`;
+        }
         return `<tr>
             <td><strong>${dip.nome}</strong></td>
             <td>${dip.mod}</td>
             <td style="text-align:center">${giorniDip[dip.nome]}</td>
             <td style="font:700 13px var(--f);color:var(--red)">${fEur(totDip[dip.nome])}</td>
-            <td style="font:700 13px var(--f);color:${dovuto > 0 ? 'var(--amb)' : 'var(--grn)'}">${dovuto > 0 ? fEur(dovuto) : '✓ saldato'}</td>
-            <td>${dovuto > 0 ? `<button class="btn btn-paga-dip" data-nome="${dip.nome}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Segna pagato</button>` : ''}</td>
+            <td style="font:700 13px var(--f)">${cellaPagare}</td>
+            <td style="white-space:nowrap">${dovuto > 0 ? `<button class="btn btn-paga-dip" data-nome="${dip.nome}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Segna pagato</button> ` : ''}<button class="btn btn-acconto-dip" data-nome="${dip.nome}" title="Registra/modifica acconto (anticipo su stipendio)" style="font-size:10px;padding:3px 8px">💶</button></td>
         </tr>`;
     }).join('');
 
@@ -330,6 +356,31 @@ function renderRiepilogoMensile(mese, anno) {
     tb.querySelectorAll('.btn-paga-dip').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoDipendente(btn.dataset.nome));
     });
+    tb.querySelectorAll('.btn-acconto-dip').forEach(btn => {
+        btn.addEventListener('click', () => impostaAcconto(btn.dataset.nome));
+    });
+}
+
+// Registra/modifica un acconto (anticipo su giornate future non ancora inserite).
+// Salvato in `acconti/{sedeId}_{nome}`; viene scalato al prossimo "Segna pagato".
+async function impostaAcconto(nome) {
+    const attuale = accontiLocali[nome] || 0;
+    const inp = prompt(`Acconto per ${nome} (anticipo su stipendio).\nImporto attuale: €${attuale}\n\nInserisci il nuovo importo (0 per azzerare):`, attuale || '');
+    if (inp === null) return;
+    const val = parseFloat(String(inp).replace(',', '.'));
+    if (isNaN(val) || val < 0) { alert('Importo non valido'); return; }
+    try {
+        await fsSetDoc(fsDoc(db, 'acconti', `${state.sedeAttiva}_${nome}`), {
+            nome,
+            sedeId: state.sedeAttiva,
+            importo: val,
+            aggiornato: new Date().toLocaleDateString('it-IT')
+        }, { merge: true });
+        if (val > 0) accontiLocali[nome] = val; else delete accontiLocali[nome];
+        renderRiepilogoMensile(riepMese, riepAnno);
+    } catch (e) {
+        alert('Errore salvataggio acconto: ' + (e?.message || e));
+    }
 }
 
 // Quindicina: marca come PAGATE tutte le giornate non saldate del dipendente
@@ -341,7 +392,12 @@ async function segnaPagatoDipendente(nome) {
     if (!daSaldare.length) return;
     const totale = daSaldare.reduce((s, p) => s + pNum(p.dettaglio[nome]), 0);
     const prima = daSaldare.map(p => p.dataISO).sort()[0].split('-').reverse().join('/');
-    if (!confirm(`Segnare PAGATO ${nome}?\n${daSaldare.length} giornate dal ${prima} — totale ${fEur(totale)}`)) return;
+    const acconto = accontiLocali[nome] || 0;
+    const daVersare = Math.max(0, totale - acconto);
+    const rigaAcconto = acconto > 0
+        ? `\nAcconto scalato: ${fEur(Math.min(acconto, totale))} → da versare ${fEur(daVersare)}`
+        : '';
+    if (!confirm(`Segnare PAGATO ${nome}?\n${daSaldare.length} giornate dal ${prima} — totale ${fEur(totale)}${rigaAcconto}`)) return;
 
     const oggi = new Date().toLocaleDateString('it-IT');
     for (const p of daSaldare) {
@@ -351,6 +407,20 @@ async function segnaPagatoDipendente(nome) {
             await fsUpdateDoc(fsDoc(db, 'presenzeDipendenti', p._id), { pagati });
             p.pagati = pagati;
         } catch (e) { console.warn('segna pagato fallito', p.dataISO, e?.message); }
+    }
+
+    // Consuma l'acconto sulle giornate appena saldate
+    if (acconto > 0) {
+        const residuo = Math.max(0, acconto - totale);
+        try {
+            await fsSetDoc(fsDoc(db, 'acconti', `${state.sedeAttiva}_${nome}`), {
+                nome,
+                sedeId: state.sedeAttiva,
+                importo: residuo,
+                aggiornato: oggi
+            }, { merge: true });
+            if (residuo > 0) accontiLocali[nome] = residuo; else delete accontiLocali[nome];
+        } catch (e) { console.warn('aggiornamento acconto fallito', e?.message); }
     }
     renderRiepilogoMensile(riepMese, riepAnno);
 }
