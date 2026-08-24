@@ -155,18 +155,23 @@ function parseIndirizzo(raw: unknown): { street?: string; cap?: string; city?: s
 // Anagrafica da denormalizzare nel documento: FIC NON copia P.IVA/CF/SDI
 // dall'anagrafica clienti — nel doc finisce solo ciò che passi in `entity`.
 // Passare solo {id, name} produce fatture senza dati fiscali (bug visto 24/08).
+// I campi formattati male fanno rifiutare l'XML a SDI (visto 24/08: provincia
+// per esteso, CAP a 6 cifre, codici SDI monchi): meglio ometterli che passarli.
 function entityDoc(id: number, name: string, e: Record<string, any>) {
+  const cap = String(e.address_postal_code || '').trim()
+  const prov = String(e.address_province || '').trim().toUpperCase()
+  const sdi = String(e.ei_code || '').trim().toUpperCase()
   return {
     id,
     name,
     vat_number: e.vat_number || undefined,
     tax_code: e.tax_code || undefined,
     address_street: e.address_street || undefined,
-    address_postal_code: e.address_postal_code || undefined,
+    address_postal_code: /^\d{5}$/.test(cap) ? cap : undefined,
     address_city: e.address_city || undefined,
-    address_province: e.address_province || undefined,
+    address_province: /^[A-Z]{2}$/.test(prov) ? prov : undefined,
     country: e.country || 'Italia',
-    ei_code: e.ei_code || undefined,
+    ei_code: /^[A-Z0-9]{6,7}$/.test(sdi) ? sdi : undefined,
     certified_email: e.certified_email || undefined,
   }
 }

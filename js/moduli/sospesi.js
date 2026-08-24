@@ -555,7 +555,7 @@ async function fatturaFICCliente(cliente) {
         const ok = confirm(`⚠️ ${cliente} non ha la P.IVA nel CRM.\nSe esiste già su Fatture in Cloud lo cerco per nome, altrimenti verrebbe creato SENZA dati fiscali.\n\nMeglio completare prima l'anagrafica in Clienti/CRM. Procedere comunque?`);
         if (!ok) return;
     }
-    if (!confirm(`Creare la fattura su Fatture in Cloud per ${cliente}?\n${aperti.length} lavorazioni — totale ${fEur(totale)}\n\nLa fattura NON viene inviata a SDI: revisione e invio dal pannello FIC.`)) return;
+    if (!confirm(`Creare la fattura su Fatture in Cloud per ${cliente}?\n${aperti.length} lavorazioni — totale ${fEur(totale)}\n\n⚠️ La fattura viene INVIATA SUBITO a SDI.`)) return;
 
     const righe = aperti.map(s => ({
         descrizione: `Lavaggio ${s.vettura || ''} ${s.targa || ''} — ${s.data}`.replace(/\s+/g, ' ').trim(),
