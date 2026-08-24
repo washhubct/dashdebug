@@ -165,7 +165,10 @@ function entityDoc(id: number, name: string, e: Record<string, any>) {
     id,
     name,
     vat_number: e.vat_number || undefined,
-    tax_code: e.tax_code || undefined,
+    // CF solo se distinto dalla P.IVA: per ditte individuali (e alcune società
+    // storiche) CF ≠ P.IVA e SDI scarta con errore 00324 se non corrispondono.
+    // La sola P.IVA è sufficiente per FatturaPA.
+    tax_code: e.tax_code && e.tax_code !== e.vat_number ? e.tax_code : undefined,
     address_street: e.address_street || undefined,
     address_postal_code: /^\d{5}$/.test(cap) ? cap : undefined,
     address_city: e.address_city || undefined,
