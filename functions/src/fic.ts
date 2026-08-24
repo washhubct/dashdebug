@@ -11,8 +11,8 @@
  * scrivere clientId/clientSecret nel doc → aprire l'URL di authorize → callback
  * salva i token. Da lì ficApi è operativa.
  *
- * Le fatture vengono create come BOZZE in FIC: revisione e invio SDI restano
- * manuali sul pannello FIC (scelta deliberata, niente invii fiscali automatici).
+ * Le fatture vengono create su FIC e inviate subito a SDI (richiesta titolare
+ * 30/07). Se l'invio fallisce la fattura resta su FIC, da inviare dal pannello.
  */
 
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -152,12 +152,32 @@ function parseIndirizzo(raw: unknown): { street?: string; cap?: string; city?: s
   return { street: m[1].replace(/,$/, '').trim(), cap: m[2], city: m[3].trim(), prov: m[4]?.toUpperCase() }
 }
 
-async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean }> {
+// Anagrafica da denormalizzare nel documento: FIC NON copia P.IVA/CF/SDI
+// dall'anagrafica clienti — nel doc finisce solo ciò che passi in `entity`.
+// Passare solo {id, name} produce fatture senza dati fiscali (bug visto 24/08).
+function entityDoc(id: number, name: string, e: Record<string, any>) {
+  return {
+    id,
+    name,
+    vat_number: e.vat_number || undefined,
+    tax_code: e.tax_code || undefined,
+    address_street: e.address_street || undefined,
+    address_postal_code: e.address_postal_code || undefined,
+    address_city: e.address_city || undefined,
+    address_province: e.address_province || undefined,
+    country: e.country || 'Italia',
+    ei_code: e.ei_code || undefined,
+    certified_email: e.certified_email || undefined,
+  }
+}
+
+async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean; entity: Record<string, any> }> {
   const piva = String(c.piva || '').replace(/\s/g, '')
   const cf = String(c.cf || '').replace(/\s/g, '')
   const addr = parseIndirizzo(c.indirizzo)
   let q = piva ? `vat_number = '${piva}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
-  const found = await fic(`/entities/clients?q=${encodeURIComponent(q)}`)
+  // fieldset=detailed: servono anche indirizzo/SDI/PEC per denormalizzarli nel doc
+  const found = await fic(`/entities/clients?fieldset=detailed&q=${encodeURIComponent(q)}`)
   const match = (found?.data || [])[0]
   if (match) {
     // Entity esistente ma anagrafica monca: integra dal CRM (fonte unica).
@@ -177,7 +197,7 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
       await fic(`/entities/clients/${match.id}`, { method: 'PUT', body: { data: patch } })
     }
     const haFiscali = !!(match.vat_number || match.tax_code || patch.vat_number || patch.tax_code)
-    return { id: match.id, name: match.name, creato: false, haFiscali }
+    return { id: match.id, name: match.name, creato: false, haFiscali, entity: entityDoc(match.id, match.name, { ...match, ...patch }) }
   }
 
   const body = {
@@ -198,7 +218,7 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
   const created = await fic('/entities/clients', { method: 'POST', body })
   const nc = created?.data
   if (!nc?.id) throw new HttpsError('internal', 'Creazione cliente FIC fallita')
-  return { id: nc.id, name: nc.name, creato: true, haFiscali: !!(piva || cf) }
+  return { id: nc.id, name: nc.name, creato: true, haFiscali: !!(piva || cf), entity: entityDoc(nc.id, nc.name, { ...body.data, ...nc }) }
 }
 
 export const ficApi = onCall({ region: REGION }, async (request) => {
@@ -253,7 +273,7 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
       const body = {
         data: {
           type: 'invoice',
-          entity: { id: entity.id, name: entity.name },
+          entity: entity.entity,
           date: oggi,
           use_gross_prices: true,
           items_list: items,
