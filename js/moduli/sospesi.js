@@ -582,15 +582,62 @@ async function fatturaFICCliente(cliente, mese = null) {
             s._ficNumero = res.numero ?? null;
             await salvaSospesoFirestore(s);
         }
-        alert(`✅ Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? totale)}` +
-              (res.clienteCreato ? `\n(cliente creato su FIC coi dati del CRM)` : '') +
-              (res.inviata ? `\n📤 Inviata a SDI automaticamente.` : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
         renderSospPage();
         updateSospBadge();
+        // Fattura emessa → chiedi subito se il cliente paga oggi (contanti/POS/bonifico)
+        const incassaOra = await _chiediIncassoDopoFattura(res, totale, label);
+        if (incassaOra) await incassaSospesi(aperti, label, cliente + (mese || ''), mese || 'Fattura');
     } catch (e) {
         console.error('[FIC] fattura sospesi', e);
         alert('❌ Fattura in Cloud: ' + (e.message || 'errore sconosciuto'));
     }
+}
+
+// Modale post-fattura: riepilogo esito + scelta "Incassa adesso" / "Più tardi".
+function _chiediIncassoDopoFattura(res, totale, label) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
+        const sdi = res.inviata
+            ? `<span style="color:var(--grn)">📤 Inviata a SDI</span>`
+            : `<span style="color:var(--red)">⚠️ NON inviata a SDI (${esc(res.invioErrore || 'errore')}) — inviala dal pannello FIC</span>`;
+        overlay.innerHTML = `
+            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+                <div style="font:700 15px var(--f);margin-bottom:4px">✅ Fattura n. ${esc(String(res.numero ?? '—'))} creata</div>
+                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:6px"><strong>${esc(label)}</strong> — ${fEur(res.totale ?? totale)}</div>
+                <div style="font:400 11px var(--f);margin-bottom:14px">${sdi}${res.clienteCreato ? '<br><span style="color:var(--tx3)">Cliente creato su FIC coi dati del CRM</span>' : ''}</div>
+                <div style="font:600 13px var(--f);margin-bottom:10px">Il cliente paga adesso?</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    <button id="_fiOra" class="btn btn-primary">💰 Incassa adesso (contanti / POS / bonifico)</button>
+                    <button id="_fiDopo" class="btn" style="color:var(--tx3);font-size:11px">Più tardi — resta in "Fatturati"</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#_fiOra').addEventListener('click', () => { overlay.remove(); resolve(true); });
+        overlay.querySelector('#_fiDopo').addEventListener('click', () => { overlay.remove(); resolve(false); });
+    });
+}
+
+// Incassa un gruppo di sospesi fatturati: modale metodo (VNE per contanti), stato pagato, Prima Nota.
+async function incassaSospesi(items, label, refId, meseRif) {
+    if (!items.length) return;
+    const totale = items.reduce((s, r) => s + r.importo, 0);
+    const pag = await richiediPagamento(totale, label, refId, { addBonifico: true });
+    if (!pag) return;
+
+    const oggi = oggiIta();
+    for (const s of items) {
+        s._pagato = true;
+        s._modPag = pag.mod;
+        s._dataPag = oggi;
+        s._pagamentoVia = pag.meta?.pagamentoVia || '';
+        s._idVNE = pag.meta?.idVNE || '';
+        await salvaSospesoFirestore(s);
+    }
+    await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, pag.meta);
+    renderSospPage();
+    updateSospBadge();
+    renderCassa();
 }
 
 async function segnaFatturatoCliente(cliente) {
@@ -634,24 +681,7 @@ async function segnaPagatoMese(cliente, mese) {
     const items = state.localSosp.filter(s =>
         s.cliente === cliente && s._fatturato && !s._pagato && getMeseAnno(s.data) === mese
     );
-    if (!items.length) return;
-    const totale = items.reduce((s, r) => s + r.importo, 0);
-    const pag = await richiediPagamento(totale, `${cliente} · ${mese}`, cliente + mese, { addBonifico: true });
-    if (!pag) return;
-
-    const oggi = oggiIta();
-    for (const s of items) {
-        s._pagato = true;
-        s._modPag = pag.mod;
-        s._dataPag = oggi;
-        s._pagamentoVia = pag.meta?.pagamentoVia || '';
-        s._idVNE = pag.meta?.idVNE || '';
-        await salvaSospesoFirestore(s);
-    }
-    await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, mese, pag.meta);
-    renderSospPage();
-    updateSospBadge();
-    renderCassa();
+    await incassaSospesi(items, `${cliente} · ${mese}`, cliente + mese, mese);
 }
 
 // ─── RIAPRI PAGATO ───
