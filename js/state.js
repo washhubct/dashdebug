@@ -13,7 +13,7 @@ export const state = {
     dateFrom: null,
     dateTo: null,
     abbFilter: 'tutti',
-    sospFilter: 'tutti',
+    sospFilter: 'aperti',
     abbEditId: null,
     sedeAttiva: localStorage.getItem('sedeAttiva') || 'lungomare',
     sedePermesse: [],
