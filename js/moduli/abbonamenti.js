@@ -49,6 +49,7 @@ export function initAbbonamenti() {
             else if(txt.includes('pagati')) state.abbFilter = 'pagato';
             else if(txt.includes('scadenza')) state.abbFilter = 'inscad';
             else if(txt.includes('notte')) state.abbFilter = 'notte';
+            else if(txt.includes('disdett')) state.abbFilter = 'disdetti';
             renderAbb();
         });
     });
@@ -63,6 +64,7 @@ export function initAbbonamenti() {
             else if(btn.classList.contains('renew-abb')) renewAbb(id);
             else if(btn.classList.contains('pay-abb')) pagaAbb(id);
             else if(btn.classList.contains('fic-abb')) fatturaFICAbb(id);
+            else if(btn.classList.contains('disd-abb')) disdiciAbb(id);
             else if(btn.classList.contains('del-abb')) deleteAbb(id);
         });
     }
@@ -97,7 +99,9 @@ export function renderAbb() {
 
     const now = new Date();
     const srch = (document.getElementById('abbSrch')?.value || '').toLowerCase();
-    let rows = [...state.localAbb];
+    const isDisd = r => r.DISDETTO === 'SI';
+    // I disdetti restano in archivio ma non contano come attivi/scaduti/in scadenza
+    let rows = state.abbFilter === 'disdetti' ? state.localAbb.filter(isDisd) : state.localAbb.filter(r => !isDisd(r));
 
     if(state.abbFilter === 'pagato') rows = rows.filter(r => r.PAGAMENTO === 'SI');
     else if(state.abbFilter === 'nonpagato') rows = rows.filter(r => r.PAGAMENTO !== 'SI');
@@ -112,8 +116,9 @@ export function renderAbb() {
         );
     }
 
-    const scaduti = state.localAbb.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) < 0; });
-    const inScad  = state.localAbb.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) >= 0 && dBetween(now, s) <= 7; });
+    const attivi = state.localAbb.filter(r => !isDisd(r));
+    const scaduti = attivi.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) < 0; });
+    const inScad  = attivi.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) >= 0 && dBetween(now, s) <= 7; });
 
     const cntEl = document.getElementById('abbCnt');
     if(cntEl) cntEl.textContent = state.localAbb.length + ' totali';
@@ -178,9 +183,11 @@ export function renderAbb() {
         const sd = pDate(sca);
         const days = sd ? dBetween(now, sd) : 999;
 
+        const disdetto = r.DISDETTO === 'SI';
         let bc = 'g';
         let bl = sca;
-        if(days < 0) { bc = 'r'; bl = sca + ' (' + Math.abs(days) + 'gg fa)'; }
+        if(disdetto) { bc = ''; bl = sca + ' · 🚫 DISDETTO' + (r['DATA DISDETTA'] ? ' il ' + r['DATA DISDETTA'] : ''); }
+        else if(days < 0) { bc = 'r'; bl = sca + ' (' + Math.abs(days) + 'gg fa)'; }
         else if(days <= 7) { bc = 'a'; bl = sca + ' (' + days + 'gg)'; }
 
         let pagB = '';
@@ -201,8 +208,9 @@ export function renderAbb() {
             <td style="font-weight:600">€${imp}${ficDisp}</td>
             <td style="white-space:nowrap">
                 <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
-                <button class="act-btn renew-abb" data-id="${id}" title="Rinnova">↻</button>
-                ${pag !== 'SI' ? `<button class="act-btn pay-abb" data-id="${id}" title="Registra pagamento" style="color:var(--grn)">💰</button>` : ''}
+                ${disdetto ? '' : `<button class="act-btn renew-abb" data-id="${id}" title="Rinnova (sposta le date al periodo successivo + incasso)">↻</button>`}
+                <button class="act-btn pay-abb" data-id="${id}" title="${pag === 'SI' ? 'Incassa SENZA rinnovare (pregresso / conguaglio, le date non cambiano)' : 'Registra pagamento'}" style="color:var(--grn)${pag === 'SI' ? ';opacity:.55' : ''}">💰</button>
+                ${disdetto ? '' : `<button class="act-btn disd-abb" data-id="${id}" title="Disdetta: il cliente lascia il posto auto (resta in archivio, niente alert scadenza)" style="color:var(--tx3)">🚫</button>`}
                 <button class="act-btn fic-abb" data-id="${id}" title="${r.ficDocId ? 'Già fatturato n. ' + esc(String(r.ficNumero ?? '')) + ' — clicca per emetterne un\'altra' : 'Fattura elettronica (Fatture in Cloud)'}" style="color:var(--blu);${r.ficDocId ? 'opacity:.45' : ''}">🧾</button>
                 <button class="act-btn del del-abb" data-id="${id}" title="Elimina">✕</button>
             </td>
@@ -606,6 +614,22 @@ function _mostraModalRinnovo(r, oldDate, newDate) {
         overlay.querySelector('#_rnPaga').addEventListener('click', () => { overlay.remove(); resolve({ pagare: true }); });
         overlay.querySelector('#_rnAnn').addEventListener('click', () => { overlay.remove(); resolve(null); });
     });
+}
+
+// Disdetta: il cliente lascia il posto. Il record resta (storico incassi), ma esce
+// dagli attivi e dagli alert di scadenza. Reversibile da Modifica (campo non esposto: admin via console).
+async function disdiciAbb(id) {
+    const r = state.localAbb.find(x => x._id === id); if(!r) return;
+    const nome = r['NOME E COGNOME'] || '';
+    const pendente = r.PAGAMENTO !== 'SI' ? `\n\n⚠️ Risulta NON PAGATO: se deve saldare il pregresso, prima usa 💰 (incassa senza rinnovo).` : '';
+    if(!confirm(`Registrare la DISDETTA di ${nome} (${r.TARGA || ''})?\nL'abbonamento resta in archivio (tab "Disdetti") e non genera più alert di scadenza.${pendente}`)) return;
+    const oggi = new Date().toLocaleDateString('it-IT');
+    r.DISDETTO = 'SI';
+    r['DATA DISDETTA'] = oggi;
+    try {
+        await setDoc(fsDoc(db, 'abbonamenti', id), { DISDETTO: 'SI', 'DATA DISDETTA': oggi }, { merge: true });
+    } catch(e) { console.error('Errore disdetta:', e); alert('Errore salvataggio disdetta'); return; }
+    renderAbb();
 }
 
 async function deleteAbb(id) {
