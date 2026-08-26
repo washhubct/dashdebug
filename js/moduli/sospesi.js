@@ -410,9 +410,12 @@ export function renderSospPage() {
                     const totMese = recs.reduce((s, r) => s + r.importo, 0);
                     const bgColor = filter === 'pagati' ? 'var(--grn1)' : 'var(--bg4)';
                     const txtColor = filter === 'pagati' ? 'var(--grn)' : 'var(--tx2)';
+                    const ficMeseBtn = filter === 'aperti'
+                        ? `<button class="btn btn-ficfatt-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" style="font-size:9px;padding:2px 8px;border-color:var(--blu);color:var(--blu);margin-left:8px" title="Fattura su FIC solo ${mese}">🧾 Fattura FIC ${mese}</button>`
+                        : '';
                     trHtml += `<tr style="background:${bgColor}">
                         <td colspan="5" style="font:600 11px var(--f);color:${txtColor};padding:6px 10px">
-                            📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}
+                            📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}${ficMeseBtn}
                         </td>
                     </tr>`;
                     recs.forEach(r => {
@@ -468,6 +471,9 @@ export function renderSospPage() {
     });
     container.querySelectorAll('.btn-ficfatt-cli').forEach(btn => {
         btn.addEventListener('click', () => fatturaFICCliente(btn.dataset.cli));
+    });
+    container.querySelectorAll('.btn-ficfatt-mese').forEach(btn => {
+        btn.addEventListener('click', () => fatturaFICCliente(btn.dataset.cli, btn.dataset.mese));
     });
     container.querySelectorAll('.btn-pagato-cli').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoCliente(btn.dataset.cli));
@@ -538,9 +544,13 @@ async function segnaFatturatoSingolo(sid) {
 
 // Crea la fattura reale su Fatture in Cloud (dati fiscali dal CRM = fonte unica)
 // e segna i sospesi come fatturati con il riferimento al documento FIC.
-async function fatturaFICCliente(cliente) {
-    const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
+// `mese` opzionale (es. "Luglio 2026"): fattura solo le lavorazioni di quel mese.
+async function fatturaFICCliente(cliente, mese = null) {
+    const aperti = state.localSosp.filter(s =>
+        s.cliente === cliente && !s._pagato && !s._fatturato && (!mese || getMeseAnno(s.data) === mese)
+    );
     if (!aperti.length) return;
+    const label = mese ? `${cliente} · ${mese}` : cliente;
     const totale = aperti.reduce((s, r) => s + (parseFloat(r.importo) || 0), 0);
 
     const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(cliente).toUpperCase());
@@ -555,7 +565,7 @@ async function fatturaFICCliente(cliente) {
         const ok = confirm(`⚠️ ${cliente} non ha la P.IVA nel CRM.\nSe esiste già su Fatture in Cloud lo cerco per nome, altrimenti verrebbe creato SENZA dati fiscali.\n\nMeglio completare prima l'anagrafica in Clienti/CRM. Procedere comunque?`);
         if (!ok) return;
     }
-    if (!confirm(`Creare la fattura su Fatture in Cloud per ${cliente}?\n${aperti.length} lavorazioni — totale ${fEur(totale)}\n\n⚠️ La fattura viene INVIATA SUBITO a SDI.`)) return;
+    if (!confirm(`Creare la fattura su Fatture in Cloud per ${label}?\n${aperti.length} lavorazioni — totale ${fEur(totale)}\n\n⚠️ La fattura viene INVIATA SUBITO a SDI.`)) return;
 
     const righe = aperti.map(s => ({
         descrizione: `Lavaggio ${s.vettura || ''} ${s.targa || ''} — ${s.data}`.replace(/\s+/g, ' ').trim(),
@@ -563,7 +573,7 @@ async function fatturaFICCliente(cliente) {
     }));
 
     try {
-        const res = await ficCall('fatturaSospesi', { cliente: anag, righe, note: `Sospesi ${cliente}` });
+        const res = await ficCall('fatturaSospesi', { cliente: anag, righe, note: mese ? `Sospesi ${cliente} — ${mese}` : `Sospesi ${cliente}` });
         const oggi = oggiIta();
         for (const s of aperti) {
             s._fatturato = true;
