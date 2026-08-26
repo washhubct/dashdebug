@@ -241,11 +241,21 @@
 <div class="ff"><label>Inizio Abb. *</label><input id="fInizio" type="date"></div>
 <div class="ff"><label>Scadenza Abb. *</label><input id="fScadenza" type="date"></div>
 <div class="ff"><label>Notte</label><select id="fNotte"><option>SI</option><option>NO</option></select></div>
-<div class="ff"><label>Pagamento</label><select id="fPag"><option value="">—</option><option>SI</option><option>NO</option></select></div>
-<div class="ff"><label>Modalità</label><select id="fMod"><option value="">—</option><option>CONTANTI</option><option>POS</option><option>BONIFICO</option></select></div>
-<div class="ff"><label>Data Pagamento</label><input id="fDataPag" type="date"></div>
+<div class="ff abb-edit-only"><label>Pagamento</label><select id="fPag"><option value="">—</option><option>SI</option><option>NO</option></select></div>
+<div class="ff abb-edit-only"><label>Modalità</label><select id="fMod"><option value="">—</option><option>CONTANTI</option><option>POS</option><option>BONIFICO</option></select></div>
+<div class="ff abb-edit-only"><label>Data Pagamento</label><input id="fDataPag" type="date"></div>
 <div class="ff"><label>Chiavi/Codice</label><select id="fChiavi"><option>CODICE</option><option>CHIAVI</option><option value="">—</option></select></div>
 <div class="ff"><label>Note</label><input id="fNote"></div>
+</div>
+<!-- Incasso alla creazione (solo nuovo abbonamento): il pagamento avviene subito, scelta metodo via modale "Come paga?" -->
+<div id="abbIncassoBox" style="margin-top:16px;padding:14px 16px;background:var(--grn1);border:1px solid var(--grn);border-radius:var(--r2)">
+  <div style="font:600 10px var(--f);color:var(--grn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">💰 Incasso abbonamento</div>
+  <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font:500 13px var(--f);cursor:pointer"><input type="radio" name="abbIncasso" value="ora" checked> Incassa adesso <span id="abbIncassoTot" style="font:700 13px var(--mono);color:var(--grn)"></span></label>
+    <label style="display:flex;align-items:center;gap:6px;font:500 13px var(--f);cursor:pointer"><input type="radio" name="abbIncasso" value="dopo"> Da pagare (non pagato)</label>
+    <label id="abbFicLbl" style="display:flex;align-items:center;gap:6px;font:500 13px var(--f);cursor:pointer;margin-left:auto"><input type="checkbox" id="abbFic"> 🧾 Emetti fattura elettronica (FIC)</label>
+  </div>
+  <div style="font:400 11px var(--f);color:var(--tx3);margin-top:8px">Con "Incassa adesso" al salvataggio si apre la scelta del metodo (contanti in cassa, POS, bonifico) e l'incasso va in Prima Nota di oggi.</div>
 </div>
 <div class="form-actions"><button class="btn btn-primary" id="abbSaveBtn">Salva</button><button class="btn">Annulla</button></div>
 <div class="form-msg" id="abbMsg"></div>
@@ -782,7 +792,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260826b"></script>
+<script type="module" src="js/main.js?v=20260826c"></script>
 
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
 import { setDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { state, CONFIG } from '../state.js';
 import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
@@ -62,6 +62,7 @@ export function initAbbonamenti() {
             if(btn.classList.contains('edit-abb')) editAbb(id);
             else if(btn.classList.contains('renew-abb')) renewAbb(id);
             else if(btn.classList.contains('pay-abb')) pagaAbb(id);
+            else if(btn.classList.contains('fic-abb')) fatturaFICAbb(id);
             else if(btn.classList.contains('del-abb')) deleteAbb(id);
         });
     }
@@ -70,6 +71,24 @@ export function initAbbonamenti() {
     const fInizio = document.getElementById('fInizio');
     if(fDurata) fDurata.addEventListener('change', calcScad);
     if(fInizio) fInizio.addEventListener('change', calcScad);
+
+    // Blocco incasso (solo nuovo): aggiorna importo sul radio e testo del bottone Salva
+    document.getElementById('fImporto')?.addEventListener('input', aggiornaBtnIncasso);
+    document.querySelectorAll('input[name="abbIncasso"]').forEach(r => r.addEventListener('change', aggiornaBtnIncasso));
+}
+
+function incassoOraSelezionato() {
+    return !state.abbEditId && document.querySelector('input[name="abbIncasso"]:checked')?.value === 'ora';
+}
+
+function aggiornaBtnIncasso() {
+    const btn = document.getElementById('abbSaveBtn');
+    const tot = document.getElementById('abbIncassoTot');
+    if(!btn) return;
+    if(state.abbEditId) { btn.textContent = 'Aggiorna'; return; }
+    const imp = parseFloat(document.getElementById('fImporto')?.value) || 0;
+    if(tot) tot.textContent = imp ? `€${imp}` : '';
+    btn.textContent = incassoOraSelezionato() ? `💰 Salva e incassa${imp ? ' €' + imp : ''}` : 'Salva (da pagare)';
 }
 
 export function renderAbb() {
@@ -167,6 +186,7 @@ export function renderAbb() {
         let pagB = '';
         if(pag === 'SI') pagB = `<span class="badge g">SI</span>${modal ? `<br><span style="font-size:10px;color:var(--tx3)">${esc(modal)}</span>` : ''}`;
         else pagB = `<span class="badge r">NO</span>`;
+        const ficDisp = r.ficDocId ? `<br><span title="Fattura FIC ${esc(r.dataFattura || '')}" style="font:500 10px var(--mono);color:var(--blu)">🧾 n. ${esc(String(r.ficNumero ?? r.ficDocId))}</span>` : '';
 
         const noteDisp = note ? `<span title="${esc(note)}" style="cursor:help;margin-left:4px">📝</span>` : '';
         const notteDisp = notte ? `<span title="Notte" style="font-size:10px;color:var(--tx3)"> 🌙</span>` : '';
@@ -178,11 +198,12 @@ export function renderAbb() {
             </td>
             <td style="font:500 11px var(--mono)">${esc(targa)}</td>
             <td><span class="badge ${bc}">${bl}</span></td>
-            <td style="font-weight:600">€${imp}</td>
+            <td style="font-weight:600">€${imp}${ficDisp}</td>
             <td style="white-space:nowrap">
                 <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
                 <button class="act-btn renew-abb" data-id="${id}" title="Rinnova">↻</button>
                 ${pag !== 'SI' ? `<button class="act-btn pay-abb" data-id="${id}" title="Registra pagamento" style="color:var(--grn)">💰</button>` : ''}
+                <button class="act-btn fic-abb" data-id="${id}" title="${r.ficDocId ? 'Già fatturato n. ' + esc(String(r.ficNumero ?? '')) + ' — clicca per emetterne un\'altra' : 'Fattura elettronica (Fatture in Cloud)'}" style="color:var(--blu);${r.ficDocId ? 'opacity:.45' : ''}">🧾</button>
                 <button class="act-btn del del-abb" data-id="${id}" title="Elimina">✕</button>
             </td>
         </tr>`;
@@ -193,6 +214,10 @@ export function renderAbb() {
 function showAbbF(data) {
     document.getElementById('abbForm').classList.add('show');
     document.getElementById('addAbbBtn').style.display = 'none';
+    // Nuovo: blocco "Incasso" e niente campi manuali pagamento. Modifica: il contrario (correzioni).
+    document.querySelectorAll('#abbForm .abb-edit-only').forEach(el => el.style.display = data ? '' : 'none');
+    const box = document.getElementById('abbIncassoBox');
+    if(box) box.style.display = data ? 'none' : '';
     if(data) {
         document.getElementById('abbFTitle').textContent = 'Modifica Abbonamento';
         document.getElementById('abbSaveBtn').textContent = 'Aggiorna';
@@ -224,8 +249,13 @@ function showAbbF(data) {
         document.getElementById('fChiavi').value = 'CODICE';
         document.getElementById('fInizio').value = fmtDI(new Date());
         document.getElementById('fDataPag').value = '';
+        const rOra = document.querySelector('input[name="abbIncasso"][value="ora"]');
+        if(rOra) rOra.checked = true;
+        const fic = document.getElementById('abbFic');
+        if(fic) fic.checked = false;
         calcScad();
     }
+    aggiornaBtnIncasso();
     document.getElementById('abbForm').scrollIntoView({behavior:'smooth'});
 }
 
@@ -262,9 +292,28 @@ async function saveAbb() {
     
     if(!nome || !targa || !ini || !sca || !imp) { msg.style.color = 'var(--red)'; msg.textContent = 'Compila i campi obbligatori (*)'; return; }
     
-    const pagamento = document.getElementById('fPag').value;
-    const modalita = document.getElementById('fMod').value;
-    const dataPag = document.getElementById('fDataPag').value;
+    const isUpdate = !!state.abbEditId;
+    let pagamento = document.getElementById('fPag').value;
+    let modalita = document.getElementById('fMod').value;
+    let dataPag = document.getElementById('fDataPag').value;
+    let vneMeta = null;
+    let importoIncassato = imp;
+
+    // NUOVO abbonamento: il pagamento avviene al momento della creazione.
+    // "Incassa adesso" → modale "Come paga?" (contanti in cassa VNE / POS / bonifico), come lavaggi e rinnovi.
+    if(!isUpdate) {
+        if(incassoOraSelezionato()) {
+            const pag = await richiediPagamento(imp, `${nome} — ${targa} (abbonamento)`, 'ABB-' + targa, { addBonifico: true });
+            if(!pag) { msg.style.color = 'var(--red)'; msg.textContent = 'Incasso annullato: abbonamento NON salvato.'; return; }
+            pagamento = 'SI';
+            modalita = pag.mod;
+            dataPag = fmtDI(new Date());
+            importoIncassato = pag.prezzoFinale;
+            if(pag.meta?.pagamentoVia) vneMeta = pag.meta;
+        } else {
+            pagamento = 'NO'; modalita = ''; dataPag = '';
+        }
+    }
 
     // Pagamento SI senza data → l'abbonamento sparirebbe da Report e Cassa (filtrano per DATA PAGAMENTO).
     // Blocca e chiedi di inserirla a mano.
@@ -295,34 +344,9 @@ async function saveAbb() {
         sedeId: state.sedeAttiva
     };
 
-    const isUpdate = !!state.abbEditId;
     // Stato pagamento PRECEDENTE: se l'abbonamento era già registrato come pagato,
     // un nuovo salvataggio NON deve riscrivere la Prima Nota (causerebbe un doppio incasso).
     const giaRegistratoPagato = isUpdate && (state.localAbb.find(r => r._id === state.abbEditId)?.PAGAMENTO === 'SI');
-
-    // CONTANTI su pagamento NUOVO → deve passare dalla cassa VNE (come i lavaggi).
-    // Se la VNE non completa l'incasso, NON salviamo nulla.
-    let vneMeta = null;
-    if (pagamento === 'SI' && !giaRegistratoPagato && (modalita || '').toUpperCase() === 'CONTANTI' && state.cassaAuto?.enabled) {
-        const h = await healthBridge();
-        if (!h?.ok || !h?.vne_reachable) {
-            if (!confirm('⚠️ Cassa VNE non raggiungibile. Registrare comunque come contanti manuale?')) {
-                msg.style.color = 'var(--red)'; msg.textContent = 'Annullato: cassa VNE non raggiungibile.'; return;
-            }
-        } else {
-            const res = await new Promise(resolve => avviaPagamento(Math.round(imp * 100), 'ABB-' + (state.abbEditId || targa), resolve));
-            if (res.status === 'completed') {
-                vneMeta = { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE };
-            } else if (res.status === 'partial') {
-                if (!confirm(`Inseriti €${(res.inserito || 0).toFixed(2)} su €${imp.toFixed(2)}. Accettare pagamento parziale?`)) {
-                    msg.style.color = 'var(--red)'; msg.textContent = 'Annullato.'; return;
-                }
-                vneMeta = { pagamentoVia: 'CASSA_AUTO', idVNE: res.idVNE, vneStatus: 'partial' };
-            } else {
-                msg.style.color = 'var(--red)'; msg.textContent = 'Pagamento VNE non completato — abbonamento NON salvato.'; return;
-            }
-        }
-    }
 
     try {
         if(isUpdate) {
@@ -348,7 +372,7 @@ async function saveAbb() {
     // evita il doppio incasso quando si ri-salva un abbonamento già pagato.
     if(pagamento === 'SI' && !giaRegistratoPagato) {
         // Ringraziamento WhatsApp al salvataggio abbonamento pagato
-        showThankYouToast(nome, imp);
+        showThankYouToast(nome, importoIncassato);
         try {
             const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
             const dataISO = dataPag || fmtDI(new Date());
@@ -357,7 +381,7 @@ async function saveAbb() {
                 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO',
                 'PRIMANOTA CLIENTI/FORNITORI': 'ABBONAMENTO ' + nome + ' (' + targa + ')',
                 Descrizione: 'ABBONAMENTO ' + nome + ' (' + targa + ') - ' + modalita,
-                ENTRATA: imp, Entrata: imp,
+                ENTRATA: importoIncassato, Entrata: importoIncassato,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva,
@@ -368,8 +392,64 @@ async function saveAbb() {
         } catch(e) { console.error("Errore salvataggio Prima Nota:", e); }
     }
 
+    const vuoleFattura = !isUpdate && document.getElementById('abbFic')?.checked;
     setTimeout(() => { hideAbbF(); renderAbb(); renderCassa(); }, 600);
+    if(vuoleFattura && rec._id) setTimeout(() => fatturaFICAbb(rec._id), 700);
     } finally { _abbBusy = false; }
+}
+
+// ─── FATTURA ELETTRONICA ABBONAMENTO (Fatture in Cloud) ───
+// Stessa Cloud Function dei sospesi: anagrafica fiscale dal CRM (per nome),
+// metodo pagamento SDI dedotto dalla modalità di incasso.
+const MP_DA_MODALITA = { CONTANTI: 'MP01', POS: 'MP08', BONIFICO: 'MP05' };
+
+async function fatturaFICAbb(id) {
+    const r = state.localAbb.find(x => x._id === id); if(!r) return;
+    if (r.ficDocId && !confirm(`⚠️ Questo abbonamento risulta già fatturato (n. ${r.ficNumero ?? r.ficDocId}).\nEmettere una SECONDA fattura?`)) return;
+    const nome = r['NOME E COGNOME'] || '';
+    const targa = r.TARGA || '';
+    const imp = pNum(r.IMPORTO);
+    if (!imp) { alert('Importo abbonamento mancante.'); return; }
+
+    const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === nome.toUpperCase());
+    const anag = {
+        nome: (crm?.denominazione || crm?.nome || nome).toUpperCase(),
+        piva: crm?.piva || '',
+        sdi: crm?.codDestinatario || '',
+        pec: crm?.pec || '',
+        indirizzo: crm?.sedeLegale || ''
+    };
+    if (!anag.piva) {
+        const ok = confirm(`⚠️ ${nome} non ha la P.IVA nel CRM.\nSe esiste già su Fatture in Cloud lo cerco per nome, altrimenti verrebbe creato SENZA dati fiscali (la fattura verrebbe scartata da SDI).\n\nMeglio completare prima l'anagrafica in Clienti/CRM. Procedere comunque?`);
+        if (!ok) return;
+    }
+    const periodo = `${r['INIZIO ABBONAMENTO'] || '?'} → ${r['SCADENZA ABBONAMENTO'] || '?'}`;
+    const modalita = (r["MODALITA'"] || '').toUpperCase();
+    const pagata = r.PAGAMENTO === 'SI';
+    if (!confirm(`Creare la fattura su Fatture in Cloud per ${nome}?\nAbbonamento parcheggio ${r['DURATA ABB.'] || ''} — ${targa}\nPeriodo ${periodo} — totale ${fEur(imp)}${pagata ? `\nPagamento: ${modalita}` : '\n⚠️ NON ancora pagato: fattura a rimessa (bonifico).'}\n\n⚠️ La fattura viene INVIATA SUBITO a SDI.`)) return;
+
+    const righe = [{
+        descrizione: `Abbonamento parcheggio ${r['DURATA ABB.'] || ''} — ${r['MODELLO VETTURA'] || ''} ${targa} — dal ${r['INIZIO ABBONAMENTO'] || ''} al ${r['SCADENZA ABBONAMENTO'] || ''}`.replace(/\s+/g, ' ').trim(),
+        importo: imp
+    }];
+    try {
+        const res = await ficCall('fatturaSospesi', {
+            cliente: anag, righe,
+            note: `Abbonamento parcheggio ${targa}`,
+            metodoPagamento: pagata ? (MP_DA_MODALITA[modalita] || 'MP05') : 'MP05'
+        });
+        r.ficDocId = res.ficDocId || null;
+        r.ficNumero = res.numero ?? null;
+        r.dataFattura = new Date().toLocaleDateString('it-IT');
+        await setDoc(fsDoc(db, 'abbonamenti', id), { ficDocId: r.ficDocId, ficNumero: r.ficNumero, dataFattura: r.dataFattura }, { merge: true });
+        alert(`✅ Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? imp)}` +
+              (res.clienteCreato ? `\n(cliente creato su FIC coi dati del CRM)` : '') +
+              (res.inviata ? `\n📤 Inviata a SDI automaticamente.` : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
+        renderAbb();
+    } catch (e) {
+        console.error('[FIC] fattura abbonamento', e);
+        alert('❌ Fattura in Cloud: ' + (e.message || 'errore sconosciuto'));
+    }
 }
 
 function editAbb(id) {
