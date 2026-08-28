@@ -144,12 +144,20 @@ async function getVat22(): Promise<number> {
  */
 // "Via Taormina 13/C, 95027 San Gregorio di Catania (CT)" → componenti SDI.
 // Il CAP a 5 cifre fa da separatore; la provincia è l'eventuale (XX) finale.
-function parseIndirizzo(raw: unknown): { street?: string; cap?: string; city?: string; prov?: string } {
+// La provincia è OBBLIGATORIA in FatturaPA ma nel CRM manca quasi sempre
+// (visto 28/08: 10 fatture bloccate): se assente la deduciamo dal CAP.
+const PROV_DA_CAP: Record<string, string> = {
+  '90': 'PA', '91': 'TP', '92': 'AG', '93': 'CL', '94': 'EN', '95': 'CT', '96': 'SR', '97': 'RG', '98': 'ME',
+  '00': 'RM', '20': 'MI', '80': 'NA', '89': 'RC',
+}
+export function parseIndirizzo(raw: unknown): { street?: string; cap?: string; city?: string; prov?: string } {
   const s = String(raw || '').trim()
   if (!s) return {}
-  const m = s.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\))?$/)
+  // "..., 95027 San Gregorio di Catania (CT)" | "... 95127 CATANIA CT" | "... 95127 CATANIA"
+  const m = s.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\)|\s+([A-Za-z]{2}))?$/)
   if (!m) return { street: s }
-  return { street: m[1].replace(/,$/, '').trim(), cap: m[2], city: m[3].trim(), prov: m[4]?.toUpperCase() }
+  const prov = (m[4] || m[5])?.toUpperCase() || PROV_DA_CAP[m[2].slice(0, 2)]
+  return { street: m[1].replace(/,$/, '').trim(), cap: m[2], city: m[3].trim(), prov }
 }
 
 // Anagrafica da denormalizzare nel documento: FIC NON copia P.IVA/CF/SDI
@@ -200,6 +208,9 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
       if (addr.cap) patch.address_postal_code = addr.cap
       if (addr.city) patch.address_city = addr.city
       if (addr.prov) patch.address_province = addr.prov
+    } else if (!match.address_province) {
+      const prov = addr.prov || PROV_DA_CAP[String(match.address_postal_code || '').slice(0, 2)]
+      if (prov) patch.address_province = prov
     }
     if (Object.keys(patch).length > 0) {
       await fic(`/entities/clients/${match.id}`, { method: 'PUT', body: { data: patch } })
