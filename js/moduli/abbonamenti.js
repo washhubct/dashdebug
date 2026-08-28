@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
+import { mostraEsitoFattura } from './fic-ui.js';
 import { setDoc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { state, CONFIG } from '../state.js';
 import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
@@ -444,16 +445,16 @@ async function fatturaFICAbb(id) {
         const res = await ficCall('fatturaSospesi', {
             cliente: anag, righe,
             note: `Abbonamento parcheggio ${targa}`,
-            metodoPagamento: pagata ? (MP_DA_MODALITA[modalita] || 'MP05') : 'MP05'
+            metodoPagamento: pagata ? (MP_DA_MODALITA[modalita] || 'MP05') : 'MP05',
+            pagata,            // già incassato in dashboard → su FIC nasce pagata
+            modalita,
         });
         r.ficDocId = res.ficDocId || null;
         r.ficNumero = res.numero ?? null;
         r.dataFattura = new Date().toLocaleDateString('it-IT');
         await setDoc(fsDoc(db, 'abbonamenti', id), { ficDocId: r.ficDocId, ficNumero: r.ficNumero, dataFattura: r.dataFattura }, { merge: true });
-        alert(`✅ Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? imp)}` +
-              (res.clienteCreato ? `\n(cliente creato su FIC coi dati del CRM)` : '') +
-              (res.inviata ? `\n📤 Inviata a SDI automaticamente.` : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
         renderAbb();
+        await mostraEsitoFattura(res, { label: `Abbonamento ${nome} — ${targa}`, totale: imp, giaPagata: pagata });
     } catch (e) {
         console.error('[FIC] fattura abbonamento', e);
         alert('❌ Fattura in Cloud: ' + (e.message || 'errore sconosciuto'));

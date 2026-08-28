@@ -1,6 +1,16 @@
 import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
-import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity, formatPhoneForWA } from '../utils.js';
+import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity, formatPhoneForWA, pivaValida } from '../utils.js';
+
+// Sede legale: campi separati (via/cap/citta/provincia) dal 28/08 — SDI li vuole
+// distinti e obbligatori. `sedeLegale` resta come stringa composta per compatibilità.
+const PROV_DA_CAP = { '90':'PA','91':'TP','92':'AG','93':'CL','94':'EN','95':'CT','96':'SR','97':'RG','98':'ME','00':'RM','20':'MI','80':'NA','89':'RC' };
+function parseSede(raw) {
+    const s = String(raw || '').trim();
+    const m = s.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\)|\s+([A-Za-z]{2}))?$/);
+    if (!m) return { via: s, cap: '', citta: '', provincia: '' };
+    return { via: m[1].replace(/,$/, '').trim(), cap: m[2], citta: m[3].trim(), provincia: ((m[4] || m[5]) || PROV_DA_CAP[m[2].slice(0, 2)] || '').toUpperCase() };
+}
 
 // ═══ Template messaggi WhatsApp (FASE 2 marketing) ═══
 const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
@@ -255,14 +265,18 @@ function showClienteForm(data) {
         document.getElementById('cPiva').value=data.piva||'';
         document.getElementById('cCodDest').value=data.codDestinatario||'';
         document.getElementById('cPec').value=data.pec||'';
-        document.getElementById('cSede').value=data.sedeLegale||'';
+        const sede = data.via ? { via: data.via, cap: data.cap || '', citta: data.citta || '', provincia: data.provincia || '' } : parseSede(data.sedeLegale);
+        document.getElementById('cVia').value=sede.via||'';
+        document.getElementById('cCap').value=sede.cap||'';
+        document.getElementById('cCitta').value=sede.citta||'';
+        document.getElementById('cProv').value=sede.provincia||'';
         const container=document.getElementById('vettureContainer'); container.innerHTML='';
         (data.vetture||[]).forEach(v=>aggiungiCampoVettura(v));
     } else {
         document.getElementById('clienteFTitle').textContent='Nuovo Cliente';
         document.getElementById('clienteSaveBtn').textContent='Salva';
         state.clienteEditId=null;
-        ['cNome','cTel','cNote','cPrezzoVip','cDenominazione','cPiva','cCodDest','cPec','cSede'].forEach(id=>document.getElementById(id).value='');
+        ['cNome','cTel','cNote','cPrezzoVip','cDenominazione','cPiva','cCodDest','cPec','cVia','cCap','cCitta','cProv'].forEach(id=>document.getElementById(id).value='');
         document.getElementById('cTipo').value='privato';
         document.getElementById('vettureContainer').innerHTML='';
         aggiungiCampoVettura();
@@ -294,7 +308,23 @@ async function salvaCliente(){
     const piva=document.getElementById('cPiva')?.value.trim()||'';
     const codDestinatario=document.getElementById('cCodDest')?.value.trim().toUpperCase()||'';
     const pec=document.getElementById('cPec')?.value.trim()||'';
-    const sedeLegale=document.getElementById('cSede')?.value.trim()||'';
+    const via=document.getElementById('cVia')?.value.trim().toUpperCase()||'';
+    const cap=document.getElementById('cCap')?.value.trim()||'';
+    const citta=document.getElementById('cCitta')?.value.trim().toUpperCase()||'';
+    const provincia=(document.getElementById('cProv')?.value.trim().toUpperCase()||'') || PROV_DA_CAP[cap.slice(0,2)] || '';
+    const sedeLegale = via ? `${via}, ${cap} ${citta}${provincia ? ` (${provincia})` : ''}`.replace(/\s+/g,' ').trim() : '';
+    // Validazione dati fiscali: gli errori qui sono quelli che SDI scarta (28/08)
+    const errFisc = (t)=>{ if(msg){msg.style.color='var(--red)';msg.textContent=t;} };
+    if(piva && !pivaValida(piva)) return errFisc('⚠️ P.IVA non valida: 11 cifre con cifra di controllo errata, ricontrolla');
+    if(codDestinatario && !/^[A-Z0-9]{6,7}$/.test(codDestinatario)) return errFisc('⚠️ Codice SDI: 7 caratteri alfanumerici (0000000 se il cliente usa la PEC)');
+    if(codDestinatario==='0000000' && !pec) return errFisc('⚠️ Con SDI 0000000 serve la PEC');
+    if(piva){
+        if(!via) return errFisc('⚠️ Sede legale: via mancante');
+        if(!/^\d{5}$/.test(cap)) return errFisc('⚠️ CAP: 5 cifre');
+        if(!citta) return errFisc('⚠️ Sede legale: città mancante');
+        if(!/^[A-Z]{2}$/.test(provincia)) return errFisc('⚠️ Provincia: sigla di 2 lettere (es. CT)');
+        if(!codDestinatario && !pec) return errFisc('⚠️ Serve il codice SDI oppure la PEC');
+    }
     
     const vetture=[];
     document.querySelectorAll('.vettura-row').forEach(row=>{
@@ -303,7 +333,7 @@ async function salvaCliente(){
         const prezzo=parseFloat(row.querySelector('.v-prezzo')?.value)||0;
         if(modello||targa) vetture.push({modello,targa,prezzo});
     });
-    const record={nome,telefono,vetture,note,prezzoVip,tipo,denominazione,piva,codDestinatario,pec,sedeLegale,timestamp:Date.now()};
+    const record={nome,telefono,vetture,note,prezzoVip,tipo,denominazione,piva,codDestinatario,pec,sedeLegale,via,cap,citta,provincia,timestamp:Date.now()};
     try{
         if(state.clienteEditId){
             await fsUpdateDoc(fsDoc(db,'clienti',state.clienteEditId),record);

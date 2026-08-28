@@ -144,3 +144,15 @@ export function nameSimilarity(a, b) {
     // Dice coefficient: 2 * matched / (|A| + |B|)
     return (2 * matched) / (tokA.length + tokB.length);
 }
+
+// Checksum P.IVA italiana: intercetta i typo prima che SDI scarti la fattura
+export function pivaValida(p) {
+    if (!/^\d{11}$/.test(p)) return false;
+    const d = p.split('').map(Number);
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        if (i % 2 === 0) sum += d[i];
+        else { const y = d[i] * 2; sum += y > 9 ? y - 9 : y; }
+    }
+    return (10 - (sum % 10)) % 10 === d[10];
+}

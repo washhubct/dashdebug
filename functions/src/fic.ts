@@ -160,6 +160,43 @@ export function parseIndirizzo(raw: unknown): { street?: string; cap?: string; c
   return { street: m[1].replace(/,$/, '').trim(), cap: m[2], city: m[3].trim(), prov }
 }
 
+/** Checksum P.IVA italiana (Luhn-like). Nel CRM sono arrivate P.IVA con typo (28/08). */
+export function pivaValida(p: string): boolean {
+  if (!/^\d{11}$/.test(p)) return false
+  const d = p.split('').map(Number)
+  let sum = 0
+  for (let i = 0; i < 10; i++) {
+    if (i % 2 === 0) sum += d[i]
+    else { const y = d[i] * 2; sum += y > 9 ? y - 9 : y }
+  }
+  return (10 - (sum % 10)) % 10 === d[10]
+}
+
+/** Cosa manca perché SDI accetti la fattura. Vuoto = ok. */
+function problemiAnagrafica(e: Record<string, any>): string[] {
+  const out: string[] = []
+  if (!e.vat_number && !e.tax_code) out.push('P.IVA/CF mancante')
+  else if (e.vat_number && !pivaValida(String(e.vat_number))) out.push(`P.IVA ${e.vat_number} non valida (cifra di controllo errata)`)
+  if (!e.address_street) out.push('via mancante')
+  if (!e.address_postal_code) out.push('CAP mancante o non a 5 cifre')
+  if (!e.address_city) out.push('città mancante')
+  if (!e.address_province) out.push('provincia mancante (sigla 2 lettere)')
+  if (!e.ei_code && !e.certified_email) out.push('codice SDI o PEC mancante')
+  if (e.ei_code === '0000000' && !e.certified_email) out.push('con SDI 0000000 serve la PEC')
+  return out
+}
+
+/** Conti FIC per il pagato: cerca per nome (CASSA/CONTANTI, POS/CARTA, BANCO/BONIFICO), fallback primo. */
+const paByCompany: Record<number, any[]> = {}
+async function paymentAccountId(modalita: string): Promise<number | undefined> {
+  const { companyId } = await getAccessToken()
+  if (!paByCompany[companyId]) paByCompany[companyId] = ((await fic('/info/payment_accounts'))?.data || [])
+  const list = paByCompany[companyId]
+  const pref: Record<string, RegExp> = { CONTANTI: /cassa|contant/i, POS: /pos|carta|bancomat/i, BONIFICO: /banco|banca|bonifico|iban/i }
+  const rx = pref[modalita] || /./
+  return (list.find((a: any) => rx.test(a.name)) || list[0])?.id
+}
+
 // Anagrafica da denormalizzare nel documento: FIC NON copia P.IVA/CF/SDI
 // dall'anagrafica clienti — nel doc finisce solo ciò che passi in `entity`.
 // Passare solo {id, name} produce fatture senza dati fiscali (bug visto 24/08).
@@ -268,7 +305,9 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
       // del CRM se assente: la dashboard è la fonte dell'anagrafica.
       // metodoPagamento: codice SDI (MP01 contanti, MP05 bonifico, MP08 carta) —
       // obbligatorio nella fattura elettronica; default MP05 (sospesi a rimessa).
-      const { cliente, righe, note, metodoPagamento } = payload
+      // pagata: true → la fattura nasce già saldata su FIC (contanti/POS incassati
+      // in dashboard); modalita (CONTANTI/POS/BONIFICO) sceglie il conto FIC.
+      const { cliente, righe, note, metodoPagamento, pagata, modalita } = payload
       const mp = ['MP01', 'MP05', 'MP08'].includes(metodoPagamento) ? metodoPagamento : 'MP05'
       if (!cliente?.nome || !Array.isArray(righe) || righe.length === 0) {
         throw new HttpsError('invalid-argument', 'cliente.nome e righe richiesti')
@@ -279,6 +318,13 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
       if (!entity.haFiscali) {
         throw new HttpsError('failed-precondition',
           `Il cliente "${entity.name}" non ha P.IVA né Codice Fiscale (né su FIC né nel CRM). Completa l'anagrafica in Clienti/CRM e riprova.`)
+      }
+      // Controllo completo PRIMA di creare il documento: una fattura creata e
+      // rifiutata da SDI resta su FIC col numero bruciato (28/08: 11 casi).
+      const problemi = problemiAnagrafica(entity.entity)
+      if (problemi.length) {
+        throw new HttpsError('failed-precondition',
+          `Anagrafica di "${entity.name}" incompleta per SDI: ${problemi.join(', ')}. Correggi in Clienti/CRM (o su FIC) e riprova.`)
       }
       const vatId = await getVat22()
       const items = righe.map((r: any) => ({
@@ -296,7 +342,9 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
           date: oggi,
           use_gross_prices: true,
           items_list: items,
-          payments_list: [{ amount: totale, due_date: oggi, status: 'not_paid' }],
+          payments_list: [pagata
+            ? { amount: totale, due_date: oggi, paid_date: oggi, status: 'paid', payment_account: { id: await paymentAccountId(String(modalita || '').toUpperCase()) } }
+            : { amount: totale, due_date: oggi, status: 'not_paid' }],
           visible_subject: note || 'Servizi autolavaggio — sospesi',
           e_invoice: true,
           ei_data: { payment_method: mp },
@@ -318,6 +366,32 @@ export const ficApi = onCall({ region: REGION }, async (request) => {
       }
 
       return { ok: true, ficDocId: doc?.id, numero: doc?.number ?? null, totale: doc?.amount_gross ?? null, clienteFicId: entity.id, clienteCreato: entity.creato, inviata, invioErrore }
+    }
+
+    case 'inviaSdi': {
+      // Reinvio a SDI di una fattura rimasta not_sent (dopo correzione anagrafica)
+      const id = Number(payload.ficDocId)
+      if (!id) throw new HttpsError('invalid-argument', 'ficDocId mancante')
+      try {
+        await fic(`/issued_documents/${id}/e_invoice/send`, { method: 'POST' })
+        return { inviata: true, invioErrore: null }
+      } catch (e: any) {
+        return { inviata: false, invioErrore: String(e.message || e).slice(0, 300) }
+      }
+    }
+
+    case 'segnaPagata': {
+      // Incasso in dashboard (contanti/POS/bonifico) → pagamento saldato anche su FIC
+      const id = Number(payload.ficDocId)
+      if (!id) throw new HttpsError('invalid-argument', 'ficDocId mancante')
+      const cur = (await fic(`/issued_documents/${id}?fields=id,payments_list`))?.data
+      const payments = cur?.payments_list || []
+      if (payments.length && payments.every((p: any) => p.status === 'paid')) return { ok: true, giaPagata: true }
+      const oggi = new Date().toISOString().slice(0, 10)
+      const paId = await paymentAccountId(String(payload.modalita || '').toUpperCase())
+      const payments_list = payments.map((p: any) => ({ id: p.id, amount: p.amount, due_date: p.due_date, paid_date: oggi, status: 'paid', payment_account: { id: paId } }))
+      await fic(`/issued_documents/${id}`, { method: 'PUT', body: { data: { payments_list } } })
+      return { ok: true }
     }
 
     case 'statoFattura': {

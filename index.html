@@ -551,7 +551,10 @@
 <div class="ff"><label>Partita IVA *</label><input id="cPiva" placeholder="Es: 12345678901" maxlength="11"></div>
 <div class="ff"><label>Codice Destinatario (SDI)</label><input id="cCodDest" placeholder="Es: A1B2C3D" maxlength="7" style="text-transform:uppercase"></div>
 <div class="ff"><label>PEC (alternativa a SDI)</label><input id="cPec" type="email" placeholder="Es: fatture@pec.azienda.it"></div>
-<div class="ff" style="grid-column:span 2"><label>Sede Legale *</label><input id="cSede" placeholder="Es: Via Roma 123, 95100 Catania (CT)"></div>
+<div class="ff" style="grid-column:span 2"><label>Sede Legale — Via e numero *</label><input id="cVia" placeholder="Es: Via Roma 123"></div>
+<div class="ff"><label>CAP *</label><input id="cCap" placeholder="95100" maxlength="5" inputmode="numeric"></div>
+<div class="ff"><label>Città *</label><input id="cCitta" placeholder="Catania"></div>
+<div class="ff"><label>Provincia (sigla) *</label><input id="cProv" placeholder="CT" maxlength="2" style="text-transform:uppercase"></div>
 </div>
 </div>
 <div style="margin-top:12px;margin-bottom:6px;font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">Vetture del Cliente</div>
@@ -793,7 +796,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260826e"></script>
+<script type="module" src="js/main.js?v=20260828a"></script>
 
 </body>
 </html>

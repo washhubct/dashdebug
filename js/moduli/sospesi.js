@@ -2,6 +2,7 @@ import { state } from '../state.js';
 import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db, ficCall } from '../firebase-config.js';
+import { mostraEsitoFattura, segnaPagataFIC } from './fic-ui.js';
 import { richiediPagamento } from './cassa-automatica.js';
 
 /* global XLSX */
@@ -585,37 +586,12 @@ async function fatturaFICCliente(cliente, mese = null) {
         renderSospPage();
         updateSospBadge();
         // Fattura emessa → chiedi subito se il cliente paga oggi (contanti/POS/bonifico)
-        const incassaOra = await _chiediIncassoDopoFattura(res, totale, label);
+        const incassaOra = await mostraEsitoFattura(res, { label, totale, chiediIncasso: true });
         if (incassaOra) await incassaSospesi(aperti, label, cliente + (mese || ''), mese || 'Fattura');
     } catch (e) {
         console.error('[FIC] fattura sospesi', e);
         alert('❌ Fattura in Cloud: ' + (e.message || 'errore sconosciuto'));
     }
-}
-
-// Modale post-fattura: riepilogo esito + scelta "Incassa adesso" / "Più tardi".
-function _chiediIncassoDopoFattura(res, totale, label) {
-    return new Promise(resolve => {
-        const overlay = document.createElement('div');
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px';
-        const sdi = res.inviata
-            ? `<span style="color:var(--grn)">📤 Inviata a SDI</span>`
-            : `<span style="color:var(--red)">⚠️ NON inviata a SDI (${esc(res.invioErrore || 'errore')}) — inviala dal pannello FIC</span>`;
-        overlay.innerHTML = `
-            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,.5)">
-                <div style="font:700 15px var(--f);margin-bottom:4px">✅ Fattura n. ${esc(String(res.numero ?? '—'))} creata</div>
-                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:6px"><strong>${esc(label)}</strong> — ${fEur(res.totale ?? totale)}</div>
-                <div style="font:400 11px var(--f);margin-bottom:14px">${sdi}${res.clienteCreato ? '<br><span style="color:var(--tx3)">Cliente creato su FIC coi dati del CRM</span>' : ''}</div>
-                <div style="font:600 13px var(--f);margin-bottom:10px">Il cliente paga adesso?</div>
-                <div style="display:flex;flex-direction:column;gap:8px">
-                    <button id="_fiOra" class="btn btn-primary">💰 Incassa adesso (contanti / POS / bonifico)</button>
-                    <button id="_fiDopo" class="btn" style="color:var(--tx3);font-size:11px">Più tardi — resta in "Fatturati"</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
-        overlay.querySelector('#_fiOra').addEventListener('click', () => { overlay.remove(); resolve(true); });
-        overlay.querySelector('#_fiDopo').addEventListener('click', () => { overlay.remove(); resolve(false); });
-    });
 }
 
 // Incassa un gruppo di sospesi fatturati: modale metodo (VNE per contanti), stato pagato, Prima Nota.
@@ -634,6 +610,8 @@ async function incassaSospesi(items, label, refId, meseRif) {
         s._idVNE = pag.meta?.idVNE || '';
         await salvaSospesoFirestore(s);
     }
+    // Fattura FIC collegata → segnala il saldo anche lì (richiesta 28/08)
+    for (const id of new Set(items.map(s => s._ficDocId).filter(Boolean))) await segnaPagataFIC(id, pag.mod);
     await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, pag.meta);
     renderSospPage();
     updateSospBadge();
@@ -671,6 +649,7 @@ async function segnaPagatoCliente(cliente) {
         s._idVNE = pag.meta?.idVNE || '';
         await salvaSospesoFirestore(s);
     }
+    for (const id of new Set(fatturati.map(s => s._ficDocId).filter(Boolean))) await segnaPagataFIC(id, pag.mod);
     await scriviPrimaNota(cliente, pag.prezzoFinale, pag.mod, 'Fatture saldate', pag.meta);
     renderSospPage();
     updateSospBadge();

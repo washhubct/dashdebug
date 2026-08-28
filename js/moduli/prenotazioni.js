@@ -1,6 +1,7 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
 import { state } from '../state.js';
-import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity } from '../utils.js';
+import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity, pivaValida } from '../utils.js';
+import { mostraEsitoFattura } from './fic-ui.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
@@ -233,7 +234,7 @@ async function addPren() {
             sede: (document.getElementById('pFSede')?.value || '').trim(),
         };
         if (!datiFattura.denominazione) return showErr('⚠️ Fattura richiesta: inserisci la denominazione', 'pFDen');
-        if (!/^\d{11}$/.test(datiFattura.piva)) return showErr('⚠️ Fattura richiesta: P.IVA di 11 cifre obbligatoria', 'pFPiva');
+        if (!pivaValida(datiFattura.piva)) return showErr('⚠️ Fattura richiesta: P.IVA non valida (11 cifre, controlla i numeri)', 'pFPiva');
     }
 
     // Hard autocomplete: se esistono clienti simili, forza scelta o conferma "nuovo"
@@ -360,7 +361,7 @@ function chiediFatturaAlPagamento(entry) {
             };
             const err = overlay.querySelector('#_rfErr');
             if (!dati.denominazione) { err.textContent = '⚠️ Denominazione obbligatoria'; return; }
-            if (!/^\d{11}$/.test(dati.piva)) { err.textContent = '⚠️ P.IVA di 11 cifre obbligatoria'; return; }
+            if (!pivaValida(dati.piva)) { err.textContent = '⚠️ P.IVA non valida (11 cifre, controlla i numeri)'; return; }
             close({ fattura: true, dati });
         });
     });
@@ -393,13 +394,13 @@ async function creaFatturaImmediata(entry, docId, importo, opts = {}) {
             righe: [{ descrizione: `${label} ${entry.vettura || entry.modello || ''} ${entry.targa || ''} — ${dataIta}`.replace(/\s+/g, ' ').trim(), importo }],
             note: `${label} del ${dataIta}`,
             metodoPagamento,
+            pagata: true,          // il saldo è già incassato: su FIC nasce pagata
+            modalita: modPag,
         });
         await fsUpdateDoc(fsDoc(db, collection, docId), { ficDocId: res.ficDocId || null, ficNumero: res.numero ?? null });
         entry.ficDocId = res.ficDocId || null;
         entry.ficNumero = res.numero ?? null;
-        alert(`🧾 Fattura n. ${res.numero ?? '—'} creata — ${fEur(res.totale ?? importo)}` +
-              (res.clienteCreato ? '\n(cliente creato su FIC coi dati inseriti)' : '') +
-              (res.inviata ? '\n📤 Inviata a SDI automaticamente.' : `\n⚠️ NON inviata a SDI (${res.invioErrore || 'errore'}): inviala dal pannello FIC.`));
+        await mostraEsitoFattura(res, { label: `${label} — ${entry.cliente || ''}`, totale: importo, giaPagata: true });
     } catch (e) {
         console.error('[FIC] fattura immediata', e);
         alert('⚠️ Pagamento salvato ma fattura NON creata:\n' + (e.message || 'errore sconosciuto') + '\n\nRiprova con ↩ e ripaga, oppure creala dal pannello FIC.');
