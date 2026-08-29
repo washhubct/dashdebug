@@ -69,8 +69,17 @@ async function fic(path: string, opts: { method?: string; body?: unknown } = {})
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new HttpsError('internal', `FIC ${path} HTTP ${res.status}: ${JSON.stringify(data).slice(0, 300)}`)
+  if (!res.ok) throw new HttpsError('internal', erroreFicLeggibile(path, res.status, data))
   return data
+}
+
+/** Errore FIC in italiano leggibile da chi sta in cassa (non JSON grezzo). */
+function erroreFicLeggibile(path: string, status: number, data: any): string {
+  const xml: string[] = data?.error?.validation_result?.xml_errors || []
+  if (xml.length) return `SDI ha rifiutato la fattura: ${xml.join(' · ')}`
+  const msg = data?.error?.message || data?.message
+  if (typeof msg === 'string' && msg && msg !== 'Validation XML') return `Fatture in Cloud: ${msg}`
+  return `Fatture in Cloud: errore ${status} su ${path}`
 }
 
 // ───────────────────────── OAuth callback ─────────────────────────
@@ -192,7 +201,7 @@ async function paymentAccountId(modalita: string): Promise<number | undefined> {
   const { companyId } = await getAccessToken()
   if (!paByCompany[companyId]) paByCompany[companyId] = ((await fic('/info/payment_accounts'))?.data || [])
   const list = paByCompany[companyId]
-  const pref: Record<string, RegExp> = { CONTANTI: /cassa|contant/i, POS: /pos|carta|bancomat/i, BONIFICO: /banco|banca|bonifico|iban/i }
+  const pref: Record<string, RegExp> = { CONTANTI: /cassa|contant/i, POS: /\bpos\b|bancomat/i, BONIFICO: /banco|banca|bonifico|iban/i }
   const rx = pref[modalita] || /./
   return (list.find((a: any) => rx.test(a.name)) || list[0])?.id
 }
