@@ -210,7 +210,7 @@ export function renderAbb() {
             <td style="white-space:nowrap">
                 <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
                 ${disdetto ? '' : `<button class="act-btn renew-abb" data-id="${id}" title="Rinnova (sposta le date al periodo successivo + incasso)">↻</button>`}
-                <button class="act-btn pay-abb" data-id="${id}" title="${pag === 'SI' ? 'Incassa SENZA rinnovare (pregresso / conguaglio, le date non cambiano)' : 'Registra pagamento'}" style="color:var(--grn)${pag === 'SI' ? ';opacity:.55' : ''}">💰</button>
+                <button class="act-btn pay-abb" data-id="${id}" title="${pag === 'SI' ? 'Incassa (se il periodo è scaduto le date avanzano al periodo successivo)' : 'Registra pagamento (se il periodo è scaduto le date avanzano)'}" style="color:var(--grn)${pag === 'SI' ? ';opacity:.55' : ''}">💰</button>
                 ${disdetto ? '' : `<button class="act-btn disd-abb" data-id="${id}" title="Disdetta: il cliente lascia il posto auto (resta in archivio, niente alert scadenza)" style="color:var(--tx3)">🚫</button>`}
                 <button class="act-btn fic-abb" data-id="${id}" title="${r.ficDocId ? 'Già fatturato n. ' + esc(String(r.ficNumero ?? '')) + ' — clicca per emetterne un\'altra' : 'Fattura elettronica (Fatture in Cloud)'}" style="color:var(--blu);${r.ficDocId ? 'opacity:.45' : ''}">🧾</button>
                 <button class="act-btn del del-abb" data-id="${id}" title="Elimina">✕</button>
@@ -466,6 +466,17 @@ function editAbb(id) {
     if(r) showAbbF(r);
 }
 
+// Prossima scadenza a partire dalla scadenza attuale, secondo la durata dell'abbonamento
+function _prossimaScadenza(dur, old) {
+    const ns = new Date(old);
+    if(dur.includes('ANNO')) ns.setFullYear(ns.getFullYear() + 1);
+    else if(dur.includes('8')) ns.setMonth(ns.getMonth() + 8);
+    else if(dur.includes('6')) ns.setMonth(ns.getMonth() + 6);
+    else if(dur.includes('3')) ns.setMonth(ns.getMonth() + 3);
+    else ns.setMonth(ns.getMonth() + 1);
+    return ns;
+}
+
 async function renewAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
     const _oggi = new Date().toLocaleDateString('it-IT');
@@ -474,12 +485,7 @@ async function renewAbb(id) {
     const imp = pNum(r.IMPORTO);
     const old = pDate(r['SCADENZA ABBONAMENTO']); if(!old) return;
 
-    const ns = new Date(old);
-    if(dur.includes('ANNO')) ns.setFullYear(ns.getFullYear() + 1);
-    else if(dur.includes('8')) ns.setMonth(ns.getMonth() + 8);
-    else if(dur.includes('6')) ns.setMonth(ns.getMonth() + 6);
-    else if(dur.includes('3')) ns.setMonth(ns.getMonth() + 3);
-    else ns.setMonth(ns.getMonth() + 1);
+    const ns = _prossimaScadenza(dur, old);
 
     const scelta = await _mostraModalRinnovo(r, old, ns);
     if(!scelta) return;
@@ -550,12 +556,27 @@ async function pagaAbb(id) {
     r["MODALITA'"] = pag.mod;
     r['DATA PAGAMENTO'] = dataPag;
 
+    const updateData = {
+        'PAGAMENTO': 'SI',
+        "MODALITA'": pag.mod,
+        'DATA PAGAMENTO': dataPag
+    };
+
+    // Periodo scaduto → l'incasso copre il periodo successivo: le date avanzano
+    // (come ↻ Rinnova). Periodo ancora in corso non pagato → solo registrazione
+    // pagamento, le date restano (es. abbonamento nuovo salvato "da pagare").
+    const oldSca = pDate(r['SCADENZA ABBONAMENTO']);
+    const oggi0 = new Date(); oggi0.setHours(0, 0, 0, 0);
+    if (oldSca && oldSca <= oggi0) {
+        const ns = _prossimaScadenza(r['DURATA ABB.'] || '1 MESE', oldSca);
+        r['INIZIO ABBONAMENTO'] = d2s(fmtDI(oldSca));
+        r['SCADENZA ABBONAMENTO'] = d2s(fmtDI(ns));
+        updateData['INIZIO ABBONAMENTO'] = r['INIZIO ABBONAMENTO'];
+        updateData['SCADENZA ABBONAMENTO'] = r['SCADENZA ABBONAMENTO'];
+    }
+
     try {
-        await setDoc(fsDoc(db, "abbonamenti", id), {
-            'PAGAMENTO': 'SI',
-            "MODALITA'": pag.mod,
-            'DATA PAGAMENTO': dataPag
-        }, { merge: true });
+        await setDoc(fsDoc(db, "abbonamenti", id), updateData, { merge: true });
     } catch(e) { console.error("Errore pagamento abbonamento:", e); return; }
 
     showThankYouToast(r['NOME E COGNOME'] || '', pag.prezzoFinale);
@@ -622,7 +643,7 @@ function _mostraModalRinnovo(r, oldDate, newDate) {
 async function disdiciAbb(id) {
     const r = state.localAbb.find(x => x._id === id); if(!r) return;
     const nome = r['NOME E COGNOME'] || '';
-    const pendente = r.PAGAMENTO !== 'SI' ? `\n\n⚠️ Risulta NON PAGATO: se deve saldare il pregresso, prima usa 💰 (incassa senza rinnovo).` : '';
+    const pendente = r.PAGAMENTO !== 'SI' ? `\n\n⚠️ Risulta NON PAGATO: se deve saldare il pregresso, prima usa 💰 (incassa).` : '';
     if(!confirm(`Registrare la DISDETTA di ${nome} (${r.TARGA || ''})?\nL'abbonamento resta in archivio (tab "Disdetti") e non genera più alert di scadenza.${pendente}`)) return;
     const oggi = new Date().toLocaleDateString('it-IT');
     r.DISDETTO = 'SI';
