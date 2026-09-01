@@ -375,7 +375,6 @@ async function saveAbb() {
         return;
     }
 
-    syncAbbToSheet(rec, isUpdate);
     
     // Scrivi in Prima Nota su Firestore SOLO se è un pagamento NUOVO (non già registrato):
     // evita il doppio incasso quando si ri-salva un abbonamento già pagato.
@@ -538,7 +537,6 @@ async function renewAbb(id) {
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
 
-    syncAbbToSheet(r, true);
     renderAbb();
     renderCassa();
 }
@@ -597,7 +595,6 @@ async function pagaAbb(id) {
         state.rawData?.primaNota?.rows?.push(pnRow);
     } catch(e) { console.warn("Errore Prima Nota:", e); }
 
-    syncAbbToSheet(r, true);
     renderAbb();
     renderCassa();
 }
@@ -666,35 +663,9 @@ async function deleteAbb(id) {
         // Solo ora rimuoviamo dallo state locale: se arrivi qui la cancellazione cloud è andata
         state.localAbb = state.localAbb.filter(x => x._id !== id);
         renderAbb();
-        // Sync Sheets in fire-and-forget (non compromette lo stato se fallisce)
-        fetch(CONFIG.GAS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'deleteAbbonamento', id: id })
-        }).catch(e => console.warn('Sync Sheets fallita (non bloccante):', e));
     } catch(e) {
         console.error('Errore cancellazione abbonamento:', e);
         alert('❌ Errore durante la cancellazione. Il record NON è stato rimosso — riprova.');
     }
 }
 
-async function syncAbbToSheet(rec, isUpdate) {
-    try {
-        await fetch(CONFIG.GAS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                action: isUpdate ? 'updateAbbonamento' : 'addAbbonamento', 
-                id: rec._id, 
-                data: {
-                    modelloVettura: rec['MODELLO VETTURA'], provenienza: rec.PROVENIENZA, targa: rec.TARGA,
-                    codiceCancello: rec['CODICE CANCELLO'], inizioAbbonamento: rec['INIZIO ABBONAMENTO'],
-                    scadenzaAbbonamento: rec['SCADENZA ABBONAMENTO'], nomeECognome: rec['NOME E COGNOME'],
-                    numeroCellulare: rec['NUMERO CELL.'], durataAbb: rec['DURATA ABB.'], importo: rec.IMPORTO,
-                    notte: rec.NOTTE, pagamento: rec.PAGAMENTO, modalita: rec["MODALITA'"],
-                    dataPagamento: rec['DATA PAGAMENTO'], chiaviCodice: rec['CHIAVI/CODICE'], note: rec.NOTE
-                }
-            })
-        });
-    } catch(e) { console.warn('Sync error:', e); }
-}

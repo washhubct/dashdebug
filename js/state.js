@@ -1,7 +1,6 @@
 // Variabili globali di sistema
 export const CONFIG = {
     MESI_S: ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'],
-    GAS_URL: 'https://script.google.com/macros/s/AKfycby3dXJ8s7c23kIaKw1Ms0hoXUFw-U_a8n_lDx_3Y5BynlQgm15RKBZAQCsv_MBfl-Y-ow/exec',
     N8N_URL: 'https://n8n-guido.lisergico.it/webhook/917ede0f-bdc3-4b3f-a29e-9d9336b22d09/chat'
 };
 
