@@ -303,12 +303,12 @@ async function initFirebaseData() {
     if (upd) upd.textContent = 'Sincronizzazione...';
 
     const cutoff = getCutoffISO(400);
-    // Prima Nota: gli operatori possono leggere per rules SOLO i record di oggi
-    // (separazione operatore/admin). Se interrogassimo 400 giorni, la query
-    // conterrebbe record vecchi vietati e Firestore rifiuterebbe TUTTA la query
-    // (permission-denied) → l'operatore non vedrebbe alcun incasso. Quindi per
-    // gli operatori il cutoff Prima Nota è oggi; l'admin mantiene lo storico.
-    const pnCutoff = isAdmin() ? cutoff : fmtDI(new Date());
+    // Prima Nota: le rules leggono per sede (nessun vincolo di data), quindi il
+    // cutoff è solo una scelta client. Admin: 400 giorni (report storico).
+    // Operatore: 60 giorni — servono per la cassa dei giorni passati (gli
+    // abbonamenti vengono da primaNota: con cutoff "oggi" l'operatore vedeva solo
+    // il parcheggio ad ore nei giorni precedenti, bug 02/09/2026).
+    const pnCutoff = isAdmin() ? cutoff : getCutoffISO(60);
     state._historicalLoaded = false;
 
     try {
