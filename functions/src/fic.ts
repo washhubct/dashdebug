@@ -242,34 +242,46 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
   const found = await fic(`/entities/clients?fieldset=detailed&q=${encodeURIComponent(q)}`)
   const match = (found?.data || [])[0]
   if (match) {
-    // Entity esistente ma anagrafica monca: integra dal CRM (fonte unica).
-    // Senza P.IVA/CF sull'entity l'invio SDI viene rifiutato (visto 03/08).
+    // REGOLA (07/09): la dashboard/CRM è la fonte unica dell'anagrafica.
+    // Ogni campo che nel CRM è valorizzato (e valido) sovrascrive quello di FIC
+    // se diverso; i campi vuoti nel CRM lasciano intatto ciò che c'è su FIC.
+    // Prima si integravano solo i campi vuoti su FIC: un'anagrafica creata a
+    // mano su FIC con dati vecchi (o lo '0000000' di default come SDI) bloccava
+    // le fatture anche con il CRM corretto (caso COMIS, 07/09).
     const patch: Record<string, unknown> = {}
-    if (piva && !match.vat_number) patch.vat_number = piva
-    if ((cf || piva) && !match.tax_code) patch.tax_code = cf || piva
-    // SDI: FIC mette '0000000' di default alle anagrafiche create senza codice,
-    // quindi "vuoto" include anche quello. Se il CRM ha un codice vero e FIC
-    // ne ha uno diverso, vince il CRM (fonte unica) — visto 07/09: COMIS con
-    // KRRH6B9 nel CRM bloccato da "con SDI 0000000 serve la PEC".
+    const set = (k: string, v: unknown) => { if (v !== undefined && v !== null && v !== '' && v !== match[k]) patch[k] = v }
+    if (piva) set('vat_number', piva)
+    if (cf) set('tax_code', cf)
+    else if (piva && !match.tax_code) set('tax_code', piva) // aziende: CF = P.IVA
     const sdiCrm = String(c.sdi || '').trim().toUpperCase()
-    const sdiFicVuoto = !match.ei_code || match.ei_code === '0000000'
-    if (/^[A-Z0-9]{6,7}$/.test(sdiCrm) && sdiCrm !== '0000000' && (sdiFicVuoto || match.ei_code !== sdiCrm)) patch.ei_code = sdiCrm
-    else if (sdiCrm === '0000000' && !match.ei_code) patch.ei_code = sdiCrm
-    if (c.pec && !match.certified_email) patch.certified_email = c.pec
-    if (addr.street && !match.address_street) {
-      patch.address_street = addr.street
-      if (addr.cap) patch.address_postal_code = addr.cap
-      if (addr.city) patch.address_city = addr.city
-      if (addr.prov) patch.address_province = addr.prov
-    } else if (!match.address_province) {
-      const prov = addr.prov || PROV_DA_CAP[String(match.address_postal_code || '').slice(0, 2)]
-      if (prov) patch.address_province = prov
+    if (/^[A-Z0-9]{6,7}$/.test(sdiCrm)) {
+      // '0000000' dal CRM ha senso solo con la PEC; non degradare un SDI vero su FIC
+      if (sdiCrm !== '0000000' || !match.ei_code) set('ei_code', sdiCrm)
+    }
+    const pecCrm = String(c.pec || '').trim().toLowerCase()
+    if (pecCrm) set('certified_email', pecCrm)
+    const street = addr.street || c.via
+    const cap = addr.cap || c.cap
+    const city = addr.city || c.citta
+    const prov = String(addr.prov || c.provincia || '').toUpperCase()
+    if (street) set('address_street', street)
+    if (/^\d{5}$/.test(String(cap || ''))) set('address_postal_code', cap)
+    if (city) set('address_city', city)
+    if (/^[A-Z]{2}$/.test(prov)) set('address_province', prov)
+    else if (!match.address_province) {
+      const dedotta = PROV_DA_CAP[String(cap || match.address_postal_code || '').slice(0, 2)]
+      if (dedotta) set('address_province', dedotta)
+    }
+    // Denominazione: solo se il match è per P.IVA (certo) e differisce davvero
+    if (piva && c.nome && String(c.nome).trim().toUpperCase() !== String(match.name || '').trim().toUpperCase()) {
+      patch.name = String(c.nome).trim()
     }
     if (Object.keys(patch).length > 0) {
       await fic(`/entities/clients/${match.id}`, { method: 'PUT', body: { data: patch } })
     }
     const haFiscali = !!(match.vat_number || match.tax_code || patch.vat_number || patch.tax_code)
-    return { id: match.id, name: match.name, creato: false, haFiscali, entity: entityDoc(match.id, match.name, { ...match, ...patch }) }
+    const nome = String(patch.name || match.name)
+    return { id: match.id, name: nome, creato: false, haFiscali, entity: entityDoc(match.id, nome, { ...match, ...patch }) }
   }
 
   const body = {
