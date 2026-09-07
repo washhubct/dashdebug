@@ -351,7 +351,9 @@ export function renderDash() {
 // ═══════════════════════════════════════════════════════════════════
 function renderDashPaesiEtnei(d) {
     const fatturato = d.fatIncassiManuali;
-    const totUscite = d.affittoPE + d.costoPersonale;
+    // Uscite = affitto pro-rata + personale + uscite di cassa (collection `uscite`,
+    // es. fatture TABS, fornitori): prima venivano ignorate (bug 07/09/2026).
+    const totUscite = d.affittoPE + d.costoPersonale + d.usciteTot;
     const margine = fatturato - totUscite;
     const margPct = fatturato > 0 ? ((margine / fatturato) * 100).toFixed(1) : '0.0';
 
@@ -411,6 +413,16 @@ function renderDashPaesiEtnei(d) {
                 <div class="kpi-label">🏠 Affitto</div>
                 <div class="kpi-val">${fEur(d.affittoPE)}</div>
                 <div class="kpi-sub">3.000 €/mese pro-rata ${d.costiFissi.giorni}gg</div>
+            </div>
+            <div class="kpi r">
+                <div class="kpi-label">📦 Uscite Cassa</div>
+                <div class="kpi-val">${fEur(d.usciteTot)}</div>
+                <div class="kpi-sub">Contanti ${fEur(d.uscContanti)} · POS ${fEur(d.uscPos)}</div>
+            </div>
+            <div class="kpi r">
+                <div class="kpi-label">Uscite Totali</div>
+                <div class="kpi-val">${fEur(totUscite)}</div>
+                <div class="kpi-sub">Affitto + Personale + Cassa</div>
             </div>`;
     }
 
@@ -721,7 +733,7 @@ export function renderReport() {
 // ═══════════════════════════════════════════════════════════════════
 function renderReportPaesiEtnei(d) {
     const entrate = d.fatIncassiManuali;
-    const totUscite = d.affittoPE + d.costoPersonale;
+    const totUscite = d.affittoPE + d.costoPersonale + d.usciteTot;
     const margine = entrate - totUscite;
     const margPct = entrate > 0 ? ((margine / entrate) * 100).toFixed(1) : '0.0';
 
@@ -729,7 +741,7 @@ function renderReportPaesiEtnei(d) {
     if (repKpis) {
         repKpis.innerHTML = `
             <div class="kpi g"><div class="kpi-label">Entrate Totali</div><div class="kpi-val">${fEur(entrate)}</div><div class="kpi-sub">Periodo: ${d.costiFissi.giorni} giorni</div></div>
-            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Affitto ${fEur(d.affittoPE)} + Personale ${fEur(d.costoPersonale)}</div></div>
+            <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Affitto ${fEur(d.affittoPE)} + Personale ${fEur(d.costoPersonale)} + Cassa ${fEur(d.usciteTot)}</div></div>
             <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
             <div class="kpi" style="border-color:var(--tx3)"><div class="kpi-label">Giorni Periodo</div><div class="kpi-val">${d.costiFissi.giorni}</div><div class="kpi-sub">Affitto pro-rata 3.000 €/mese</div></div>`;
     }
@@ -738,6 +750,7 @@ function renderReportPaesiEtnei(d) {
     const uscByCat = {};
     if (d.costoPersonale > 0) uscByCat['👷 Personale Lavaggio'] = d.costoPersonale;
     uscByCat['🏠 Affitto (3.000 €/mese pro-rata)'] = d.affittoPE;
+    if (d.usciteTot > 0) uscByCat['📦 Uscite Cassa (fornitori, fatture, varie)'] = d.usciteTot;
 
     const uscEntries = Object.entries(uscByCat).sort((a, b) => b[1] - a[1]);
     const tbUsc = document.getElementById('repUscTb');
