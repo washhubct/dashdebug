@@ -247,7 +247,14 @@ async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; n
     const patch: Record<string, unknown> = {}
     if (piva && !match.vat_number) patch.vat_number = piva
     if ((cf || piva) && !match.tax_code) patch.tax_code = cf || piva
-    if (c.sdi && !match.ei_code) patch.ei_code = c.sdi
+    // SDI: FIC mette '0000000' di default alle anagrafiche create senza codice,
+    // quindi "vuoto" include anche quello. Se il CRM ha un codice vero e FIC
+    // ne ha uno diverso, vince il CRM (fonte unica) — visto 07/09: COMIS con
+    // KRRH6B9 nel CRM bloccato da "con SDI 0000000 serve la PEC".
+    const sdiCrm = String(c.sdi || '').trim().toUpperCase()
+    const sdiFicVuoto = !match.ei_code || match.ei_code === '0000000'
+    if (/^[A-Z0-9]{6,7}$/.test(sdiCrm) && sdiCrm !== '0000000' && (sdiFicVuoto || match.ei_code !== sdiCrm)) patch.ei_code = sdiCrm
+    else if (sdiCrm === '0000000' && !match.ei_code) patch.ei_code = sdiCrm
     if (c.pec && !match.certified_email) patch.certified_email = c.pec
     if (addr.street && !match.address_street) {
       patch.address_street = addr.street
