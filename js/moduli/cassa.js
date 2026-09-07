@@ -218,7 +218,8 @@ async function addUscita() {
                 USCITE: obj.importo, Uscite: obj.importo,
                 SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": mod, timestamp: Date.now(),
-                sedeId: state.sedeAttiva
+                sedeId: state.sedeAttiva,
+                uscitaId: ref.id // la Cloud Function onUscitaDeleted rimuove la riga PN se l'uscita viene cancellata
             });
         } catch(e) { console.warn("Errore Prima Nota uscita:", e); }
         

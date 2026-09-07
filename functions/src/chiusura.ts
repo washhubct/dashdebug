@@ -125,8 +125,10 @@ export const chiusuraGiornaliera = onSchedule({
       if (tapPos > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA POS', Descrizione: 'TAPPEZZERIA POS', ENTRATA: tapPos, Entrata: tapPos, "MODALITA'": 'POS' })
       if (parContanti > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE CASH', ENTRATA: parContanti, Entrata: parContanti, "MODALITA'": 'CONTANTI' })
       if (parPos > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE POS', ENTRATA: parPos, Entrata: parPos, "MODALITA'": 'POS' })
-      if (uscContanti > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA CASH', ENTRATA: 0, Entrata: 0, USCITE: uscContanti, Uscite: uscContanti, "MODALITA'": 'CONTANTI' })
-      if (uscPos > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'VARIE', Categoria: 'VARIE', 'PRIMANOTA CLIENTI/FORNITORI': 'USCITE GIORNATA', Descrizione: 'USCITE GIORNATA POS', ENTRATA: 0, Entrata: 0, USCITE: uscPos, Uscite: uscPos, "MODALITA'": 'POS' })
+      // USCITE: nessuna riga aggregata. Ogni uscita viene già scritta in
+      // primaNota dalla Cassa al momento dell'inserimento (cassa.js addUscita):
+      // l'aggregato 'USCITE GIORNATA' la contava due volte (visto 07/09/2026,
+      // Paesi Etnei 04/09: 600 € → 1.200 €). I totali restano nel marker.
 
       for (const riga of righe) {
         riga.timestamp = Date.now()
