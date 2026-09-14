@@ -6,10 +6,10 @@ import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 // ─── CONFIGURAZIONE DIPENDENTI PER SEDE ───
 export const DIPENDENTI_PER_SEDE = {
     'lungomare': [
-        { nome: 'SONY', modalita: 'BONIFICO', importoDefault: 70 },
+        // SONY: dal 01/09/2026 a stipendio fisso (vedi DIPENDENTI_FISSI), non più a giornata
+        // PARAM: uscito dall'organico il 14/09/2026 (storico e "da pagare" restano visibili come ex)
         { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
         { nome: 'XXX', modalita: 'BONIFICO', importoDefault: 50 },
-        { nome: 'PARAM', modalita: 'CONTANTI', importoDefault: 50 },
         { nome: 'HAPPY', modalita: 'CONTANTI', importoDefault: 45 },
         { nome: 'SHENTER', modalita: 'CONTANTI', importoDefault: 45 },
         { nome: 'MENTA', modalita: 'BONIFICO', importoDefault: 0 }
@@ -19,6 +19,18 @@ export const DIPENDENTI_PER_SEDE = {
         { nome: 'MINTA', modalita: 'CONTANTI', importoDefault: 0 }
     ]
 };
+
+// Dipendenti a stipendio fisso mensile: niente presenze giornaliere, il costo
+// entra nel report pro-rata dal giorno `dal` (report.js costiFissi).
+export const DIPENDENTI_FISSI = {
+    'lungomare': [
+        { nome: 'SONY', modalita: 'BONIFICO', mensile: 1700, dal: '2026-09-01' },
+    ],
+    'paesi-etnei': [],
+};
+export function isDipendenteFisso(nome, sedeId) {
+    return (DIPENDENTI_FISSI[sedeId] || []).some(d => d.nome === nome);
+}
 
 function getDipendenti() {
     return DIPENDENTI_PER_SEDE[state.sedeAttiva] || DIPENDENTI_PER_SEDE['lungomare'];
@@ -310,7 +322,12 @@ function renderRiepilogoMensile(mese, anno) {
 
     const righe = [
         ...dipendenti.map(d => ({ nome: d.nome, mod: d.modalita === 'BONIFICO' ? '<span class="badge b">🏦 Bonifico</span>' : '<span class="badge g">💵 Contanti</span>' })),
-        ...exDipendenti.sort().map(n => ({ nome: n, mod: '<span class="badge" title="Non più in organico">👋 ex</span>' })),
+        ...exDipendenti.sort().map(n => {
+            const f = (DIPENDENTI_FISSI[state.sedeAttiva] || []).find(d => d.nome === n);
+            return f
+                ? { nome: n, mod: `<span class="badge b" title="Stipendio fisso dal ${f.dal.split('-').reverse().join('/')}: le giornate qui sono lo storico a giornata">📅 Fisso ${fEur(f.mensile)}/mese</span>` }
+                : { nome: n, mod: '<span class="badge" title="Non più in organico">👋 ex</span>' };
+        }),
     ];
 
     // "Da pagare" = giornate NON marcate pagate su TUTTO lo storico (il

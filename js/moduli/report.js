@@ -1,6 +1,6 @@
 import { state, CONFIG } from '../state.js';
 import { pNum, pDate, fEur, esc, gMK, fmtDI } from '../utils.js';
-import { isDipendenteBonifico } from './presenze.js';
+import { isDipendenteBonifico, DIPENDENTI_FISSI } from './presenze.js';
 
 // ─── PERSONALE ───
 // Il personale entra nel margine al NETTO versato (contanti e bonifici).
@@ -218,7 +218,21 @@ function calcolaDatiOperativi(fromStr, toStr) {
         giorni: giorniPeriodo,
         totale: 0
     };
-    costiFissi.totale = costiFissi.affitto + costiFissi.operatore + costiFissi.luce + costiFissi.acqua + costiFissi.assicurazione;
+    // Dipendenti a stipendio fisso (es. SONY 1.700/mese dal 01/09/2026): pro-rata
+    // sui soli giorni del periodo a partire da `dal`, così un periodo a cavallo
+    // non li conta due volte (prima a giornata, poi a fisso).
+    costiFissi.dipendentiFissi = 0;
+    costiFissi.dettaglioFissi = {};
+    (DIPENDENTI_FISSI[state.sedeAttiva] || []).forEach(f => {
+        const dal = new Date(f.dal);
+        const start = dal > from ? dal : from;
+        const gg = start <= to ? Math.max(1, Math.round((to - start) / 864e5)) : 0; // stessa formula di giorniPeriodo
+        if (gg <= 0) return;
+        const quota = Math.round((f.mensile / 30) * Math.min(gg, giorniPeriodo) * 100) / 100;
+        costiFissi.dettaglioFissi[f.nome] = quota;
+        costiFissi.dipendentiFissi += quota;
+    });
+    costiFissi.totale = costiFissi.affitto + costiFissi.operatore + costiFissi.luce + costiFissi.acqua + costiFissi.assicurazione + costiFissi.dipendentiFissi;
 
     // --- TOTALI ---
     const fatLavaggio = lavContanti + lavPos + lavBonifico;
@@ -346,7 +360,7 @@ export function renderDash() {
             <div class="kpi r">
                 <div class="kpi-label">🏠 Costi Fissi</div>
                 <div class="kpi-val">${fEur(d.costiFissi.totale)}</div>
-                <div class="kpi-sub">Pro-rata ${d.costiFissi.giorni}gg · operatore netto ${fEur(d.costiFissi.operatore)}</div>
+                <div class="kpi-sub">Pro-rata ${d.costiFissi.giorni}gg · operatore ${fEur(d.costiFissi.operatore)}${d.costiFissi.dipendentiFissi > 0 ? ` · fissi ${Object.entries(d.costiFissi.dettaglioFissi).map(([n, v]) => `${n} ${fEur(v)}`).join(', ')}` : ''}</div>
             </div>
             <div class="kpi r">
                 <div class="kpi-label">📦 Altre Uscite</div>
@@ -707,6 +721,7 @@ export function renderReport() {
     if (d.personaleBonificoNetto > 0) uscByCat['👷 Personale assunto (bonifico, netto)'] = d.personaleBonificoNetto;
     uscByCat['🏠 Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = d.costiFissi.affitto;
     uscByCat[`👤 Operatore Lavaggio fisso (netto ${OPERATORE_NETTO_MESE}/mese)`] = d.costiFissi.operatore;
+    for (const [nome, v] of Object.entries(d.costiFissi.dettaglioFissi || {})) uscByCat[`👷 ${nome} (stipendio fisso, netto)`] = v;
     uscByCat['💡 Luce (media)'] = d.costiFissi.luce;
     uscByCat['💧 Acqua (media)'] = d.costiFissi.acqua;
     uscByCat['🛡️ Assicurazione'] = d.costiFissi.assicurazione;
