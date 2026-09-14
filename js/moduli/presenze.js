@@ -4,7 +4,7 @@ import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 
 // ─── CONFIGURAZIONE DIPENDENTI PER SEDE ───
-const DIPENDENTI_PER_SEDE = {
+export const DIPENDENTI_PER_SEDE = {
     'lungomare': [
         { nome: 'SONY', modalita: 'BONIFICO', importoDefault: 70 },
         { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
@@ -22,6 +22,12 @@ const DIPENDENTI_PER_SEDE = {
 
 function getDipendenti() {
     return DIPENDENTI_PER_SEDE[state.sedeAttiva] || DIPENDENTI_PER_SEDE['lungomare'];
+}
+
+// true se il dipendente è pagato con bonifico (assunto → costo azienda nel report)
+export function isDipendenteBonifico(nome, sedeId) {
+    const lista = DIPENDENTI_PER_SEDE[sedeId] || DIPENDENTI_PER_SEDE[state.sedeAttiva] || [];
+    return (lista.find(d => d.nome === nome)?.modalita || '') === 'BONIFICO';
 }
 
 let currentWeekStart = null;

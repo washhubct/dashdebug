@@ -1,5 +1,16 @@
 import { state, CONFIG } from '../state.js';
 import { pNum, pDate, fEur, esc, gMK, fmtDI } from '../utils.js';
+import { isDipendenteBonifico } from './presenze.js';
+
+// ─── COSTO AZIENDA PERSONALE ASSUNTO (richiesta Guido 14/09/2026) ───
+// Chi è pagato con bonifico è assunto: nel margine conta il costo azienda
+// (netto × coefficiente: contributi INPS/INAIL, ratei 13ª/14ª, TFR), non il
+// netto versato. Chi è pagato in contanti resta al netto.
+// COEFF_COSTO_AZIENDA = 2.0 è una stima prudenziale: da validare con Michela
+// sui cedolini reali e aggiornare qui.
+export const COEFF_COSTO_AZIENDA = 2.0;
+export const OPERATORE_NETTO_MESE = 1500;   // operatore lavaggio fisso Lungomare (netto)
+export const OPERATORE_COSTO_MESE = Math.round(OPERATORE_NETTO_MESE * COEFF_COSTO_AZIENDA * 100) / 100;
 
 let ch1 = null;
 let ch2 = null;
@@ -175,25 +186,39 @@ function calcolaDatiOperativi(fromStr, toStr) {
     const fatIncassiManuali = imContanti + imPos;
 
     // --- PERSONALE (da presenze) ---
-    let costoPersonale = 0;
+    // costoPersonaleNetto = quanto versato (contanti + bonifici).
+    // costoPersonale     = costo azienda: i bonifici (assunti) × COEFF_COSTO_AZIENDA,
+    //                      i contanti al netto. È questo che entra nel margine.
+    let costoPersonale = 0, costoPersonaleNetto = 0, personaleBonificoNetto = 0, personaleContanti = 0;
     let dettaglioDip = {};
     (state.presenzeDB || []).forEach(p => {
         const d = p.dataISO ? new Date(p.dataISO) : pDate(p.data);
         if (d && d >= from && d <= to) {
-            costoPersonale += pNum(p.costoTotale);
+            const sede = p.sedeId || state.sedeAttiva;
             if (p.dettaglio) {
                 for (const [nome, val] of Object.entries(p.dettaglio)) {
-                    dettaglioDip[nome] = (dettaglioDip[nome] || 0) + pNum(val);
+                    const netto = pNum(val);
+                    if (!netto) continue;
+                    const bonifico = isDipendenteBonifico(nome, sede);
+                    const costo = bonifico ? netto * COEFF_COSTO_AZIENDA : netto;
+                    costoPersonaleNetto += netto;
+                    costoPersonale += costo;
+                    if (bonifico) personaleBonificoNetto += netto; else personaleContanti += netto;
+                    dettaglioDip[nome] = (dettaglioDip[nome] || 0) + costo;
                 }
+            } else {
+                costoPersonaleNetto += pNum(p.costoTotale);
+                costoPersonale += pNum(p.costoTotale);
             }
         }
     });
+    costoPersonale = Math.round(costoPersonale * 100) / 100;
 
     // --- COSTI FISSI (pro-rata giornaliero) ---
     const giorniPeriodo = Math.max(1, Math.round((to - from) / 864e5));
     const costiFissi = {
         affitto: Math.round((1560 / 30) * giorniPeriodo * 100) / 100,
-        operatore: Math.round((1400 / 30) * giorniPeriodo * 100) / 100,
+        operatore: Math.round((OPERATORE_COSTO_MESE / 30) * giorniPeriodo * 100) / 100, // costo azienda (netto 1.500 × coeff)
         luce: Math.round((1000 / 30) * giorniPeriodo * 100) / 100,
         acqua: Math.round((390 / 30) * giorniPeriodo * 100) / 100,
         assicurazione: Math.round((82.33 / 30) * giorniPeriodo * 100) / 100,
@@ -237,7 +262,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
         // Totali
         fatturato, sospesiAperti, numSospesi,
         uscContanti, uscPos, usciteTot,
-        costoPersonale, dettaglioDip,
+        costoPersonale, costoPersonaleNetto, personaleBonificoNetto, personaleContanti, dettaglioDip,
         costiFissi, consumabili,
         // Margine
         margine: fatturato - usciteTot - costiFissi.totale - consumabili - costoPersonale,
@@ -321,14 +346,14 @@ export function renderDash() {
 
         uscEl.innerHTML = `
             <div class="kpi r">
-                <div class="kpi-label">👷 Personale</div>
+                <div class="kpi-label">👷 Personale (costo azienda)</div>
                 <div class="kpi-val">${fEur(d.costoPersonale)}</div>
-                <div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dipDetail || 'Nessun dato presenze'}</div>
+                <div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Netto versato ${fEur(d.costoPersonaleNetto)} · bonifici ×${COEFF_COSTO_AZIENDA}</div>
             </div>
             <div class="kpi r">
                 <div class="kpi-label">🏠 Costi Fissi</div>
                 <div class="kpi-val">${fEur(d.costiFissi.totale)}</div>
-                <div class="kpi-sub">Pro-rata ${d.costiFissi.giorni}gg su 30</div>
+                <div class="kpi-sub">Pro-rata ${d.costiFissi.giorni}gg · operatore ${fEur(d.costiFissi.operatore)} (netto ${OPERATORE_NETTO_MESE} × ${COEFF_COSTO_AZIENDA})</div>
             </div>
             <div class="kpi r">
                 <div class="kpi-label">📦 Altre Uscite</div>
@@ -405,9 +430,9 @@ function renderDashPaesiEtnei(d) {
         const dipDetail = Object.entries(d.dettaglioDip).sort((a, b) => b[1] - a[1]).map(([n, v]) => `${n}: ${fEur(v)}`).join(' · ');
         uscEl.innerHTML = `
             <div class="kpi r">
-                <div class="kpi-label">👷 Personale</div>
+                <div class="kpi-label">👷 Personale (costo azienda)</div>
                 <div class="kpi-val">${fEur(d.costoPersonale)}</div>
-                <div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${dipDetail || 'Nessun dato presenze'}</div>
+                <div class="kpi-sub" title="${dipDetail}" style="cursor:help;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Netto versato ${fEur(d.costoPersonaleNetto)} · bonifici ×${COEFF_COSTO_AZIENDA}</div>
             </div>
             <div class="kpi r">
                 <div class="kpi-label">🏠 Affitto</div>
@@ -685,9 +710,10 @@ export function renderReport() {
 
     // Dettaglio uscite CON personale
     const uscByCat = {};
-    if (d.costoPersonale > 0) uscByCat['👷 Personale Lavaggio'] = d.costoPersonale;
+    if (d.personaleContanti > 0) uscByCat['👷 Personale a giornata (contanti, netto)'] = d.personaleContanti;
+    if (d.personaleBonificoNetto > 0) uscByCat[`👷 Personale assunto (bonifico, costo azienda ×${COEFF_COSTO_AZIENDA})`] = Math.round(d.personaleBonificoNetto * COEFF_COSTO_AZIENDA * 100) / 100;
     uscByCat['🏠 Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = d.costiFissi.affitto;
-    uscByCat['👤 Operatore Lavaggio (fisso)'] = d.costiFissi.operatore;
+    uscByCat[`👤 Operatore Lavaggio fisso (netto ${OPERATORE_NETTO_MESE} → costo azienda)`] = d.costiFissi.operatore;
     uscByCat['💡 Luce (media)'] = d.costiFissi.luce;
     uscByCat['💧 Acqua (media)'] = d.costiFissi.acqua;
     uscByCat['🛡️ Assicurazione'] = d.costiFissi.assicurazione;
@@ -748,7 +774,8 @@ function renderReportPaesiEtnei(d) {
 
     // --- USCITE ---
     const uscByCat = {};
-    if (d.costoPersonale > 0) uscByCat['👷 Personale Lavaggio'] = d.costoPersonale;
+    if (d.personaleContanti > 0) uscByCat['👷 Personale a giornata (contanti, netto)'] = d.personaleContanti;
+    if (d.personaleBonificoNetto > 0) uscByCat[`👷 Personale assunto (bonifico, costo azienda ×${COEFF_COSTO_AZIENDA})`] = Math.round(d.personaleBonificoNetto * COEFF_COSTO_AZIENDA * 100) / 100;
     uscByCat['🏠 Affitto (3.000 €/mese pro-rata)'] = d.affittoPE;
     if (d.usciteTot > 0) uscByCat['📦 Uscite Cassa (fornitori, fatture, varie)'] = d.usciteTot;
 
