@@ -187,7 +187,9 @@ async function handlePrenActions(e) {
         btn.disabled = true;
         try {
             const mod = btn.dataset.mod;
-            const serviziExtra = mod !== 'SOSPESO' ? await mostraModalServizi(date, id) : [];
+            // Servizi aggiuntivi (profumo, cera...) chiesti anche sul sospeso (richiesta Guido 14/09/2026):
+            // l'importo va nel prezzo della prenotazione, da cui il sospeso prende il dovuto.
+            const serviziExtra = await mostraModalServizi(date, id, mod);
             await markPaid(date, id, mod, serviziExtra);
         } finally { btn.disabled = false; }
     } else if (btn.classList.contains('undo-pay')) {
@@ -453,8 +455,10 @@ async function gestisciCassaContanti(prezzoEur, refId) {
     return { abort: true };
 }
 
-async function mostraModalServizi(date, pid) {
+async function mostraModalServizi(date, pid, mod = '') {
     const entry = state.prenDB[date]?.find(e => e._pid === pid);
+    const isSosp = mod === 'SOSPESO';
+    const verbo = isSosp ? 'Segna sospeso' : 'Incassa';
     if (!entry) return [];
 
     const servizi = await loadServiziAttivi();
@@ -518,12 +522,12 @@ async function mostraModalServizi(date, pid) {
                 ${scontoRefRowHtml}
                 ${scontoVoucherRowHtml}
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border-radius:var(--r2);margin-bottom:14px">
-                    <span style="font:500 13px var(--f);color:var(--tx2)">Totale da incassare</span>
-                    <span id="saTot" style="font:700 20px var(--f);color:var(--grn)">€${iniziale.netto.toFixed(2)}</span>
+                    <span style="font:500 13px var(--f);color:var(--tx2)">${isSosp ? 'Totale in sospeso' : 'Totale da incassare'}</span>
+                    <span id="saTot" style="font:700 20px var(--f);color:${isSosp ? 'var(--amb)' : 'var(--grn)'}">€${iniziale.netto.toFixed(2)}</span>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button id="saSkip" class="btn" style="flex:1;color:var(--tx2)">Solo lavaggio</button>
-                    <button id="saOk" class="btn btn-primary" style="flex:2;font:600 14px var(--f)">Incassa €${iniziale.netto.toFixed(2)}</button>
+                    <button id="saOk" class="btn btn-primary" style="flex:2;font:600 14px var(--f)${isSosp ? ';background:var(--amb);border-color:var(--amb)' : ''}">${verbo} €${iniziale.netto.toFixed(2)}</button>
                 </div>
             </div>`;
 
@@ -535,7 +539,7 @@ async function mostraModalServizi(date, pid) {
                 overlay.querySelectorAll('.sa-item:checked').forEach(c => extraSum += parseFloat(c.dataset.prezzo));
                 const r = calcola(extraSum);
                 overlay.querySelector('#saTot').textContent = '€' + r.netto.toFixed(2);
-                overlay.querySelector('#saOk').textContent = 'Incassa €' + r.netto.toFixed(2);
+                overlay.querySelector('#saOk').textContent = verbo + ' €' + r.netto.toFixed(2);
                 const sr = overlay.querySelector('#saScontoRef');
                 if (sr) sr.textContent = '−€' + r.scontoRef.toFixed(2);
                 const sv = overlay.querySelector('#saScontoVoucher');
