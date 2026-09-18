@@ -1,4 +1,4 @@
-import { auth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from '../firebase-config.js';
+import { auth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from '../firebase-config.js';
 import { state } from '../state.js';
 
 // Lista admin — la sicurezza reale dev'essere su Firestore Security Rules,
@@ -99,6 +99,22 @@ export function initAuth() {
     // Permette di accedere anche premendo "Invio" sulla tastiera
     document.getElementById('loginPass')?.addEventListener('keydown', (e) => {
         if(e.key === 'Enter') loginBtn.click();
+    });
+
+    // Reset password via email Firebase (link "Password dimenticata?")
+    document.getElementById('loginReset')?.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const e = document.getElementById('loginUser').value.trim();
+        const err = document.getElementById('loginErr');
+        if (!e) { err.textContent = 'Scrivi la tua email qui sopra, poi clicca "Password dimenticata?"'; return; }
+        try {
+            await sendPasswordResetEmail(auth, e);
+            err.style.color = 'var(--grn)';
+            err.textContent = `Email inviata a ${e}: apri il link per scegliere una nuova password.`;
+        } catch (error) {
+            err.style.color = '';
+            err.textContent = 'Invio non riuscito: controlla che l\'email sia quella dell\'account.';
+        }
     });
 
     if (logoutBtn) {
