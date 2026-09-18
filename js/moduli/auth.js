@@ -37,17 +37,23 @@ export function initAuth() {
 
     onAuthStateChanged(auth, user => {
         if (user) {
-            // TRUCCO CTO: Se l'utente apre una nuova scheda o riapre il browser,
-            // non c'è la "wh_active_tab". Quindi lo scolleghiamo per forzare il click su Accedi!
-            if (!sessionStorage.getItem('wh_active_tab')) {
+            // Sessione per-scheda: chi apre una nuova scheda o riapre il browser deve
+            // rifare il login (PC condiviso in sede). Vale solo per gli operatori:
+            // gli admin (Guido, Michela) restano collegati sul proprio dispositivo —
+            // su iPad/PWA la sessionStorage sparisce a ogni riapertura e Michela
+            // veniva buttata fuori di continuo (18/09/2026).
+            const emailLow = (user.email || '').toLowerCase();
+            const adminUser = ADMIN_EMAILS.includes(emailLow);
+            if (!adminUser && !sessionStorage.getItem('wh_active_tab')) {
                 signOut(auth);
                 return;
             }
+            if (adminUser) sessionStorage.setItem('wh_active_tab', 'true');
 
             // Login confermato (utente ha cliccato Accedi o ha solo ricaricato la pagina)
             let role = 'user';
             let label = 'Operatore';
-            if (ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+            if (adminUser) {
                 role = 'admin';
                 label = 'Amministratore';
             }
