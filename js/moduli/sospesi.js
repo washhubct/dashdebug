@@ -73,6 +73,8 @@ export function initSospesi() {
             else if (txt.includes('fatturati')) state.sospFilter = 'fatturati';
             else if (txt.includes('pagati')) state.sospFilter = 'pagati';
             renderSospPage();
+            // Cambio tab = nuova lista: si riparte dall'alto
+            const pc = document.querySelector('.page-content'); if (pc) pc.scrollTop = 0;
         });
     });
 
@@ -348,7 +350,30 @@ export function updateSospBadge() {
 }
 
 // ─── RENDER PAGINA SOSPESI ───
+// Ogni azione (incassa, fattura, riapri...) ridisegna la lista sostituendo
+// l'HTML: il browser tornava in cima e l'operatore perdeva il punto in cui
+// era (segnalato 18/09/2026). Salviamo lo scroll del contenitore (e della
+// finestra, su mobile) e lo ripristiniamo dopo il render.
+function _scrollSnapshot() {
+    const pc = document.querySelector('.page-content');
+    return { pc, top: pc ? pc.scrollTop : 0, win: window.scrollY };
+}
+function _scrollRestore(snap) {
+    if (!snap) return;
+    const apply = () => {
+        if (snap.pc) snap.pc.scrollTop = snap.top;
+        if (snap.win) window.scrollTo(0, snap.win);
+    };
+    apply();
+    requestAnimationFrame(apply); // dopo il reflow del nuovo HTML
+}
+
 export function renderSospPage() {
+    const _scroll = _scrollSnapshot();
+    try { _renderSospPageInner(); } finally { _scrollRestore(_scroll); }
+}
+
+function _renderSospPageInner() {
     const srch = (document.getElementById('sospSrch')?.value || '').toLowerCase();
     const filter = state.sospFilter || 'aperti';
 
