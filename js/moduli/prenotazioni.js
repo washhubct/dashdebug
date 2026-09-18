@@ -564,7 +564,7 @@ function sospBadge(e) {
     if (!e?.cliente || (e.saldato === 'SI' && e.saldo !== 'SOSPESO')) return '';
     const r = sospesiClienteDaSaldare(e.cliente, 'PREN-' + e._pid);
     if (!r.n) return '';
-    return ` <span class="badge a" title="${r.n} sospesi da saldare — ${fEur(r.totale)}" style="font-size:9px">⏳ ${r.n} · ${fEur(r.totale)}</span>`;
+    return ` <span title="${r.n} sospesi da saldare — ${fEur(r.totale)}" style="font:700 9px var(--f);color:#fff;background:var(--red);padding:2px 7px;border-radius:10px;white-space:nowrap;vertical-align:middle">SOSPESI PRESENTI · ${r.n} · ${fEur(r.totale)}</span>`;
 }
 
 async function markPaid(date, pid, mod, serviziExtra = []) {
