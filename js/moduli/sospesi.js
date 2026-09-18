@@ -166,21 +166,15 @@ export function avvisaSospesiCliente(nomeCliente, escludiSid = '') {
     const r = sospesiClienteDaSaldare(nomeCliente, escludiSid);
     if (r.n === 0) return Promise.resolve(r);
     return new Promise(resolve => {
-        const righe = [...r.aperti, ...r.fatturati]
-            .sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0))
-            .map(s => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--brd);font:400 12px var(--f)">
-                    <span style="color:var(--tx2)">${esc(s.data || '')} · ${esc(s.vettura || '')}${s._fatturato ? ` <span class="badge b" style="font-size:9px">fatt.${s._ficNumero != null && s._ficNumero !== '' ? ' n. ' + esc(String(s._ficNumero)) : ''}</span>` : ''}</span>
-                    <strong>${fEur(parseFloat(s.importo) || 0)}</strong>
-                </div>`).join('');
-        const totFatt = r.fatturati.reduce((t, s) => t + (parseFloat(s.importo) || 0), 0);
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
         overlay.innerHTML = `
-            <div style="background:var(--bg2);border-radius:var(--r);padding:20px;width:100%;max-width:400px;box-shadow:0 12px 40px rgba(0,0,0,.5);border-top:4px solid var(--amb)">
-                <div style="font:700 17px var(--f);margin-bottom:4px">⏳ ${esc(nomeCliente)} ha ${r.n} sospes${r.n === 1 ? 'o' : 'i'} da saldare</div>
-                <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:12px">Totale da incassare <strong style="color:var(--amb);font-size:16px">${fEur(r.totale)}</strong>${totFatt > 0 ? ` · di cui già fatturati ${fEur(totFatt)}` : ''}</div>
-                <div style="max-height:220px;overflow:auto;margin-bottom:14px">${righe}</div>
-                <div style="font:400 11px var(--f);color:var(--tx3);margin-bottom:12px">Proponi al cliente di saldarli oggi. Li incassi dalla pagina Sospesi.</div>
+            <div style="background:var(--bg2);border-radius:var(--r);padding:22px;width:100%;max-width:360px;box-shadow:0 12px 40px rgba(0,0,0,.5);border-top:4px solid var(--amb);text-align:center">
+                <div style="font-size:34px;margin-bottom:6px">⏳</div>
+                <div style="font:700 17px var(--f);margin-bottom:6px">${esc(nomeCliente)}</div>
+                <div style="font:500 14px var(--f);color:var(--tx2);margin-bottom:4px">ha <strong style="color:var(--tx)">${r.n} sospes${r.n === 1 ? 'o' : 'i'}</strong> da saldare</div>
+                <div style="font:800 26px var(--f);color:var(--amb);margin-bottom:14px">${fEur(r.totale)}</div>
+                <div style="font:400 11px var(--f);color:var(--tx3);margin-bottom:14px">Dettaglio e incasso nella sezione Sospesi.</div>
                 <button id="_sospOk" class="btn btn-primary" style="width:100%;font:600 14px var(--f)">Ho capito, continua</button>
             </div>`;
         document.body.appendChild(overlay);
