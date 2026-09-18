@@ -643,6 +643,15 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
 
         renderPren();
         showThankYouToast(entry.cliente, pNum(prezzoFinaleStr));
+
+        // Anagrafica CRM: le prenotazioni dal sito arrivano senza cliente in
+        // anagrafica (il sito non può scrivere in `clienti`). Al pagamento il
+        // cliente è reale → lo creiamo (o completiamo telefono/vettura se esiste).
+        // Idempotente, vale anche per le prenotazioni manuali. (18/09/2026)
+        try {
+            const isNew = await autoSalvaCliente(entry.cliente, entry.vettura, entry.targa || '', entry.telefono || '');
+            if (isNew) showWelcomeToast(entry.cliente);
+        } catch (e) { console.warn('CRM da pagamento:', e?.message); }
     } catch(e) { alert("Errore Cloud"); }
 }
 
