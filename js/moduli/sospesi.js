@@ -113,7 +113,8 @@ export function buildSospesiArray() {
                 dataPagamento: '',
                 _sid: sid
             };
-            if (e.saldo === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = ''; }
+            if (e.saldo === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = e.dataFattura || ''; }
+            if (e.ficDocId || e.ficNumero) { obj._ficDocId = e.ficDocId || null; obj._ficNumero = e.ficNumero ?? null; }
             state.localSosp.push(obj);
         });
     }
@@ -133,7 +134,8 @@ export function buildSospesiArray() {
             dataPagamento: '',
             _sid: sid
         };
-        if (t.pagamento === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = ''; }
+        if (t.pagamento === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = t.dataFattura || ''; }
+        if (t.ficDocId || t.ficNumero) { obj._ficDocId = t.ficDocId || null; obj._ficNumero = t.ficNumero ?? null; }
         state.localSosp.push(obj);
     });
 
@@ -141,6 +143,13 @@ export function buildSospesiArray() {
 }
 
 // ─── HELPERS ───
+// Badge numero fattura (FIC) per un sospeso fatturato; vuoto se fatturato a mano senza numero
+function fattBadge(r) {
+    if (!r._fatturato && !r._pagato) return '';
+    if (r._ficNumero != null && r._ficNumero !== '') return ` <span class="badge b" title="Fattura n. ${esc(String(r._ficNumero))} su Fatture in Cloud${r._dataFatt ? ' del ' + esc(r._dataFatt) : ''}">🧾 n. ${esc(String(r._ficNumero))}</span>`;
+    if (r._fatturato) return ` <span class="badge" title="Segnato fatturato a mano${r._dataFatt ? ' il ' + esc(r._dataFatt) : ''}: nessun numero FIC">🧾 manuale</span>`;
+    return '';
+}
 function getMeseAnno(dataStr) {
     if (!dataStr) return 'Senza data';
     const d = pDate(dataStr);
@@ -369,8 +378,11 @@ export function renderSospPage() {
                 const mesi = {};
                 rows.forEach(r => { const m = getMeseAnno(r.data); if (!mesi[m]) mesi[m] = 0; mesi[m] += r.importo; });
                 const mesiInfo = Object.entries(mesi).map(([m, t]) => `${m}: ${fEur(t)}`).join(' · ');
+                const numeri = [...new Set(rows.map(r => r._ficNumero).filter(n => n != null && n !== ''))];
+                const fattInfo = numeri.length ? `<span style="font:600 10px var(--mono);color:var(--blu)">🧾 Fatt. n. ${numeri.map(n => esc(String(n))).join(', ')}</span>` : '';
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                     <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Registra incasso fatture">💰 Incassato</button>
+                    ${fattInfo}
                     <span style="font:400 10px var(--mono);color:var(--tx2);margin-left:auto">${mesiInfo}</span>
                 </div>`;
             }
@@ -393,7 +405,7 @@ export function renderSospPage() {
                             <td>${esc(r.vettura)}</td>
                             <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
-                            <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
+                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} ${esc(r.note)}</td>
                             <td style="text-align:right">
                                 <button class="act-btn btn-riapri-singolo" data-sid="${r._sid}" title="Riporta in Aperti" style="color:var(--tx2);font-size:11px">↩</button>
                             </td>
@@ -435,7 +447,7 @@ export function renderSospPage() {
                             <td>${esc(r.vettura)}</td>
                             <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
-                            <td style="font-size:11px;color:var(--tx2)">${esc(r.note)}</td>
+                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} ${esc(r.note)}</td>
                             ${azioniHtml}
                         </tr>`;
                     });
@@ -752,7 +764,7 @@ function esportaExcelSospesi() {
     XLSX.utils.book_append_sheet(wb, wsRiepilogo, 'Riepilogo');
 
     // Foglio dettaglio tutti i sospesi
-    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Targa', 'Importo (€)', 'Note', 'Stato', 'Mod. Pagamento', 'Data Pagamento']];
+    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Targa', 'Importo (€)', 'Note', 'Stato', 'N° Fattura', 'Data Fattura', 'Mod. Pagamento', 'Data Pagamento']];
     filtrati
         .sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0))
         .forEach(s => {
@@ -765,12 +777,14 @@ function esportaExcelSospesi() {
                 s.importo || 0,
                 s.note || '',
                 stato,
+                s._ficNumero ?? '',
+                s._dataFatt || '',
                 s._modPag || '',
                 s._dataPag || ''
             ]);
         });
     const wsDettaglio = XLSX.utils.aoa_to_sheet(dettaglioRows);
-    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 16 }];
+    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsDettaglio, 'Dettaglio');
 
     const daLabel = daVal.split('-').reverse().join('');

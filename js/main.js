@@ -353,6 +353,7 @@ async function initFirebaseData() {
                     let d = docSnap.data();
                     d._sid = docSnap.id;
                     if (d.fatturato) { d._fatturato = true; d._dataFatt = d.dataFattura || ''; }
+                    if (d.ficDocId || d.ficNumero) { d._ficDocId = d.ficDocId || null; d._ficNumero = d.ficNumero ?? null; }
                     if (d.pagato) { d._pagato = true; d._modPag = d.modPagamento || ''; d._dataPag = d.dataPagamento || ''; }
                     state.localSosp.push(d);
                 });
