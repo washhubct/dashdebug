@@ -31,6 +31,30 @@ export function requireAdmin(action = 'questa operazione') {
     return true;
 }
 
+// sessionStorage può lanciare (Safari con "Blocca tutti i cookie", modalità privata,
+// dati sito corrotti): mai far dipendere il login da questo.
+const tabFlag = {
+    get: () => { try { return sessionStorage.getItem('wh_active_tab'); } catch { return 'true'; } },
+    set: () => { try { sessionStorage.setItem('wh_active_tab', 'true'); } catch { /* ignora */ } },
+    clear: () => { try { sessionStorage.removeItem('wh_active_tab'); } catch { /* ignora */ } },
+};
+
+// Messaggi leggibili per gli errori Firebase Auth (prima era sempre "Credenziali errate!")
+function messaggioErroreLogin(error) {
+    const code = error?.code || '';
+    const map = {
+        'auth/wrong-password': 'Password errata.',
+        'auth/invalid-credential': 'Email o password errate.',
+        'auth/invalid-login-credentials': 'Email o password errate.',
+        'auth/user-not-found': 'Nessun account con questa email.',
+        'auth/invalid-email': 'Email non valida.',
+        'auth/user-disabled': 'Account disabilitato: contatta l\'amministratore.',
+        'auth/too-many-requests': 'Troppi tentativi: attendi qualche minuto o usa "Password dimenticata?".',
+        'auth/network-request-failed': 'Nessuna connessione a Firebase: controlla rete, VPN o blocco contenuti.',
+    };
+    return map[code] || `Accesso non riuscito (${code || error?.message || 'errore sconosciuto'}).`;
+}
+
 export function initAuth() {
     const loginBtn = document.querySelector('.login-btn');
     const logoutBtn = document.querySelector('.sb-logout');
@@ -44,11 +68,11 @@ export function initAuth() {
             // veniva buttata fuori di continuo (18/09/2026).
             const emailLow = (user.email || '').toLowerCase();
             const adminUser = ADMIN_EMAILS.includes(emailLow);
-            if (!adminUser && !sessionStorage.getItem('wh_active_tab')) {
+            if (!adminUser && !tabFlag.get()) {
                 signOut(auth);
                 return;
             }
-            if (adminUser) sessionStorage.setItem('wh_active_tab', 'true');
+            if (adminUser) tabFlag.set();
 
             // Login confermato (utente ha cliccato Accedi o ha solo ricaricato la pagina)
             let role = 'user';
@@ -84,12 +108,14 @@ export function initAuth() {
             loginBtn.textContent = 'Accesso...';
             try {
                 // L'utente sta cliccando "Accedi": attiviamo la sessione per questa scheda
-                sessionStorage.setItem('wh_active_tab', 'true');
+                tabFlag.set();
                 await signInWithEmailAndPassword(auth, e, p);
                 err.textContent = '';
             } catch(error) {
-                sessionStorage.removeItem('wh_active_tab');
-                err.textContent = 'Credenziali errate!';
+                tabFlag.clear();
+                console.warn('login fallito:', error?.code, error?.message);
+                err.style.color = '';
+                err.textContent = messaggioErroreLogin(error);
             } finally {
                 loginBtn.textContent = 'Accedi';
             }
@@ -119,7 +145,7 @@ export function initAuth() {
 
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            sessionStorage.removeItem('wh_active_tab');
+            tabFlag.clear();
             signOut(auth);
         });
     }
