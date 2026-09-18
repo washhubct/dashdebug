@@ -9,6 +9,7 @@ import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automat
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato } from './referral-confirm.js';
 import { marcaVoucherUtilizzato, getVoucher } from './vouchers.js';
+import { avvisaSospesiCliente, sospesiClienteDaSaldare } from './sospesi.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -151,7 +152,7 @@ export function renderPren() {
 
                 html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
-                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
+                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${sospBadge(e)}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
                     <td>${esc(e.vettura || '')}</td>
                     <td style="font:500 12px var(--mono)">${prezzoCellHtml}</td>
                     <td>${pagHtml}</td>
@@ -558,9 +559,20 @@ async function mostraModalServizi(date, pid, mod = '') {
     });
 }
 
+// Badge ⏳ in lista se il cliente ha altri sospesi da saldare (esclusa questa prenotazione)
+function sospBadge(e) {
+    if (!e?.cliente || (e.saldato === 'SI' && e.saldo !== 'SOSPESO')) return '';
+    const r = sospesiClienteDaSaldare(e.cliente, 'PREN-' + e._pid);
+    if (!r.n) return '';
+    return ` <span class="badge a" title="${r.n} sospesi da saldare — ${fEur(r.totale)}" style="font-size:9px">⏳ ${r.n} · ${fEur(r.totale)}</span>`;
+}
+
 async function markPaid(date, pid, mod, serviziExtra = []) {
     const entry = state.prenDB[date]?.find(e => e._pid === pid);
     if (!entry) return;
+
+    // Cliente con sospesi da saldare: avviso all'operatore prima di incassare
+    await avvisaSospesiCliente(entry.cliente, 'PREN-' + pid);
 
     let extraMeta = {};
     let prezzoFinaleStr = entry.prezzo;
@@ -942,6 +954,8 @@ async function handleTapActions(e) {
 async function markPaidTap(id, modDefault) {
     const t = state.tapDB.find(x => x._id === id);
     if (!t) return;
+
+    await avvisaSospesiCliente(t.cliente, 'TAP-' + id);
 
     // Popup richiesta fattura al pagamento (come i lavaggi)
     if ((modDefault === 'CONTANTI' || modDefault === 'POS') && !t.richiedeFattura) {
