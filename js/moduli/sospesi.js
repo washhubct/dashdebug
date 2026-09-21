@@ -121,6 +121,46 @@ export function initSospesi() {
 }
 
 // ─── RACCOGLIE TUTTI I SOSPESI ───
+// ─── SERVIZIO E NOTE LEGGIBILI (richiesta Guido 21/09/2026) ───
+// Il cliente che riceve l'elenco deve capire cosa paga: descrizione del
+// servizio (lavaggio + extra, o tappezzeria) e le note scritte dall'operatore.
+// Le note tecniche del sito ("[WEB] Servizio: ... | Tel: ...") non si mostrano.
+const eurS = v => '€' + (parseFloat(v) || 0).toFixed(2).replace(/\.00$/, '').replace('.', ',');
+export function notePulita(note) {
+    const n = String(note || '').trim();
+    if (!n.startsWith('[WEB]')) return n;
+    return ''; // tutto tecnico: servizio, telefono, targa, referral
+}
+export function servizioPren(e) {
+    if (!e) return '';
+    const m = String(e.note || '').match(/Servizio:\s*([^|]+)/);
+    let base = m ? m[1].trim() : 'Lavaggio';
+    const extra = Array.isArray(e.serviziAggiuntivi) ? e.serviziAggiuntivi : [];
+    if (extra.length) {
+        const baseP = e.prezzoLavaggio != null ? ` ${eurS(e.prezzoLavaggio)}` : '';
+        return `${base}${baseP} + ${extra.map(x => `${x.nome}${x.prezzo != null ? ' ' + eurS(x.prezzo) : ''}`).join(' + ')}`;
+    }
+    return base;
+}
+export function servizioTap(t) {
+    return t ? `Tappezzeria${t.modello ? ' ' + t.modello : ''}` : 'Tappezzeria';
+}
+// Per i record storici (collection sospesi) senza `servizio`: ricava dalla
+// prenotazione/tappezzeria d'origine se è ancora in memoria.
+function arricchisciServizio(s, prenById) {
+    if (s.servizio) return;
+    const sid = s.origineSid || s._sid || '';
+    if (sid.startsWith('PREN-')) {
+        const e = prenById.get(sid.slice(5));
+        if (e) { s.servizio = servizioPren(e); if (!notePulita(s.note) && e.note && !String(e.note).startsWith('[WEB]')) s.note = e.note; }
+    } else if (sid.startsWith('TAP-')) {
+        const t = (state.tapDB || []).find(x => x._id === sid.slice(4));
+        if (t) s.servizio = servizioTap(t);
+    }
+    if (!s.servizio) s.servizio = /tappezzeria/i.test(s.vettura || '') || /tappezzeria/i.test(s.note || '') ? 'Tappezzeria' : 'Lavaggio';
+    s.note = notePulita(s.note);
+}
+
 export function buildSospesiArray() {
     const firebaseSosp = state.localSosp.filter(s => s._sid && !s._sid.startsWith('PREN-') && !s._sid.startsWith('TAP-'));
 
@@ -132,8 +172,11 @@ export function buildSospesiArray() {
 
     // Raccogli gli origineSid già presenti nei record Firestore (sospesi pagati/fatturati da PREN-/TAP-)
     const originiGiaPresenti = new Set();
+    const prenById = new Map();
+    for (const entries of Object.values(state.prenDB || {})) entries.forEach(e => { if (e._pid) prenById.set(e._pid, e); });
     state.localSosp.forEach(s => {
         if (s.origineSid) originiGiaPresenti.add(s.origineSid);
+        arricchisciServizio(s, prenById);
     });
 
     // Aggiungi sospesi da prenotazioni (solo se non già salvati come record storico)
@@ -149,7 +192,8 @@ export function buildSospesiArray() {
                 vettura: e.vettura || '',
                 targa: e.targa || '',
                 importo: parseFloat(e.prezzo) || 0,
-                note: e.note || '',
+                note: notePulita(e.note),
+                servizio: servizioPren(e),
                 dataPagamento: '',
                 _sid: sid
             };
@@ -170,7 +214,8 @@ export function buildSospesiArray() {
             vettura: 'TAPPEZZERIA ' + (t.modello || ''),
             targa: t.targa || '',
             importo: parseFloat(t.prezzo) || 0,
-            note: 'Tappezzeria',
+            note: t.note || '',
+            servizio: servizioTap(t),
             dataPagamento: '',
             _sid: sid
         };
@@ -333,6 +378,7 @@ async function salvaSospesoStorico(sospeso) {
             targa: sospeso.targa || '',
             importo: sospeso.importo || 0,
             note: sospeso.note || '',
+            servizio: sospeso.servizio || '',
             origineSid: originalSid,
             pagato: !!sospeso._pagato,
             modPagamento: sospeso._modPag || '',
@@ -490,7 +536,7 @@ function _renderSospPageInner() {
                             <td>${esc(r.vettura)}</td>
                             <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
-                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} ${esc(r.note)}</td>
+                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} <span style="color:var(--tx)">${esc(r.servizio || '')}</span>${r.note ? ` · ${esc(r.note)}` : ''}</td>
                             <td style="text-align:right">
                                 <button class="act-btn btn-riapri-singolo" data-sid="${r._sid}" title="Riporta in Aperti" style="color:var(--tx2);font-size:11px">↩</button>
                             </td>
@@ -532,7 +578,7 @@ function _renderSospPageInner() {
                             <td>${esc(r.vettura)}</td>
                             <td style="font:500 11px var(--mono);color:var(--tx2)">${esc(r.targa || '')}</td>
                             <td style="font-weight:600">€${r.importo}</td>
-                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} ${esc(r.note)}</td>
+                            <td style="font-size:11px;color:var(--tx2)">${fattBadge(r)} <span style="color:var(--tx)">${esc(r.servizio || '')}</span>${r.note ? ` · ${esc(r.note)}` : ''}</td>
                             ${azioniHtml}
                         </tr>`;
                     });
@@ -548,7 +594,7 @@ function _renderSospPageInner() {
                 </div>
                 ${btnClienteHtml}
                 <table class="tbl">
-                    <thead><tr><th>Data</th><th>Vettura/Lavorazione</th><th style="width:80px">Targa</th><th style="width:80px">Importo</th><th>Note</th>${thAzioni}</tr></thead>
+                    <thead><tr><th>Data</th><th>Vettura/Lavorazione</th><th style="width:80px">Targa</th><th style="width:80px">Importo</th><th>Servizio / Note</th>${thAzioni}</tr></thead>
                     <tbody>${trHtml}</tbody>
                 </table>
             </div>`;
@@ -856,7 +902,7 @@ function esportaExcelSospesi() {
     XLSX.utils.book_append_sheet(wb, wsRiepilogo, 'Riepilogo');
 
     // Foglio dettaglio tutti i sospesi
-    const dettaglioRows = [['Cliente', 'Data', 'Vettura/Lavorazione', 'Targa', 'Importo (€)', 'Note', 'Stato', 'N° Fattura', 'Data Fattura', 'Mod. Pagamento', 'Data Pagamento']];
+    const dettaglioRows = [['Cliente', 'Data', 'Vettura', 'Targa', 'Servizio', 'Importo (€)', 'Note', 'Stato', 'N° Fattura', 'Data Fattura', 'Mod. Pagamento', 'Data Pagamento']];
     filtrati
         .sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0))
         .forEach(s => {
@@ -866,6 +912,7 @@ function esportaExcelSospesi() {
                 s.data || '',
                 s.vettura || '',
                 s.targa || '',
+                s.servizio || '',
                 s.importo || 0,
                 s.note || '',
                 stato,
@@ -876,7 +923,7 @@ function esportaExcelSospesi() {
             ]);
         });
     const wsDettaglio = XLSX.utils.aoa_to_sheet(dettaglioRows);
-    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
+    wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 34 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsDettaglio, 'Dettaglio');
 
     XLSX.writeFile(wb, `${sel.nomeFile}.xlsx`);
@@ -898,10 +945,10 @@ function esportaPdfSospesi() {
         totGen += tot;
         const righe = recs.map(r => {
             const stato = r._pagato ? `Pagato ${h(r._modPag || '')} ${h(r._dataPag || '')}` : r._fatturato ? `Fatturato${r._ficNumero != null && r._ficNumero !== '' ? ' n. ' + h(r._ficNumero) : ''}${r._dataFatt ? ' del ' + h(r._dataFatt) : ''}` : 'Da saldare';
-            return `<tr><td>${h(r.data)}</td><td>${h(r.vettura)}</td><td>${h(r.targa)}</td><td>${h(r.note)}</td><td>${stato}</td><td class="n">${eur(r.importo)}</td></tr>`;
+            return `<tr><td>${h(r.data)}</td><td>${h(r.vettura)}</td><td>${h(r.targa)}</td><td><b>${h(r.servizio || '')}</b>${r.note ? `<br><span style="color:#555">${h(r.note)}</span>` : ''}</td><td>${stato}</td><td class="n">${eur(r.importo)}</td></tr>`;
         }).join('');
         return `<h2>${h(cli)} <span class="tot">${recs.length} lav. · ${eur(tot)}</span></h2>
-            <table><thead><tr><th>Data</th><th>Vettura</th><th>Targa</th><th>Note</th><th>Stato</th><th class="n">Importo</th></tr></thead><tbody>${righe}</tbody>
+            <table><thead><tr><th>Data</th><th>Vettura</th><th>Targa</th><th>Servizio / Note</th><th>Stato</th><th class="n">Importo</th></tr></thead><tbody>${righe}</tbody>
             <tfoot><tr><td colspan="5">Totale ${h(cli)}</td><td class="n">${eur(tot)}</td></tr></tfoot></table>`;
     }).join('');
     const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Sospesi ${h(sel.tabLabel)} — ${h(sel.periodo)}</title>
