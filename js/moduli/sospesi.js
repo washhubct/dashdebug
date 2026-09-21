@@ -347,7 +347,8 @@ async function salvaSospesoFirestore(sospeso) {
         if (sospeso._fatturato) {
             updateData.fatturato = true;
             updateData.dataFattura = sospeso._dataFatt || '';
-            if (sospeso._ficDocId) { updateData.ficDocId = sospeso._ficDocId; updateData.ficNumero = sospeso._ficNumero ?? null; }
+            if (sospeso._ficDocId) updateData.ficDocId = sospeso._ficDocId;
+            if (sospeso._ficDocId || sospeso._ficNumero != null) updateData.ficNumero = sospeso._ficNumero ?? null;
         }
         if (sospeso._pagato) {
             updateData.pagato = true;
@@ -384,7 +385,8 @@ async function salvaSospesoStorico(sospeso) {
             modPagamento: sospeso._modPag || '',
             dataPagamento: sospeso._dataPag || '',
             ...(sospeso._pagamentoVia ? { pagamentoVia: sospeso._pagamentoVia, idVNE: sospeso._idVNE || '' } : {}),
-            ...(sospeso._ficDocId ? { ficDocId: sospeso._ficDocId, ficNumero: sospeso._ficNumero ?? null } : {}),
+            ...(sospeso._ficDocId ? { ficDocId: sospeso._ficDocId } : {}),
+            ...(sospeso._ficDocId || sospeso._ficNumero != null ? { ficNumero: sospeso._ficNumero ?? null } : {}),
             fatturato: !!sospeso._fatturato,
             dataFattura: sospeso._dataFatt || '',
             timestamp: Date.now(),
@@ -513,6 +515,7 @@ function _renderSospPageInner() {
                 const fattInfo = numeri.length ? `<span style="font:600 10px var(--mono);color:var(--blu)">🧾 Fatt. n. ${numeri.map(n => esc(String(n))).join(', ')}</span>` : '';
                 btnClienteHtml = `<div style="padding:8px 14px;border-bottom:1px solid var(--brd);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                     <button class="btn btn-pagato-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Registra incasso fatture">💰 Incassato</button>
+                    <button class="btn btn-numfatt-cli" data-cli="${esc(cliente)}" style="font-size:10px;padding:3px 8px" title="Inserisci o modifica il numero fattura per tutti i sospesi fatturati di questo cliente">✏️ N. fattura</button>
                     ${fattInfo}
                     <span style="font:400 10px var(--mono);color:var(--tx2);margin-left:auto">${mesiInfo}</span>
                 </div>`;
@@ -527,6 +530,7 @@ function _renderSospPageInner() {
                     trHtml += `<tr style="background:var(--amb1)">
                         <td colspan="5" style="font:600 11px var(--f);color:var(--amb);padding:6px 10px">📅 ${mese} — ${recs.length} lav. — ${fEur(totMese)}</td>
                         <td style="text-align:right;padding-right:10px">
+                            <button class="btn btn-numfatt-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" style="font-size:9px;padding:2px 8px;margin-right:4px" title="Numero fattura per ${mese}">✏️ n.</button>
                             <button class="btn btn-pagato-mese" data-cli="${esc(cliente)}" data-mese="${esc(mese)}" style="font-size:9px;padding:2px 8px;background:var(--grn1);border-color:var(--grn);color:var(--grn)" title="Incassa ${mese}">💰 Incassa</button>
                         </td>
                     </tr>`;
@@ -625,6 +629,12 @@ function _renderSospPageInner() {
     container.querySelectorAll('.btn-pagato-mese').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoMese(btn.dataset.cli, btn.dataset.mese));
     });
+    container.querySelectorAll('.btn-numfatt-cli').forEach(btn => {
+        btn.addEventListener('click', () => impostaNumeroFattura(btn.dataset.cli));
+    });
+    container.querySelectorAll('.btn-numfatt-mese').forEach(btn => {
+        btn.addEventListener('click', () => impostaNumeroFattura(btn.dataset.cli, btn.dataset.mese));
+    });
     container.querySelectorAll('.btn-riapri-singolo').forEach(btn => {
         btn.addEventListener('click', () => riapriFatturato(btn.dataset.sid));
     });
@@ -676,14 +686,41 @@ async function saldaCliente(cliente) {
     renderCassa();
 }
 
+// Fattura fatta FUORI dal gestionale (FIC diretto, commercialista): chiediamo il
+// numero così compare in lista, Excel e PDF come per quelle create da qui.
+// Ritorna null se l'operatore annulla, '' se lascia vuoto (ok senza numero).
+function chiediNumeroFattura(label, attuale = '') {
+    const v = prompt(`Numero fattura per ${label}\n(lascia vuoto se non lo conosci: potrai inserirlo dopo con ✏️)`, attuale || '');
+    if (v === null) return null;
+    return v.trim();
+}
+
 async function segnaFatturatoSingolo(sid) {
     const r = state.localSosp.find(s => s._sid === sid);
     if (!r) return;
+    const num = chiediNumeroFattura(`${r.cliente} — ${r.data} ${r.vettura || ''}`);
+    if (num === null) return;
     r._fatturato = true;
     r._dataFatt = oggiIta();
+    if (num) r._ficNumero = num;
     await salvaSospesoFirestore(r);
     renderSospPage();
     updateSospBadge();
+}
+
+// Inserisce/modifica il numero fattura su un gruppo di sospesi già fatturati
+// (cliente intero o un solo mese) — per le fatture fatte fuori dal gestionale.
+async function impostaNumeroFattura(cliente, mese = null) {
+    const recs = state.localSosp.filter(s => s.cliente === cliente && s._fatturato && !s._pagato && (!mese || getMeseAnno(s.data) === mese));
+    if (!recs.length) return;
+    const attuale = recs.map(r => r._ficNumero).find(n => n != null && n !== '') || '';
+    const num = chiediNumeroFattura(mese ? `${cliente} · ${mese} (${recs.length} sospesi)` : `${cliente} (${recs.length} sospesi)`, attuale);
+    if (num === null) return;
+    for (const r of recs) {
+        r._ficNumero = num || null;
+        await salvaSospesoFirestore(r);
+    }
+    renderSospPage();
 }
 
 // Crea la fattura reale su Fatture in Cloud (dati fiscali dal CRM = fonte unica)
@@ -765,11 +802,14 @@ async function segnaFatturatoCliente(cliente) {
     const aperti = state.localSosp.filter(s => s.cliente === cliente && !s._pagato && !s._fatturato);
     if (!aperti.length) return;
     if (!confirm(`Segnare come FATTURATI tutti i ${aperti.length} sospesi di ${cliente}?`)) return;
+    const num = chiediNumeroFattura(`${cliente} (${aperti.length} sospesi)`);
+    if (num === null) return;
 
     const oggi = oggiIta();
     for (const s of aperti) {
         s._fatturato = true;
         s._dataFatt = oggi;
+        if (num) s._ficNumero = num;
         await salvaSospesoFirestore(s);
     }
     renderSospPage();
