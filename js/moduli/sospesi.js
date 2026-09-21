@@ -853,16 +853,12 @@ async function riapriFatturato(sid) {
 }
 
 // ─── EXPORT EXCEL ───
-// Selezione per gli export: quello che è a video (tab + ricerca + filtro date).
-// Se le date sono compilate ma "Filtra Vista" non è stato premuto, le applica comunque.
+// Selezione per gli export: ESATTAMENTE quello che è a video (tab + ricerca +
+// filtro date solo se attivo con "Filtra Vista"). I campi Da/A si precompilano
+// col mese corrente: applicarli senza click tagliava i mesi precedenti
+// (Gaetano S.: a video 5 sospesi, nel PDF solo la Micra del 18/09 — 21/09/2026).
 function selezioneExport() {
-    const daVal = document.getElementById('sospExportDa')?.value;
-    const aVal  = document.getElementById('sospExportA')?.value;
-    let { items, filter, srch, range } = sospesiVisualizzati();
-    if (!range && daVal && aVal) {
-        range = rangeLocale(daVal, aVal);
-        items = items.filter(s => { const d = pDate(s.data); return d && !isNaN(d.getTime()) && d.getTime() >= range.daMs && d.getTime() <= range.aMs; });
-    }
+    const { items, filter, srch, range } = sospesiVisualizzati();
     const clienti = [...new Set(items.map(s => s.cliente || 'N/D'))];
     const tabLabel = { aperti: 'Aperti', fatturati: 'Fatturati', pagati: 'Pagati' }[filter] || filter;
     const periodo = range ? `${range.daVal.split('-').reverse().join('/')} → ${range.aVal.split('-').reverse().join('/')}` : 'tutte le date';
