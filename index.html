@@ -449,7 +449,8 @@
   <input type="date" id="sospExportA" style="font:400 12px var(--f);padding:4px 8px;border:1px solid var(--brd);border-radius:6px;background:var(--bg3);color:var(--tx)">
   <button class="btn" id="btnFiltraSospesi" style="font-size:12px;padding:4px 14px">🔍 Filtra Vista</button>
   <button class="btn" id="btnResetFiltraSospesi" style="font-size:12px;padding:4px 14px;display:none;border-color:var(--red);color:var(--red)">✕ Reset</button>
-  <button class="btn" id="btnEsportaSospesi" style="background:var(--grn1);border-color:var(--grn);color:var(--grn);font-size:12px;padding:4px 14px">⬇ Esporta Excel</button>
+  <button class="btn" id="btnEsportaSospesi" style="background:var(--grn1);border-color:var(--grn);color:var(--grn);font-size:12px;padding:4px 14px" title="Esporta quello che vedi: tab, cliente cercato e date">⬇ Esporta Excel</button>
+  <button class="btn" id="btnPdfSospesi" style="font-size:12px;padding:4px 14px" title="PDF di quello che vedi: tab, cliente cercato e date (si apre la stampa, scegli 'Salva come PDF')">🖨 PDF</button>
 </div>
 
 <div id="sospCards"></div>
@@ -798,7 +799,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260918i"></script>
+<script type="module" src="js/main.js?v=20260921a"></script>
 
 </body>
 </html>

@@ -24,6 +24,43 @@ export async function loadSospesiPagati() {
 let _sospesiInitialized = false;
 let _sospDateFilter = null; // { daMs, aMs } quando attivo
 
+// 'YYYY-MM-DD' dagli <input type=date> → mezzanotte LOCALE. new Date('YYYY-MM-DD')
+// è UTC: in Italia diventa le 02:00 e il primo giorno del range spariva (bug 21/09/2026).
+function inputDateLocal(v) {
+    const [y, m, d] = String(v || '').split('-').map(Number);
+    return (y && m && d) ? new Date(y, m - 1, d) : null;
+}
+function rangeLocale(daVal, aVal) {
+    const da = inputDateLocal(daVal), a = inputDateLocal(aVal);
+    if (!da || !a) return null;
+    return { daMs: da.getTime(), aMs: new Date(a.getFullYear(), a.getMonth(), a.getDate(), 23, 59, 59, 999).getTime(), daVal, aVal };
+}
+
+// Sospesi effettivamente visualizzati: tab attiva + ricerca + filtro date.
+// Usata dal render e dagli export, così "esporto quello che vedo".
+export function sospesiVisualizzati() {
+    const srch = (document.getElementById('sospSrch')?.value || '').trim().toLowerCase();
+    const filter = state.sospFilter || 'aperti';
+    let items;
+    if (filter === 'fatturati') items = state.localSosp.filter(s => s._fatturato && !s._pagato);
+    else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato);
+    else items = state.localSosp.filter(s => !s._pagato && !s._fatturato);
+    if (_sospDateFilter) {
+        items = items.filter(s => {
+            const d = pDate(s.data);
+            if (!d || isNaN(d.getTime())) return false;
+            return d.getTime() >= _sospDateFilter.daMs && d.getTime() <= _sospDateFilter.aMs;
+        });
+    }
+    if (srch) {
+        items = items.filter(s =>
+            (s.cliente || '').toLowerCase().includes(srch) ||
+            (s.vettura || '').toLowerCase().includes(srch)
+        );
+    }
+    return { items, filter, srch, range: _sospDateFilter };
+}
+
 export function initSospesi() {
     buildSospesiArray();
 
@@ -41,12 +78,13 @@ export function initSospesi() {
     if (elA)  elA.value  = toInputDate(ultimoMese);
 
     document.getElementById('btnEsportaSospesi')?.addEventListener('click', esportaExcelSospesi);
+    document.getElementById('btnPdfSospesi')?.addEventListener('click', esportaPdfSospesi);
 
     document.getElementById('btnFiltraSospesi')?.addEventListener('click', () => {
         const daVal = document.getElementById('sospExportDa')?.value;
         const aVal  = document.getElementById('sospExportA')?.value;
         if (!daVal || !aVal) { alert('Seleziona Da e A per filtrare.'); return; }
-        _sospDateFilter = { daMs: new Date(daVal).getTime(), aMs: new Date(aVal + 'T23:59:59').getTime() };
+        _sospDateFilter = rangeLocale(daVal, aVal);
         const btnReset = document.getElementById('btnResetFiltraSospesi');
         const btnFiltra = document.getElementById('btnFiltraSospesi');
         if (btnReset) btnReset.style.display = '';
@@ -391,25 +429,7 @@ function _renderSospPageInner() {
     if (kpiLav) kpiLav.textContent = aperti.length + fatturati.length;
     if (totBadge) totBadge.textContent = fEur(totDaInc);
 
-    let items;
-    if (filter === 'fatturati') items = fatturati;
-    else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato);
-    else items = aperti;
-
-    if (_sospDateFilter) {
-        items = items.filter(s => {
-            const d = pDate(s.data);
-            if (!d || isNaN(d.getTime())) return false;
-            return d.getTime() >= _sospDateFilter.daMs && d.getTime() <= _sospDateFilter.aMs;
-        });
-    }
-
-    if (srch) {
-        items = items.filter(s =>
-            (s.cliente || '').toLowerCase().includes(srch) ||
-            (s.vettura || '').toLowerCase().includes(srch)
-        );
-    }
+    const { items } = sospesiVisualizzati();
 
     const byClient = {};
     items.forEach(s => {
@@ -787,21 +807,28 @@ async function riapriFatturato(sid) {
 }
 
 // ─── EXPORT EXCEL ───
-function esportaExcelSospesi() {
+// Selezione per gli export: quello che è a video (tab + ricerca + filtro date).
+// Se le date sono compilate ma "Filtra Vista" non è stato premuto, le applica comunque.
+function selezioneExport() {
     const daVal = document.getElementById('sospExportDa')?.value;
     const aVal  = document.getElementById('sospExportA')?.value;
-    if (!daVal || !aVal) { alert('Seleziona il range di date.'); return; }
+    let { items, filter, srch, range } = sospesiVisualizzati();
+    if (!range && daVal && aVal) {
+        range = rangeLocale(daVal, aVal);
+        items = items.filter(s => { const d = pDate(s.data); return d && !isNaN(d.getTime()) && d.getTime() >= range.daMs && d.getTime() <= range.aMs; });
+    }
+    const clienti = [...new Set(items.map(s => s.cliente || 'N/D'))];
+    const tabLabel = { aperti: 'Aperti', fatturati: 'Fatturati', pagati: 'Pagati' }[filter] || filter;
+    const periodo = range ? `${range.daVal.split('-').reverse().join('/')} → ${range.aVal.split('-').reverse().join('/')}` : 'tutte le date';
+    const slug = v => String(v || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const nomeFile = `sospesi_${tabLabel.toLowerCase()}${clienti.length === 1 ? '_' + slug(clienti[0]) : ''}${range ? '_' + range.daVal.replace(/-/g, '') + '-' + range.aVal.replace(/-/g, '') : ''}`;
+    return { items, filter, tabLabel, srch, range, periodo, clienti, nomeFile };
+}
 
-    const daMs = new Date(daVal).getTime();
-    const aMs  = new Date(aVal + 'T23:59:59').getTime();
-
-    const filtrati = state.localSosp.filter(s => {
-        const d = pDate(s.data);
-        if (!d || isNaN(d.getTime())) return false;
-        return d.getTime() >= daMs && d.getTime() <= aMs;
-    });
-
-    if (!filtrati.length) { alert('Nessun sospeso nel periodo selezionato.'); return; }
+function esportaExcelSospesi() {
+    const sel = selezioneExport();
+    const filtrati = sel.items;
+    if (!filtrati.length) { alert('Nessun sospeso da esportare con i filtri attuali.'); return; }
 
     // Raggruppa per cliente
     const byCliente = {};
@@ -852,7 +879,52 @@ function esportaExcelSospesi() {
     wsDettaglio['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, wsDettaglio, 'Dettaglio');
 
-    const daLabel = daVal.split('-').reverse().join('');
-    const aLabel  = aVal.split('-').reverse().join('');
-    XLSX.writeFile(wb, `sospesi_${daLabel}-${aLabel}.xlsx`);
+    XLSX.writeFile(wb, `${sel.nomeFile}.xlsx`);
+}
+
+// ─── PDF (stampa) di quello che si vede: elenco per cliente, date filtrate ───
+function esportaPdfSospesi() {
+    const sel = selezioneExport();
+    if (!sel.items.length) { alert('Nessun sospeso da stampare con i filtri attuali.'); return; }
+    const eur = v => '€ ' + (parseFloat(v) || 0).toFixed(2).replace('.', ',');
+    const h = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const byCli = {};
+    sel.items.forEach(s => { const c = s.cliente || 'N/D'; (byCli[c] ??= []).push(s); });
+    const sedeLabel = state.sedeAttiva === 'paesi-etnei' ? 'Paesi Etnei' : 'Lungomare';
+    let totGen = 0;
+    const blocchi = Object.entries(byCli).sort((a, b) => a[0].localeCompare(b[0])).map(([cli, recs]) => {
+        recs.sort((a, b) => (pDate(a.data) || 0) - (pDate(b.data) || 0));
+        const tot = recs.reduce((t, r) => t + (parseFloat(r.importo) || 0), 0);
+        totGen += tot;
+        const righe = recs.map(r => {
+            const stato = r._pagato ? `Pagato ${h(r._modPag || '')} ${h(r._dataPag || '')}` : r._fatturato ? `Fatturato${r._ficNumero != null && r._ficNumero !== '' ? ' n. ' + h(r._ficNumero) : ''}${r._dataFatt ? ' del ' + h(r._dataFatt) : ''}` : 'Da saldare';
+            return `<tr><td>${h(r.data)}</td><td>${h(r.vettura)}</td><td>${h(r.targa)}</td><td>${h(r.note)}</td><td>${stato}</td><td class="n">${eur(r.importo)}</td></tr>`;
+        }).join('');
+        return `<h2>${h(cli)} <span class="tot">${recs.length} lav. · ${eur(tot)}</span></h2>
+            <table><thead><tr><th>Data</th><th>Vettura</th><th>Targa</th><th>Note</th><th>Stato</th><th class="n">Importo</th></tr></thead><tbody>${righe}</tbody>
+            <tfoot><tr><td colspan="5">Totale ${h(cli)}</td><td class="n">${eur(tot)}</td></tr></tfoot></table>`;
+    }).join('');
+    const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Sospesi ${h(sel.tabLabel)} — ${h(sel.periodo)}</title>
+        <style>
+            body{font:12px/1.4 -apple-system,Helvetica,Arial,sans-serif;color:#111;margin:24px}
+            h1{font-size:18px;margin:0 0 2px} .sub{color:#666;margin-bottom:18px;font-size:11px}
+            h2{font-size:14px;margin:18px 0 6px;display:flex;justify-content:space-between;border-bottom:2px solid #C8A84E;padding-bottom:4px}
+            h2 .tot{font-weight:600;color:#444;font-size:12px}
+            table{width:100%;border-collapse:collapse;margin-bottom:6px} th,td{padding:5px 6px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}
+            th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#666} td.n,th.n{text-align:right;white-space:nowrap}
+            tfoot td{font-weight:700;border-top:2px solid #333;border-bottom:0}
+            .gen{margin-top:16px;text-align:right;font-size:14px;font-weight:700}
+            .foot{margin-top:24px;color:#888;font-size:10px}
+            @media print{body{margin:10mm} h2{break-after:avoid} tr{break-inside:avoid}}
+        </style></head><body>
+        <h1>Wash Hub ${h(sedeLabel)} — Sospesi ${h(sel.tabLabel)}</h1>
+        <div class="sub">Periodo: ${h(sel.periodo)}${sel.srch ? ` · Filtro: "${h(sel.srch)}"` : ''} · Generato il ${new Date().toLocaleDateString('it-IT')} ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</div>
+        ${blocchi}
+        ${sel.clienti.length > 1 ? `<div class="gen">Totale generale: ${eur(totGen)}</div>` : ''}
+        <div class="foot">Wash Hub Lungomare · Via Anfuso 35, Catania · info@washhub.it</div>
+        <script>window.addEventListener('load',()=>{setTimeout(()=>window.print(),150)})</script>
+        </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Il browser ha bloccato la finestra: consenti i popup per dashboard.washhub.it'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
 }
