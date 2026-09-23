@@ -26,7 +26,9 @@ import nodemailer from 'nodemailer'
 // Secrets/param (firebase functions:secrets:set / .env):
 //   SUMUP_API_KEY        chiave API SumUp (sup_sk_…), scope payments
 //   SUMUP_MERCHANT_CODE  codice merchant (Dashboard SumUp → profilo)
-//   MAIL_USER / MAIL_PASS  Gmail Workspace info@washhub.it + App Password (SMTP)
+//   MAIL_USER / MAIL_PASS  account Google Workspace che autentica su SMTP + App Password
+//   Mittente: noreply@washhub.it (alias "Invia come" dell'account, o casella dedicata);
+//   reply-to info@washhub.it.
 //
 // Il codice arriva al cliente a schermo (pagina conferma) e via email.
 // Nome, telefono ed email sono obbligatori; il consenso marketing è una
@@ -38,6 +40,8 @@ const SUMUP_API_KEY = defineSecret('SUMUP_API_KEY')
 const SUMUP_MERCHANT_CODE = defineString('SUMUP_MERCHANT_CODE')
 const MAIL_USER = defineSecret('MAIL_USER')
 const MAIL_PASS = defineSecret('MAIL_PASS')
+const MAIL_FROM = 'noreply@washhub.it'
+const MAIL_REPLY_TO = 'info@washhub.it'
 const SITE_URL = 'https://wash-hub.it'
 const SELF_URL = `https://${REGION}-dashboard-washhub.cloudfunctions.net/parcheggioSmart`
 const SEDE = 'lungomare'
@@ -153,11 +157,11 @@ async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
         <li>All'uscita ripeti il codice sul tastierino interno.</li>
       </ol>
       <p style="font-size:13px;color:#6B6B6B">Oltre l'orario il codice non funziona più: prendi un nuovo codice su <a href="${SITE_URL}/parcheggio-smart/" style="color:#0F0F0F">wash-hub.it/parcheggio-smart</a> oppure passa al banco.</p>
-      <p style="font-size:12px;color:#6B6B6B;margin-top:24px">WASH HUB Lungomare · Via Anfuso 35, Catania · info@washhub.it</p>
+      <p style="font-size:12px;color:#6B6B6B;margin-top:24px">WASH HUB Lungomare · Via Anfuso 35, Catania · Questa email è automatica: per assistenza scrivi a info@washhub.it</p>
     </div>
   </div>`
   await tr.sendMail({
-    from: `"WASH HUB" <${user}>`, to: d.email, replyTo: 'info@washhub.it',
+    from: `"WASH HUB" <${MAIL_FROM}>`, to: d.email, replyTo: MAIL_REPLY_TO,
     subject: `Codice parcheggio ${d.codice} · targa ${d.targa}`,
     text: `Il tuo codice parcheggio WASH HUB è ${d.codice}.\nTarga ${d.targa} · ${d.ore} ore · €${d.prezzo}\nValido dal ${fmtIt(d.inizio)} alle ${fmtIt(d.fine)}.\nDigita il codice sul tastierino in entrata e in uscita. Via Anfuso 35, Catania.`,
     html,
