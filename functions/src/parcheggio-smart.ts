@@ -2,6 +2,7 @@ import { onRequest } from 'firebase-functions/v2/https'
 import { defineSecret, defineString } from 'firebase-functions/params'
 import { getFirestore } from 'firebase-admin/firestore'
 import type { Request, Response } from 'express'
+import nodemailer from 'nodemailer'
 
 // ═══════════════════════════════════════════════════════════════════
 // PARCHEGGIO SMART — vendita online di codici a tempo per il cancello
@@ -25,11 +26,18 @@ import type { Request, Response } from 'express'
 // Secrets/param (firebase functions:secrets:set / .env):
 //   SUMUP_API_KEY        chiave API SumUp (sup_sk_…), scope payments
 //   SUMUP_MERCHANT_CODE  codice merchant (Dashboard SumUp → profilo)
+//   MAIL_USER / MAIL_PASS  Gmail Workspace info@washhub.it + App Password (SMTP)
+//
+// Il codice arriva al cliente a schermo (pagina conferma) e via email.
+// Nome, telefono ed email sono obbligatori; il consenso marketing è una
+// spunta separata e facoltativa (GDPR): salvato sul doc e nel CRM `clienti`.
 // ═══════════════════════════════════════════════════════════════════
 
 const REGION = 'europe-west1'
 const SUMUP_API_KEY = defineSecret('SUMUP_API_KEY')
 const SUMUP_MERCHANT_CODE = defineString('SUMUP_MERCHANT_CODE')
+const MAIL_USER = defineSecret('MAIL_USER')
+const MAIL_PASS = defineSecret('MAIL_PASS')
 const SITE_URL = 'https://wash-hub.it'
 const SELF_URL = `https://${REGION}-dashboard-washhub.cloudfunctions.net/parcheggioSmart`
 const SEDE = 'lungomare'
@@ -115,6 +123,72 @@ async function generaCodice(db: FirebaseFirestore.Firestore): Promise<string> {
   return String(100000 + Math.floor(Math.random() * 900000))
 }
 
+const fmtIt = (local: string) => {   // 'YYYY-MM-DDTHH:mm' → 'gio 24/09 alle 09:00'
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local)
+  if (!m) return local
+  const giorno = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).toLocaleDateString('it-IT', { weekday: 'short', timeZone: 'UTC' })
+  return `${giorno} ${m[3]}/${m[2]} alle ${m[4]}:${m[5]}`
+}
+
+async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
+  if (!d.email) return
+  const user = MAIL_USER.value(), pass = MAIL_PASS.value()
+  if (!user || !pass) { console.warn('MAIL_USER/MAIL_PASS non configurati: email non inviata'); return }
+  const tr = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } })
+  const nome = String(d.nome || '').split(' ')[0]
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0F0F0F">
+    <div style="background:#0F0F0F;color:#fff;padding:28px 24px;border-radius:16px 16px 0 0;text-align:center">
+      <div style="font-size:12px;letter-spacing:3px;color:#C8A84E;font-weight:700">WASH HUB · PARCHEGGIO SMART</div>
+      <div style="font-size:22px;font-weight:800;margin-top:8px">Il tuo codice cancello</div>
+      <div style="font-family:Menlo,Consolas,monospace;font-size:44px;letter-spacing:12px;color:#C8A84E;font-weight:800;margin:22px 0 6px">${d.codice}</div>
+      <div style="font-size:12px;color:#aaa">Targa ${d.targa} · ${d.ore} ore · €${d.prezzo}</div>
+    </div>
+    <div style="border:1px solid #E8E8E4;border-top:0;padding:24px;border-radius:0 0 16px 16px;line-height:1.6">
+      <p>Ciao${nome ? ' ' + nome : ''}, il pagamento è andato a buon fine.</p>
+      <p><b>Valido dal ${fmtIt(d.inizio)} alle ${fmtIt(d.fine)}.</b></p>
+      <ol style="padding-left:20px">
+        <li>Arriva al cancello di <b>Via Anfuso 35, Catania</b>.</li>
+        <li>Digita il codice sul tastierino: il cancello si apre da solo.</li>
+        <li>All'uscita ripeti il codice sul tastierino interno.</li>
+      </ol>
+      <p style="font-size:13px;color:#6B6B6B">Oltre l'orario il codice non funziona più: prendi un nuovo codice su <a href="${SITE_URL}/parcheggio-smart/" style="color:#0F0F0F">wash-hub.it/parcheggio-smart</a> oppure passa al banco.</p>
+      <p style="font-size:12px;color:#6B6B6B;margin-top:24px">WASH HUB Lungomare · Via Anfuso 35, Catania · info@washhub.it</p>
+    </div>
+  </div>`
+  await tr.sendMail({
+    from: `"WASH HUB" <${user}>`, to: d.email, replyTo: 'info@washhub.it',
+    subject: `Codice parcheggio ${d.codice} · targa ${d.targa}`,
+    text: `Il tuo codice parcheggio WASH HUB è ${d.codice}.\nTarga ${d.targa} · ${d.ore} ore · €${d.prezzo}\nValido dal ${fmtIt(d.inizio)} alle ${fmtIt(d.fine)}.\nDigita il codice sul tastierino in entrata e in uscita. Via Anfuso 35, Catania.`,
+    html,
+  })
+}
+
+// CRM: crea/aggiorna il cliente in `clienti` con email e consenso marketing (dati per il marketing)
+async function upsertCliente(db: FirebaseFirestore.Firestore, d: FirebaseFirestore.DocumentData) {
+  const tel = String(d.telefono || '').replace(/\s+/g, '')
+  if (!tel) return
+  const q = await db.collection('clienti').where('telefono', '==', tel).limit(1).get()
+  const nome = String(d.nome || '').trim().toUpperCase()
+  const veicolo = d.vettura ? [{ modello: d.vettura, targa: d.targa, prezzo: 0 }] : []
+  const consenso: Record<string, unknown> = d.consensoMarketing
+    ? { consensoMarketing: true, consensoMarketingTs: d.pagatoTs || Date.now(), consensoMarketingFonte: 'parcheggio-smart' }
+    : {}
+  if (q.empty) {
+    await db.collection('clienti').add({
+      nome: nome || `CLIENTE ${tel}`, telefono: tel, email: d.email || '', vetture: veicolo,
+      note: '', prezzoVip: 0, tipo: 'privato', timestamp: Date.now(), origine: 'parcheggio-smart',
+      consensoMarketing: !!d.consensoMarketing, ...consenso,
+    })
+    return
+  }
+  const ref = q.docs[0].ref, c = q.docs[0].data()
+  const upd: Record<string, unknown> = { ...consenso }
+  if (d.email && !c.email) upd.email = d.email
+  if (d.vettura && !(c.vetture || []).some((v: any) => String(v.targa || '').toUpperCase() === d.targa)) upd.vetture = [...(c.vetture || []), ...veicolo]
+  if (Object.keys(upd).length) await ref.update(upd)
+}
+
 // Finalizza un doc in_pagamento → attivo (+ riga giornalieri). Idempotente.
 async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) {
   const db = getFirestore()
@@ -146,7 +220,9 @@ async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) 
   }).catch((e: any) => { if (e?.code !== 6) throw e })  // 6 = ALREADY_EXISTS
   await ref.update({ giornalieroId: gref.id })
   console.log(`✅ parcheggioSmart ${docId} attivo: codice ${codice} targa ${d.targa} ${d.ore}h €${d.prezzo}`)
-  // TODO: invio codice via WhatsApp (functions/src/whatsapp.ts) quando i secret Meta saranno configurati.
+  try { await inviaEmailCodice(d); await ref.update({ emailInviataTs: Date.now() }) }
+  catch (e: any) { console.error('email codice fallita:', e.message); await ref.update({ emailErrore: String(e.message).slice(0, 200) }) }
+  try { await upsertCliente(db, d) } catch (e: any) { console.warn('CRM upsert:', e.message) }
 }
 
 // Verifica su SumUp e finalizza se pagato. Ritorna lo stato SumUp.
@@ -168,13 +244,16 @@ function pubblico(d: FirebaseFirestore.DocumentData) {
     stato: d.stato, targa: d.targa, ore: d.ore, prezzo: d.prezzo,
     inizio: d.inizio, fine: d.fine, inizioTs: d.inizioTs, fineTs: d.fineTs,
     codice: d.stato === 'attivo' ? d.codice : null,
+    email: d.email ? String(d.email).replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2') : null,
+    emailInviata: !!d.emailInviataTs,
   }
 }
 
 const TARGA_RE = /^[A-Z0-9]{5,10}$/
 const TEL_RE = /^\+?[0-9 ]{8,16}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY], cors: false }, async (req, res) => {
+export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY, MAIL_USER, MAIL_PASS], cors: false }, async (req, res) => {
   cors(req, res)
   if (req.method === 'OPTIONS') { res.status(204).send(''); return }
   const db = getFirestore()
@@ -199,8 +278,11 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
       const nome = String(b.nome || '').trim().slice(0, 60)
       const email = String(b.email || '').trim().toLowerCase().slice(0, 100)
       const ore = Math.ceil(Number(b.ore) || 0)
+      const consensoMarketing = b.consensoMarketing === true
       if (!TARGA_RE.test(targa)) { res.status(400).json({ error: 'Targa non valida' }); return }
       if (!TEL_RE.test(telefono)) { res.status(400).json({ error: 'Telefono non valido' }); return }
+      if (nome.length < 2) { res.status(400).json({ error: 'Inserisci il tuo nome' }); return }
+      if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email non valida' }); return }
       if (ore < cfg.minOre || ore > cfg.maxOre) { res.status(400).json({ error: `Durata tra ${cfg.minOre} e ${cfg.maxOre} ore` }); return }
 
       const now = Date.now()
@@ -220,6 +302,7 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
         ore, prezzo, inizio: epochToRomeLocal(inizioValid), fine: epochToRomeLocal(fineTs),
         inizioTs: inizioValid, fineTs, dataISO: romeDateISO(now), creatoTs: now, creatoDa: 'sito',
         origine: 'sito', pagamento: 'SUMUP', stato: 'in_pagamento',
+        consensoMarketing, consensoMarketingTs: consensoMarketing ? now : null,
         sync: { est: 'pending', int: 'pending' }, syncErrore: null, eventi: [],
         sedeId: SEDE, sumupCheckoutId: null,
         ua: String(req.headers['user-agent'] || '').slice(0, 200),
@@ -234,7 +317,7 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
         return_url: `${SELF_URL}/webhook`,
         redirect_url: `${SITE_URL}/parcheggio-smart/conferma/?id=${ref.id}`,
         hosted_checkout: { enabled: true },
-        ...(email ? { customer_email: email } : {}),
+        customer_email: email,
       } })
       const url = ck?.hosted_checkout_url
       if (!ck?.id || !url) throw new Error('SumUp: risposta senza hosted_checkout_url: ' + JSON.stringify(ck).slice(0, 300))
