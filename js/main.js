@@ -9,6 +9,7 @@ import { initNavigazione, goPage } from './moduli/navigazione.js';
 import { initCassa, renderCassa } from './moduli/cassa.js';
 import { initLog, renderCancellazioni } from './moduli/log.js';
 import { initGiornalieri, renderGiornalieri } from './moduli/giornalieri.js';
+import { initParcheggioSmart, renderParcheggioSmart } from './moduli/parcheggio-smart.js';
 import { initPrenotazioni, renderPren, renderTap } from './moduli/prenotazioni.js';
 import { initAbbonamenti, renderAbb } from './moduli/abbonamenti.js';
 import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } from './moduli/sospesi.js';
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCassa();
     initLog();
     initGiornalieri();
+    initParcheggioSmart();
     initPrenotazioni();
     initAbbonamenti();
     initReport();
@@ -132,7 +134,7 @@ function initSelezioneSedeUI() {
         let pageId = pageAttiva ? pageAttiva.id.replace('page-', '') : null;
 
         // A Paesi Etnei alcune pagine sono nascoste: redirigi a Cassa
-        const HIDDEN_PE = ['prenotazioni', 'abbonamenti', 'giornalieri', 'sospesi', 'clienti', 'servizi', 'marketing', 'referral', 'vouchers'];
+        const HIDDEN_PE = ['prenotazioni', 'abbonamenti', 'giornalieri', 'parchsmart', 'sospesi', 'clienti', 'servizi', 'marketing', 'referral', 'vouchers'];
         if (state.sedeAttiva === 'paesi-etnei' && HIDDEN_PE.includes(pageId)) {
             goPage('cassa');
             return;
@@ -150,6 +152,7 @@ document.addEventListener('pageChanged', (e) => {
     if(id === 'dashboard') renderDash();
     if(id === 'cassa') renderCassa();
     if(id === 'giornalieri') renderGiornalieri();
+    if(id === 'parchsmart') renderParcheggioSmart();
     if(id === 'prenotazioni') { renderPren(); renderTap(); }
     if(id === 'sospesi') { buildSospesiArray(); renderSospPage(); }
     if(id === 'presenze') renderPresenze();

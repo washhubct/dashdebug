@@ -27,7 +27,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260918d';
+    var APP_VERSION = '20260923a';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -86,6 +86,7 @@
 <div class="sb-section">Gestione</div>
 <a class="sb-item" id="nav-abbonamenti"><span class="icon">🅿️</span>Abbonamenti</a>
 <a class="sb-item" id="nav-giornalieri"><span class="icon">🎟️</span>Parcheggio a Ore</a>
+<a class="sb-item" id="nav-parchsmart"><span class="icon">🔐</span>Parcheggio Smart</a>
 <a class="sb-item" id="nav-prenotazioni"><span class="icon">📋</span>Prenotazioni</a>
 <a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
 <a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
@@ -328,6 +329,65 @@
 </div>
 </div>
 
+
+<div class="page" id="page-parchsmart">
+<div class="sec">
+<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:16px">
+<div class="kpi g"><div class="kpi-label">Codici in corso</div><div class="kpi-val" id="psKpiCorso">0</div></div>
+<div class="kpi b"><div class="kpi-label">Venduti oggi</div><div class="kpi-val" id="psKpiOggi">0</div></div>
+<div class="kpi a"><div class="kpi-label">Incasso oggi</div><div class="kpi-val" id="psKpiIncasso">€0</div></div>
+<div class="kpi" id="psKpiSyncBox" style="border-color:var(--grn)"><div class="kpi-label">Sync tastierini</div><div class="kpi-val" id="psKpiSync" style="font-size:18px">—</div></div>
+</div>
+
+<div class="form-panel show" style="margin-bottom:20px;background:var(--bg4)">
+<h3 style="font:600 13px var(--f);margin-bottom:10px">🔐 Vendi codice al banco</h3>
+<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+<div class="ff" style="width:110px"><label>Targa *</label><input id="psTarga" style="text-transform:uppercase" placeholder="AB123CD"></div>
+<div class="ff" style="flex:1;min-width:130px"><label>Telefono *</label><input id="psTel" type="tel" placeholder="333 1234567"></div>
+<div class="ff" style="flex:1;min-width:120px"><label>Vettura</label><input id="psVettura" placeholder="Es: Fiat 500"></div>
+<div class="ff" style="width:120px"><label>Inizio</label><select id="psInizioMode"><option value="now">Adesso</option><option value="custom">Scegli orario</option></select></div>
+<div class="ff" style="width:190px;display:none"><label>Data e ora inizio</label><input id="psInizio" type="datetime-local"></div>
+<div class="ff" style="width:80px"><label>Ore</label><input id="psOre" type="number" min="2" max="24" step="1" value="2"></div>
+<button class="btn btn-primary" id="psVendi" style="height:37px;padding:0 20px">Incassa e genera</button>
+</div>
+<div id="psPreview" style="margin-top:10px;font:400 13px var(--f)"></div>
+<div class="form-msg" id="psMsg"></div>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:14px 16px;background:var(--bg3);border-radius:var(--r2);border:1px solid var(--brd)">
+  <div style="font:600 11px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;width:100%;margin-bottom:6px">🅿️ Tariffa (stessa del parcheggio a ore) · minimo 2 ore</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;width:100%">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-radius:20px;border:1px solid var(--brd)"><span style="font:400 12px var(--f);color:var(--tx2)">€2/ora</span><span style="font:700 13px var(--mono);color:var(--tx)">max €8 (6h)</span></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-radius:20px;border:1px solid var(--brd)"><span style="font:400 12px var(--f);color:var(--tx2)">fino a 24h</span><span style="font:700 13px var(--mono);color:var(--tx)">max €15</span></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-radius:20px;border:1px solid var(--brd)"><span style="font:400 12px var(--f);color:var(--tx2)">online</span><span style="font:700 13px var(--mono);color:var(--tx)">wash-hub.it/parcheggio-smart</span></div>
+  </div>
+</div>
+
+<div class="form-panel" id="psCfgPanel" style="margin-bottom:20px">
+<h3 style="font:600 13px var(--f);margin-bottom:10px">⚙️ Configurazione vendita online (admin)</h3>
+<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+<label style="display:flex;align-items:center;gap:8px;font:500 13px var(--f);height:37px"><input type="checkbox" id="psCfgAttivo" checked> Vendita online attiva</label>
+<div class="ff" style="width:90px"><label>Min ore</label><input id="psCfgMin" type="number" min="1" max="24" value="2"></div>
+<div class="ff" style="width:90px"><label>Max ore</label><input id="psCfgMax" type="number" min="2" max="72" value="24"></div>
+<button class="btn" id="psCfgSave" style="height:37px">Salva</button>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+<button class="qbtn ps-tab on" data-tab="attivi">Attivi</button>
+<button class="qbtn ps-tab" data-tab="oggi">Oggi</button>
+<button class="qbtn ps-tab" data-tab="tutti">Ultimi 30 giorni</button>
+<button class="btn" id="psRefresh" style="margin-left:auto">↻ Aggiorna</button>
+</div>
+
+<div class="tbl-wrap">
+<table class="tbl">
+<thead><tr><th>Codice</th><th>Targa</th><th>Cliente</th><th>Validità</th><th>Origine</th><th>Stato</th><th>Tastierini</th><th>Ultimo passaggio</th><th style="width:150px">Azioni</th></tr></thead>
+<tbody id="psTb"></tbody>
+</table>
+</div>
+</div>
+</div>
 <div class="page" id="page-prenotazioni">
 <div class="sec">
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
@@ -799,7 +859,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260921d"></script>
+<script type="module" src="js/main.js?v=20260923a"></script>
 
 </body>
 </html>

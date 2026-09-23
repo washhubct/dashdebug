@@ -135,6 +135,19 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // CODICI PARCHEGGIO SMART — PIN a tempo per i tastierini Hikvision.
+    // Sito/SumUp scrivono via Cloud Function (Admin SDK); il Pi del cancello
+    // aggiorna sync/eventi via service account. Da client solo staff di sede.
+    // Nessuna lettura pubblica: il codice arriva al cliente dalla Function.
+    // ═══════════════════════════════════════════════════════════
+    match /codiciParcheggio/{doc} {
+      allow read:   if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create: if writeOk();
+      allow update: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // CLIENTI — condivisi tra sedi, nessun filtro sedeId
     // ═══════════════════════════════════════════════════════════
     match /clienti/{doc} {
