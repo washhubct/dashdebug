@@ -27,7 +27,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260923a';
+    var APP_VERSION = '20260924a';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -336,7 +336,7 @@
 <div class="kpi g"><div class="kpi-label">Codici in corso</div><div class="kpi-val" id="psKpiCorso">0</div></div>
 <div class="kpi b"><div class="kpi-label">Venduti oggi</div><div class="kpi-val" id="psKpiOggi">0</div></div>
 <div class="kpi a"><div class="kpi-label">Incasso oggi</div><div class="kpi-val" id="psKpiIncasso">€0</div></div>
-<div class="kpi" id="psKpiSyncBox" style="border-color:var(--grn)"><div class="kpi-label">Sync tastierini</div><div class="kpi-val" id="psKpiSync" style="font-size:18px">—</div></div>
+<div class="kpi" id="psKpiSyncBox" style="border-color:var(--grn)"><div class="kpi-label">Tastierini</div><div class="kpi-val" id="psKpiSync" style="font-size:18px">—</div><div class="kpi-sub" id="psKpiSyncSub" style="font:400 10px var(--mono);color:var(--tx3);margin-top:2px"></div></div>
 </div>
 
 <div class="form-panel show" style="margin-bottom:20px;background:var(--bg4)">
@@ -859,7 +859,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20260923a"></script>
+<script type="module" src="js/main.js?v=20260924a"></script>
 
 </body>
 </html>

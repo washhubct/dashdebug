@@ -29,6 +29,7 @@ const CONFIG_DOC = 'parcheggioSmart';
 let codici = [];          // doc della sede attiva
 let tab = 'attivi';       // attivi | oggi | tutti
 let config = { attivo: true, minOre: 2, maxOre: 24 };
+let cancello = null;      // doc cancelloStato/lungomare scritto dal Pi
 
 // ── Tariffa (identica a calcPrezzoGiornaliero per durate intere) ──
 export function prezzoParcheggioOre(ore) {
@@ -48,6 +49,7 @@ const fmtIt = ms => { const d = new Date(ms); return `${pad(d.getDate())}/${pad(
 
 function generaCodice() {
     const usati = new Set(codici.filter(c => c.stato === 'attivo').map(c => c.codice));
+    (cancello?.pinOccupati || []).forEach(p => usati.add(String(p)));   // PIN abbonati già sui terminali
     for (let i = 0; i < 50; i++) {
         const c = String(100000 + Math.floor(Math.random() * 900000));
         if (!usati.has(c) && !/(\d)\1{3}/.test(c)) return c;   // niente 4 cifre uguali di fila
@@ -137,6 +139,13 @@ async function salvaConfig() {
     } catch (e) { alert('Errore salvataggio config: ' + e.message); }
 }
 
+async function caricaStatoCancello() {
+    try {
+        const snap = await fsGetDoc(fsDoc(db, 'cancelloStato', SEDE));
+        cancello = snap.exists() ? snap.data() : null;
+    } catch (e) { cancello = null; }
+}
+
 async function caricaCodici() {
     codici = [];
     try {
@@ -147,7 +156,7 @@ async function caricaCodici() {
 }
 
 export async function renderParcheggioSmart() {
-    await Promise.all([caricaConfig(), caricaCodici()]);
+    await Promise.all([caricaConfig(), caricaCodici(), caricaStatoCancello()]);
     document.getElementById('psCfgPanel')?.classList.toggle('show', isAdmin());
     aggiornaPreview();
     renderKpi();
@@ -165,8 +174,12 @@ function renderKpi() {
     set('psKpiCorso', inCorso);
     set('psKpiOggi', vOggi.length);
     set('psKpiIncasso', fEur(incOggi));
-    set('psKpiSync', err ? `${err} errori` : pend ? `${pend} in attesa` : 'OK');
-    const k = document.getElementById('psKpiSyncBox'); if (k) k.style.borderColor = err ? 'var(--red)' : pend ? 'var(--amb)' : 'var(--grn)';
+    const vecchio = !cancello || (now - (cancello.ultimoCiclo || 0)) > 3 * 60e3;   // Pi fermo da >3 min
+    const offline = Object.entries(cancello?.terminali || {}).filter(([, t]) => !t.online).map(([k]) => k.toUpperCase());
+    set('psKpiSync', vecchio ? 'Pi non attivo' : offline.length ? `${offline.join('+')} offline` : err ? `${err} errori` : pend ? `${pend} in attesa` : 'OK');
+    const sub = document.getElementById('psKpiSyncSub');
+    if (sub) sub.textContent = cancello ? `ultimo ciclo ${fmtIt(cancello.ultimoCiclo)} · ${(cancello.pinOccupati || []).length} PIN sui tastierini` : 'nessun dato dal Pi';
+    const k = document.getElementById('psKpiSyncBox'); if (k) k.style.borderColor = (vecchio || offline.length || err) ? 'var(--red)' : pend ? 'var(--amb)' : 'var(--grn)';
 }
 
 function renderTabella() {

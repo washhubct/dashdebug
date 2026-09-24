@@ -120,6 +120,9 @@ async function getConfig() {
 async function generaCodice(db: FirebaseFirestore.Firestore): Promise<string> {
   const attivi = await db.collection('codiciParcheggio').where('stato', '==', 'attivo').where('fineTs', '>=', Date.now() - 864e5).get()
   const usati = new Set(attivi.docs.map(d => d.data().codice))
+  // PIN già presenti sui terminali (abbonati caricati a mano): pubblicati dal Pi in cancelloStato
+  const st = await db.collection('cancelloStato').doc(SEDE).get()
+  for (const p of (st.data()?.pinOccupati || [])) usati.add(String(p))
   for (let i = 0; i < 100; i++) {
     const c = String(100000 + Math.floor(Math.random() * 900000))
     if (!usati.has(c) && !/(\d)\1{3}/.test(c)) return c

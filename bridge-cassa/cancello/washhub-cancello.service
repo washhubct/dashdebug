@@ -1,0 +1,18 @@
+[Unit]
+Description=Wash Hub cancello-sync (Parcheggio Smart → terminali Hikvision)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/cancello
+Environment=CANCELLO_ENV=/home/pi/cancello.env
+ExecStart=/usr/bin/python3 /home/pi/cancello/cancello_sync.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/pi/cancello/cancello.log
+StandardError=append:/home/pi/cancello/cancello.log
+
+[Install]
+WantedBy=multi-user.target

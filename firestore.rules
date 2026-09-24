@@ -147,6 +147,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Stato del cancello scritto dal Pi (utente cancello@washhub.it, operatore
+    // sede lungomare): terminali online, PIN occupati, ultimo ciclo. ID = sedeId.
+    match /cancelloStato/{sedeId} {
+      allow read:   if isSignedIn();
+      allow write:  if isSignedIn() && sedeValida(sedeId)
+                    && request.resource.data.sedeId == sedeId
+                    && hasSedeAccess(sedeId);
+    }
+
     // ═══════════════════════════════════════════════════════════
     // CLIENTI — condivisi tra sedi, nessun filtro sedeId
     // ═══════════════════════════════════════════════════════════
