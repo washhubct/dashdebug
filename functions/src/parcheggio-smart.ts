@@ -140,7 +140,7 @@ const fmtIt = (local: string) => {   // 'YYYY-MM-DDTHH:mm' → 'gio 24/09 alle 0
 async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
   if (!d.email) return
   const user = MAIL_USER.value(), pass = MAIL_PASS.value()
-  if (!user || !pass) { console.warn('MAIL_USER/MAIL_PASS non configurati: email non inviata'); return }
+  if (!user || !pass || !user.includes('@')) { console.warn('MAIL_USER/MAIL_PASS non configurati (placeholder): email non inviata'); return }
   const tr = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } })
   const nome = String(d.nome || '').split(' ')[0]
   const html = `
