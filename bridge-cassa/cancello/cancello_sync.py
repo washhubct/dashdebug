@@ -59,7 +59,6 @@ SEDE = 'lungomare'
 COLL = 'codiciParcheggio'
 EMP_PREFIX = '77'                 # employeeNo dei codici smart: 77 + 6 cifre (gli abbonati a mano usano 000000xx)
 SCADUTO_GRACE_MS = 10 * 60 * 1000  # tolleranza dopo `fine` prima di cancellare l'utente
-TZ_SUFFIX = '+02:00'              # aggiornato dal terminale (System/time)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
 log = logging.getLogger('cancello')
@@ -84,6 +83,42 @@ class Terminale:
         self.op = build_opener(HTTPDigestAuthHandler(pm))
         self.online = False
         self.utenti: dict[str, dict] = {}   # employeeNo → UserInfo
+        self.tz = dt.datetime.now().astimezone().tzinfo   # fuso del terminale (letto da System/time)
+        self.tz_txt = dt.datetime.now().astimezone().strftime('%z')
+        self.tz_txt = self.tz_txt[:3] + ':' + self.tz_txt[3:]
+        self.drift_s = 0                    # secondi di scarto orologio terminale − Pi
+        self.tz_letto_ms = 0
+
+    def local_iso(self, ms: int) -> str:
+        """epoch ms → 'YYYY-MM-DDTHH:MM:SS' nell'ora locale DEL TERMINALE (il suo fuso può differire dal Pi)."""
+        return dt.datetime.fromtimestamp(ms / 1000, tz=self.tz).strftime('%Y-%m-%dT%H:%M:%S')
+
+    def parse_time(self, txt: str) -> int | None:
+        """'2026-09-25T02:01:21+08:00' → epoch ms. Senza offset assume il fuso del terminale."""
+        try:
+            d = dt.datetime.fromisoformat(str(txt)[:25])
+        except Exception:
+            return None
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=self.tz)
+        return int(d.timestamp() * 1000)
+
+    def aggiorna_ora(self, force: bool = False):
+        """Legge System/time: fuso orario e scarto dell'orologio del terminale. Ogni ora."""
+        now = now_ms()
+        if not force and now - self.tz_letto_ms < 3600_000:
+            return
+        txt = self.ora()
+        if not txt:
+            return
+        d = dt.datetime.fromisoformat(txt[:25])
+        if d.tzinfo is not None:
+            self.tz = d.tzinfo
+            self.tz_txt = txt[-6:]
+            self.drift_s = int(d.timestamp() - now / 1000)
+        self.tz_letto_ms = now
+        livello = log.warning if abs(self.drift_s) > 120 or self.tz_txt not in ('+01:00', '+02:00') else log.info
+        livello('ora terminale %s: %s (fuso %s, scarto %+ds rispetto al Pi)', self.nome.upper(), txt, self.tz_txt, self.drift_s)
 
     def call(self, path: str, method: str = 'GET', body=None, timeout: int = 15):
         data = json.dumps(body).encode() if body is not None else None
@@ -111,7 +146,7 @@ class Terminale:
     def upsert(self, emp: str, nome: str, pin: str, inizio_ms: int, fine_ms: int):
         body = {'UserInfo': {
             'employeeNo': emp, 'name': nome[:32], 'userType': 'normal',
-            'Valid': {'enable': True, 'beginTime': local_iso(inizio_ms), 'endTime': local_iso(fine_ms), 'timeType': 'local'},
+            'Valid': {'enable': True, 'beginTime': self.local_iso(inizio_ms), 'endTime': self.local_iso(fine_ms), 'timeType': 'local'},
             'password': pin, 'doorRight': '1', 'RightPlan': [{'doorNo': 1, 'planTemplateNo': '1'}],
         }}
         if emp in self.utenti:
@@ -136,7 +171,7 @@ class Terminale:
         while True:
             r = self.call('/ISAPI/AccessControl/AcsEvent?format=json', 'POST', {'AcsEventCond': {
                 'searchID': 'ev', 'searchResultPosition': pos, 'maxResults': 30, 'major': 5, 'minor': 0,
-                'startTime': local_iso(da_ms) + TZ_SUFFIX, 'endTime': local_iso(a_ms) + TZ_SUFFIX,
+                'startTime': self.local_iso(da_ms) + self.tz_txt, 'endTime': self.local_iso(a_ms) + self.tz_txt,
             }}, timeout=25)
             s = r.get('AcsEvent', {}) if isinstance(r, dict) else {}
             lista = s.get('InfoList', []) or []
@@ -276,6 +311,7 @@ def ciclo(fs: Firestore, terms: dict[str, Terminale], stato: dict):
     for t in terms.values():
         try:
             t.carica_utenti()
+            t.aggiorna_ora()
         except Exception as e:
             t.online = False
             log.warning('terminale %s (%s) non raggiungibile: %s', t.nome, t.host, e)
@@ -319,7 +355,7 @@ def ciclo(fs: Firestore, terms: dict[str, Terminale], stato: dict):
         cambiato = False
         for k, t in terms.items():
             presente = emp in t.utenti and t.utenti[emp].get('password') == c['codice'] \
-                and t.utenti[emp].get('Valid', {}).get('endTime') == local_iso(fine)
+                and t.utenti[emp].get('Valid', {}).get('endTime') == t.local_iso(fine)
             if sync.get(k) == 'ok' and presente:
                 continue
             if not t.online:
@@ -359,17 +395,19 @@ def ciclo(fs: Firestore, terms: dict[str, Terminale], stato: dict):
     for k, t in terms.items():
         if not t.online: continue
         da = int(stato.get(f'ultimoEvento_{k}') or (now - 3600_000))
+        if da >= now - 1000:
+            log.warning('cursore eventi %s nel futuro (%s): riparto da un\'ora fa', k, local_iso(da))
+            da = now - 3600_000
         try:
+            t.aggiorna_ora()
             evs = t.eventi(da + 1000, now)
         except Exception as e:
             log.warning('eventi %s: %s', k, e); continue
         max_ts = da
         for ev in evs:
             emp = str(ev.get('employeeNoString') or ev.get('employeeNo') or '')
-            ts_txt = str(ev.get('time') or '')[:19]
-            try:
-                ts = int(dt.datetime.strptime(ts_txt, '%Y-%m-%dT%H:%M:%S').timestamp() * 1000)
-            except Exception:
+            ts = t.parse_time(ev.get('time'))
+            if ts is None:
                 continue
             max_ts = max(max_ts, ts)
             if not emp.startswith(EMP_PREFIX):
@@ -384,7 +422,7 @@ def ciclo(fs: Firestore, terms: dict[str, Terminale], stato: dict):
             lista.append(evento)
             c['eventi'] = lista
             fs.patch(COLL, c['_id'], {'eventi': lista, 'ultimoPassaggioTs': ts})
-            log.info('%s %s targa %s alle %s', evento['tipo'], c.get('codice'), c.get('targa'), ts_txt)
+            log.info('%s %s targa %s alle %s', evento['tipo'], c.get('codice'), c.get('targa'), local_iso(ts))
         stato[f'ultimoEvento_{k}'] = max_ts
 
     # 6. stato terminali + PIN occupati (per generazione codici lato sito/dash)
@@ -393,7 +431,7 @@ def ciclo(fs: Firestore, terms: dict[str, Terminale], stato: dict):
         pins |= {str(u.get('password')) for u in t.utenti.values() if u.get('password')}
     stato_doc = {
         'sedeId': SEDE, 'ultimoCiclo': now, 'pinOccupati': sorted(pins),
-        'terminali': {k: {'online': t.online, 'host': t.host, 'utenti': len(t.utenti)} for k, t in terms.items()},
+        'terminali': {k: {'online': t.online, 'host': t.host, 'utenti': len(t.utenti), 'fuso': t.tz_txt, 'scartoSec': t.drift_s} for k, t in terms.items()},
         'codiciAttivi': len(attivi),
     }
     fs.patch('cancelloStato', SEDE, stato_doc)
@@ -406,14 +444,11 @@ def main():
     terms = {k: Terminale(k, h) for k, h in TERMINALI.items()}
     fs = Firestore()
     stato = carica_stato()
-    global TZ_SUFFIX
-    try:
-        ora = terms['est'].ora()
-        if ora and (ora.endswith('+01:00') or ora.endswith('+02:00')):
-            TZ_SUFFIX = ora[-6:]
-        log.info('ora terminale EST: %s', ora)
-    except Exception as e:
-        log.warning('lettura ora terminale: %s', e)
+    for t in terms.values():
+        try:
+            t.aggiorna_ora(force=True)
+        except Exception as e:
+            log.warning('lettura ora terminale %s: %s', t.nome, e)
     log.info('cancello-sync avviato: EST=%s INT=%s poll=%ss', TERMINALI['est'], TERMINALI['int'], POLL_SEC)
     while True:
         t0 = time.time()
