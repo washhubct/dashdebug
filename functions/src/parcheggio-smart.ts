@@ -3,7 +3,6 @@ import { defineSecret, defineString } from 'firebase-functions/params'
 import { getFirestore } from 'firebase-admin/firestore'
 import type { Request, Response } from 'express'
 import nodemailer from 'nodemailer'
-import { fic, upsertClienteFIC, getVat22, paymentAccountId, pivaValida } from './fic'
 
 // ═══════════════════════════════════════════════════════════════════
 // PARCHEGGIO SMART — vendita online di codici a tempo per il cancello
@@ -41,6 +40,11 @@ const SUMUP_API_KEY = defineSecret('SUMUP_API_KEY')
 const SUMUP_MERCHANT_CODE = defineString('SUMUP_MERCHANT_CODE')
 const MAIL_USER = defineSecret('MAIL_USER')
 const MAIL_PASS = defineSecret('MAIL_PASS')
+// Openapi "Smart Receipt" = documento commerciale online (procedura web AdE pilotata da Openapi, intestato a LAST MILE SRL).
+// Token OAuth v2 con scope IT-receipts + IT-configurations. OPENAPI_ENV: 'test' (sandbox) | 'prod'. Vuoto/placeholder = scontrino disattivato.
+const OPENAPI_TOKEN = defineSecret('OPENAPI_TOKEN')
+const OPENAPI_ENV = defineString('OPENAPI_ENV', { default: 'test' })
+const OPENAPI_FISCAL_ID = defineString('OPENAPI_FISCAL_ID', { default: '' })   // P.IVA LAST MILE SRL (fiscal_id della IT-configuration)
 const MAIL_FROM = 'noreply@washhub.it'
 const MAIL_REPLY_TO = 'info@washhub.it'
 const SITE_URL = 'https://wash-hub.it'
@@ -141,61 +145,72 @@ const fmtIt = (local: string) => {   // 'YYYY-MM-DDTHH:mm' → 'gio 24/09 alle 0
   return `${giorno} ${m[3]}/${m[2]} alle ${m[4]}:${m[5]}`
 }
 
-// ─── Fattura elettronica via Fatture in Cloud (LAST MILE SRL) ───
-// Decisione Guido 26/09/2026: niente documento commerciale online; per ogni vendita online si emette
-// fattura B2C (CF + indirizzo chiesti nel form del sito), inviata a SDI e allegata in PDF alla mail del codice.
-const CF_RE = /^[A-Z]{6}[0-9LMNPQRSTUV]{2}[ABCDEHLMPRST][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]$/
-function fiscaleValido(v: string): 'cf' | 'piva' | null {
-  const x = v.replace(/\s/g, '').toUpperCase()
-  if (CF_RE.test(x)) return 'cf'
-  if (/^\d{11}$/.test(x) && pivaValida(x)) return 'piva'
-  return null
+// ─── Scontrino (documento commerciale) via Openapi ───
+function openapiBase() { return OPENAPI_ENV.value() === 'prod' ? 'https://invoice.openapi.com' : 'https://test.invoice.openapi.com' }
+function scontrinoAttivo() {
+  const t = OPENAPI_TOKEN.value(), f = OPENAPI_FISCAL_ID.value()
+  return !!t && t.length > 20 && /^\d{11}$/.test(f)
+}
+async function openapi(path: string, init: { method?: string; body?: unknown; pdf?: boolean } = {}) {
+  const r = await fetch(openapiBase() + path, {
+    method: init.method || 'GET',
+    headers: { Authorization: `Bearer ${OPENAPI_TOKEN.value()}`, 'Content-Type': init.pdf ? 'application/pdf' : 'application/json' },
+    body: init.body ? JSON.stringify(init.body) : undefined,
+  })
+  if (init.pdf) {
+    if (!r.ok) throw new Error(`Openapi PDF ${path} → ${r.status}`)
+    const ct = r.headers.get('content-type') || ''
+    if (!ct.includes('pdf')) throw new Error(`Openapi PDF ${path}: content-type ${ct}`)
+    return Buffer.from(await r.arrayBuffer())
+  }
+  const txt = await r.text()
+  let data: any = null
+  try { data = txt ? JSON.parse(txt) : null } catch { data = { raw: txt } }
+  if (!r.ok || data?.success === false) throw new Error(`Openapi ${init.method || 'GET'} ${path} → ${r.status}: ${txt.slice(0, 300)}`)
+  return data
 }
 
-/** Emette e invia a SDI la fattura per un codice pagato online. Idempotente su d.fattura.ficDocId. Ritorna il PDF se disponibile. */
-async function emettiFatturaFIC(ref: FirebaseFirestore.DocumentReference, d: FirebaseFirestore.DocumentData): Promise<Buffer | null> {
-  if (d.fattura?.ficDocId) return null
+/** Emette il documento commerciale per un codice pagato online. Idempotente: se il doc ha già scontrino.id non riemette. */
+async function emettiScontrino(ref: FirebaseFirestore.DocumentReference, d: FirebaseFirestore.DocumentData) {
+  if (!scontrinoAttivo()) { console.warn('Openapi non configurato: scontrino non emesso'); return null }
+  if (d.scontrino?.id) return d.scontrino
   const prezzo = Number(d.prezzo) || 0
-  if (prezzo <= 0 || !d.cf) return null
-  const tipo = fiscaleValido(String(d.cf))
-  const cliente = {
-    nome: d.nome, cf: tipo === 'cf' ? d.cf : '', piva: tipo === 'piva' ? d.cf : '',
-    via: d.via, cap: d.cap, citta: d.citta, provincia: d.provincia, sdi: '0000000',
-  }
-  const entity = await upsertClienteFIC(cliente)
-  const oggi = new Date().toISOString().slice(0, 10)
-  const body = {
-    data: {
-      type: 'invoice',
-      entity: entity.entity,
-      date: oggi,
-      use_gross_prices: true,
-      items_list: [{ name: `Parcheggio Smart WASH HUB · targa ${d.targa} · ${d.ore} ore (${fmtIt(d.inizio)} → ${fmtIt(d.fine)})`, qty: 1, gross_price: prezzo, vat: { id: await getVat22() } }],
-      payments_list: [{ amount: prezzo, due_date: oggi, paid_date: oggi, status: 'paid', payment_account: { id: await paymentAccountId('POS') } }],
-      visible_subject: 'Parcheggio Smart — pagamento online',
-      e_invoice: true,
-      ei_data: { payment_method: 'MP08' },
-    },
-  }
-  const created = (await fic('/issued_documents', { method: 'POST', body }))?.data
-  const fattura: Record<string, unknown> = { ficDocId: created?.id || null, numero: created?.number ?? null, clienteFicId: entity.id, emessaTs: Date.now(), inviata: false, invioErrore: null }
-  await ref.update({ fattura, fatturaErrore: null })
-  try { await fic(`/issued_documents/${created.id}/e_invoice/send`, { method: 'POST' }); fattura.inviata = true }
-  catch (e: any) { fattura.invioErrore = String(e.message || e).slice(0, 300); console.error('[parcheggioSmart] invio SDI fallito', created?.id, fattura.invioErrore) }
-  await ref.update({ fattura })
-  console.log(`🧾 fattura FIC ${created?.id} n. ${created?.number} per ${ref.id} (SDI ${fattura.inviata ? 'ok' : 'NON inviata'})`)
-  // PDF: FIC espone un url temporaneo del documento
-  try {
-    const info = (await fic(`/issued_documents/${created.id}?fields=id,url`))?.data
-    if (info?.url) {
-      const r = await fetch(info.url)
-      if (r.ok && (r.headers.get('content-type') || '').includes('pdf')) return Buffer.from(await r.arrayBuffer())
-    }
-  } catch (e: any) { console.warn('PDF fattura non disponibile:', e.message) }
-  return null
+  if (prezzo <= 0) return null
+  const r = await openapi('/IT-receipts', { method: 'POST', body: {
+    fiscal_id: OPENAPI_FISCAL_ID.value(),
+    items: [{ quantity: 1, description: `Parcheggio Smart WASH HUB · targa ${d.targa} · ${d.ore}h`, unit_price: prezzo, vat_rate_code: '22' }],
+    cash_payment_amount: 0,
+    electronic_payment_amount: prezzo,
+    tags: [String(ref.id).slice(0, 30), 'parcheggio-smart'],
+  } })
+  const data = r?.data || {}
+  const scontrino = { id: String(data.id || ''), numero: data.document_number || null, stato: data.status || null, env: OPENAPI_ENV.value(), emessoTs: Date.now() }
+  await ref.update({ scontrino, scontrinoErrore: null })
+  console.log(`🧾 scontrino ${scontrino.id} ${scontrino.numero || ''} per ${ref.id} (${OPENAPI_ENV.value()})`)
+  return scontrino
 }
 
-async function inviaEmailCodice(d: FirebaseFirestore.DocumentData, pdfFattura?: Buffer | null) {
+async function scaricaPdfScontrino(id: string): Promise<Buffer | null> {
+  try { return await openapi(`/IT-receipts/${encodeURIComponent(id)}`, { pdf: true }) }
+  catch (e: any) { console.warn('PDF scontrino non disponibile:', e.message); return null }
+}
+
+/** Seconda email: documento commerciale in allegato (usata dal callback Openapi o quando il PDF non era pronto subito). */
+async function inviaEmailScontrino(d: FirebaseFirestore.DocumentData, pdf: Buffer) {
+  if (!d.email) return
+  const user = MAIL_USER.value(), pass = MAIL_PASS.value()
+  if (!user || !pass || !user.includes('@')) return
+  const tr = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } })
+  const num = d.scontrino?.numero ? ` n. ${d.scontrino.numero}` : ''
+  await tr.sendMail({
+    from: `"WASH HUB" <${MAIL_FROM}>`, to: d.email, replyTo: MAIL_REPLY_TO,
+    subject: `Documento commerciale${num} · Parcheggio Smart targa ${d.targa}`,
+    text: `In allegato il documento commerciale${num} per il Parcheggio Smart WASH HUB (targa ${d.targa}, ${d.ore} ore, €${d.prezzo}).\nEmesso da LAST MILE SRL. Per assistenza scrivi a info@washhub.it`,
+    attachments: [{ filename: `documento-commerciale-${d.targa}.pdf`, content: pdf, contentType: 'application/pdf' }],
+  })
+}
+
+async function inviaEmailCodice(d: FirebaseFirestore.DocumentData, pdfScontrino?: Buffer | null) {
   if (!d.email) return
   const user = MAIL_USER.value(), pass = MAIL_PASS.value()
   if (!user || !pass || !user.includes('@')) { console.warn('MAIL_USER/MAIL_PASS non configurati (placeholder): email non inviata'); return }
@@ -217,7 +232,7 @@ async function inviaEmailCodice(d: FirebaseFirestore.DocumentData, pdfFattura?: 
         <li>Digita il codice sul tastierino: il cancello si apre da solo.</li>
         <li>All'uscita ripeti il codice sul tastierino interno.</li>
       </ol>
-      ${pdfFattura ? '<p style="font-size:13px;color:#6B6B6B">In allegato trovi la fattura (emessa da LAST MILE SRL, titolare del marchio WASH HUB).</p>' : ''}
+      ${pdfScontrino ? '<p style="font-size:13px;color:#6B6B6B">In allegato trovi il documento commerciale (emesso da LAST MILE SRL).</p>' : ''}
       <p style="font-size:13px;color:#6B6B6B">Oltre l'orario il codice non funziona più: prendi un nuovo codice su <a href="${SITE_URL}/parcheggio-smart/" style="color:#0F0F0F">wash-hub.it/parcheggio-smart</a> oppure passa al banco.</p>
       <p style="font-size:12px;color:#6B6B6B;margin-top:24px">WASH HUB Lungomare · Via Anfuso 35, Catania · Questa email è automatica: per assistenza scrivi a info@washhub.it</p>
     </div>
@@ -227,7 +242,7 @@ async function inviaEmailCodice(d: FirebaseFirestore.DocumentData, pdfFattura?: 
     subject: `Codice parcheggio ${d.codice} · targa ${d.targa}`,
     text: `Il tuo codice parcheggio WASH HUB è ${d.codice}.\nTarga ${d.targa} · ${d.ore} ore · €${d.prezzo}\nValido dal ${fmtIt(d.inizio)} alle ${fmtIt(d.fine)}.\nDigita il codice sul tastierino in entrata e in uscita. Via Anfuso 35, Catania.`,
     html,
-    attachments: pdfFattura ? [{ filename: `fattura-washhub-${d.targa}.pdf`, content: pdfFattura, contentType: 'application/pdf' }] : [],
+    attachments: pdfScontrino ? [{ filename: `documento-commerciale-${d.targa}.pdf`, content: pdfScontrino, contentType: 'application/pdf' }] : [],
   })
 }
 
@@ -287,10 +302,12 @@ async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) 
   }).catch((e: any) => { if (e?.code !== 6) throw e })  // 6 = ALREADY_EXISTS
   await ref.update({ giornalieroId: gref.id })
   console.log(`✅ parcheggioSmart ${docId} attivo: codice ${codice} targa ${d.targa} ${d.ore}h €${d.prezzo}`)
-  // Fattura elettronica (solo vendite online: al banco batte la cassa di sede). Errori non bloccano il codice.
+  // Documento commerciale (solo vendite online: al banco batte la cassa di sede). Errori non bloccano il codice.
   let pdf: Buffer | null = null
-  try { pdf = await emettiFatturaFIC(ref, d) }
-  catch (e: any) { console.error('fattura FIC fallita:', e.message); await ref.update({ fatturaErrore: String(e.message).slice(0, 300) }) }
+  try {
+    const sc = await emettiScontrino(ref, d)
+    if (sc?.id) { pdf = await scaricaPdfScontrino(sc.id); if (pdf) await ref.update({ 'scontrino.pdfInviatoTs': Date.now() }) }
+  } catch (e: any) { console.error('scontrino fallito:', e.message); await ref.update({ scontrinoErrore: String(e.message).slice(0, 300) }) }
   try { await inviaEmailCodice(d, pdf); await ref.update({ emailInviataTs: Date.now() }) }
   catch (e: any) { console.error('email codice fallita:', e.message); await ref.update({ emailErrore: String(e.message).slice(0, 200) }) }
   try { await upsertCliente(db, d) } catch (e: any) { console.warn('CRM upsert:', e.message) }
@@ -324,7 +341,7 @@ const TARGA_RE = /^[A-Z0-9]{5,10}$/
 const TEL_RE = /^\+?[0-9 ]{8,16}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY, MAIL_USER, MAIL_PASS], cors: false }, async (req, res) => {
+export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY, MAIL_USER, MAIL_PASS, OPENAPI_TOKEN], cors: false }, async (req, res) => {
   cors(req, res)
   if (req.method === 'OPTIONS') { res.status(204).send(''); return }
   const db = getFirestore()
@@ -350,17 +367,7 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
       const email = String(b.email || '').trim().toLowerCase().slice(0, 100)
       const ore = Math.ceil(Number(b.ore) || 0)
       const consensoMarketing = b.consensoMarketing === true
-      const cf = String(b.cf || '').replace(/\s/g, '').toUpperCase().slice(0, 16)
-      const via = String(b.via || '').trim().slice(0, 60)
-      const cap = String(b.cap || '').replace(/\D/g, '').slice(0, 5)
-      const citta = String(b.citta || '').trim().slice(0, 60)
-      const provincia = String(b.provincia || '').trim().toUpperCase().slice(0, 2)
       if (!TARGA_RE.test(targa)) { res.status(400).json({ error: 'Targa non valida' }); return }
-      if (!fiscaleValido(cf)) { res.status(400).json({ error: 'Codice fiscale (o P.IVA) non valido' }); return }
-      if (via.length < 3) { res.status(400).json({ error: 'Inserisci via e numero civico' }); return }
-      if (!/^\d{5}$/.test(cap)) { res.status(400).json({ error: 'CAP non valido' }); return }
-      if (citta.length < 2) { res.status(400).json({ error: 'Inserisci la città' }); return }
-      if (!/^[A-Z]{2}$/.test(provincia)) { res.status(400).json({ error: 'Provincia: sigla di 2 lettere' }); return }
       if (!TEL_RE.test(telefono)) { res.status(400).json({ error: 'Telefono non valido' }); return }
       if (nome.length < 2) { res.status(400).json({ error: 'Inserisci il tuo nome' }); return }
       if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email non valida' }); return }
@@ -380,7 +387,6 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
       const ref = db.collection('codiciParcheggio').doc()
       const doc = {
         codice: null, targa, telefono, vettura, nome, email,
-        cf, via, cap, citta, provincia,
         ore, prezzo, inizio: epochToRomeLocal(inizioValid), fine: epochToRomeLocal(fineTs),
         inizioTs: inizioValid, fineTs, dataISO: romeDateISO(now), creatoTs: now, creatoDa: 'sito',
         origine: 'sito', pagamento: 'SUMUP', stato: 'in_pagamento',
@@ -418,6 +424,28 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
       if (q.empty) { res.status(200).send('unknown checkout'); return }   // 200: SumUp non deve ritentare
       const d = q.docs[0]
       if (d.data().stato === 'in_pagamento') await verificaEFinalizza(d.id, checkoutId)
+      res.status(200).send('ok')
+      return
+    }
+
+    // ── POST /scontrino-callback (Openapi: eventi receipt / receipt-error) ──
+    if (req.method === 'POST' && path === '/scontrino-callback') {
+      const b = (req.body || {}) as Record<string, any>
+      const ev = b.data || b
+      const scId = String(ev?.id || '')
+      console.log('Openapi callback', JSON.stringify(b).slice(0, 400))
+      if (!scId) { res.status(200).send('no id'); return }
+      const q = await db.collection('codiciParcheggio').where('scontrino.id', '==', scId).limit(1).get()
+      if (q.empty) { res.status(200).send('unknown receipt'); return }
+      const ref = q.docs[0].ref
+      const d = q.docs[0].data()
+      const upd: Record<string, unknown> = { 'scontrino.stato': ev?.status || null, 'scontrino.numero': ev?.document_number || d.scontrino?.numero || null, 'scontrino.callbackTs': Date.now() }
+      if (ev?.error_message || ev?.error_code) upd.scontrinoErrore = `${ev.error_code || ''} ${ev.error_message || ''}`.trim()
+      await ref.update(upd)
+      if (!d.scontrino?.pdfInviatoTs && !ev?.error_code) {
+        const pdf = await scaricaPdfScontrino(scId)
+        if (pdf) { try { await inviaEmailScontrino({ ...d, scontrino: { ...d.scontrino, numero: upd['scontrino.numero'] } }, pdf); await ref.update({ 'scontrino.pdfInviatoTs': Date.now() }) } catch (e: any) { console.error('email scontrino:', e.message) } }
+      }
       res.status(200).send('ok')
       return
     }
