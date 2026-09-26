@@ -207,7 +207,7 @@ function renderTabella() {
             <td><strong>${esc(c.targa || '')}</strong>${c.vettura ? `<div style="font-size:11px;color:var(--tx3)">${esc(c.vettura)}</div>` : ''}</td>
             <td style="font-size:11px">${esc(c.telefono || '')}${c.nome ? `<div style="color:var(--tx3)">${esc(c.nome)}</div>` : ''}</td>
             <td style="font:500 11px var(--mono)">${fmtIt(c.inizioTs)} → ${fmtIt(c.fineTs)}<div style="color:var(--tx3)">${c.ore}h · ${fEur(Number(c.prezzo) || 0)}</div></td>
-            <td style="font-size:11px">${origine}<div>${pag}</div></td>
+            <td style="font-size:11px">${origine}<div>${pag}</div>${c.fattura?.numero ? `<div style="font-size:10px;color:var(--tx3)" title="Fattura FIC ${esc(String(c.fattura.ficDocId || ''))}${c.fattura.inviata ? ' · SDI ok' : ' · SDI NON inviata'}">🧾 n. ${esc(String(c.fattura.numero))}${c.fattura.inviata ? '' : ' ⚠️'}</div>` : (c.fatturaErrore ? `<div style="font-size:10px;color:var(--red,#c0392b)" title="${esc(c.fatturaErrore)}">🧾 errore fattura</div>` : '')}</td>
             <td><span class="badge ${cls}">${lbl}</span></td>
             <td style="white-space:nowrap">${c.stato === 'attivo' ? syncBadge(c, 'est') + ' ' + syncBadge(c, 'int') : '<span style="color:var(--tx3)">—</span>'}</td>
             <td>${evHtml}</td>

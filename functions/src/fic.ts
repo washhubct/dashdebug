@@ -61,7 +61,7 @@ async function getAccessToken(): Promise<{ token: string; companyId: number }> {
   return { token: data.access_token, companyId: s.companyId }
 }
 
-async function fic(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
+export async function fic(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
   const { token, companyId } = await getAccessToken()
   const res = await fetch(`${FIC_API}/c/${companyId}${path}`, {
     method: opts.method || 'GET',
@@ -137,7 +137,7 @@ export const ficOauthCallback = onRequest({ region: REGION }, async (req, res) =
 
 /** Cache aliquota 22% per companyId (l'id vat_type cambia da azienda ad azienda). */
 const vat22ByCompany: Record<number, number> = {}
-async function getVat22(): Promise<number> {
+export async function getVat22(): Promise<number> {
   const { companyId } = await getAccessToken()
   if (vat22ByCompany[companyId] !== undefined) return vat22ByCompany[companyId]
   const data = await fic('/info/vat_types')
@@ -197,7 +197,7 @@ function problemiAnagrafica(e: Record<string, any>): string[] {
 
 /** Conti FIC per il pagato: cerca per nome (CASSA/CONTANTI, POS/CARTA, BANCO/BONIFICO), fallback primo. */
 const paByCompany: Record<number, any[]> = {}
-async function paymentAccountId(modalita: string): Promise<number | undefined> {
+export async function paymentAccountId(modalita: string): Promise<number | undefined> {
   const { companyId } = await getAccessToken()
   if (!paByCompany[companyId]) paByCompany[companyId] = ((await fic('/info/payment_accounts'))?.data || [])
   const list = paByCompany[companyId]
@@ -233,11 +233,12 @@ function entityDoc(id: number, name: string, e: Record<string, any>) {
   }
 }
 
-async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean; entity: Record<string, any> }> {
+export async function upsertClienteFIC(c: Record<string, any>): Promise<{ id: number; name: string; creato: boolean; haFiscali: boolean; entity: Record<string, any> }> {
   const piva = String(c.piva || '').replace(/\s/g, '')
   const cf = String(c.cf || '').replace(/\s/g, '')
   const addr = parseIndirizzo(c.indirizzo)
-  let q = piva ? `vat_number = '${piva}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
+  // Match: P.IVA, altrimenti CF (privati: mai per nome, due omonimi si sovrascriverebbero l'anagrafica), altrimenti nome
+  let q = piva ? `vat_number = '${piva}'` : cf ? `tax_code = '${cf}'` : `name contains '${String(c.nome).replace(/'/g, "\\'")}'`
   // fieldset=detailed: servono anche indirizzo/SDI/PEC per denormalizzarli nel doc
   const found = await fic(`/entities/clients?fieldset=detailed&q=${encodeURIComponent(q)}`)
   const match = (found?.data || [])[0]
