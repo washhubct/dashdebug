@@ -118,8 +118,11 @@ async function getConfig() {
 }
 
 async function generaCodice(db: FirebaseFirestore.Firestore): Promise<string> {
-  const attivi = await db.collection('codiciParcheggio').where('stato', '==', 'attivo').where('fineTs', '>=', Date.now() - 864e5).get()
-  const usati = new Set(attivi.docs.map(d => d.data().codice))
+  // Solo filtro su `stato` (un where su due campi richiede un indice composito che non esiste →
+  // FAILED_PRECONDITION e finalizzazione mai eseguita). Gli attivi sono pochi: fineTs filtrato in memoria.
+  const attivi = await db.collection('codiciParcheggio').where('stato', '==', 'attivo').get()
+  const soglia = Date.now() - 864e5
+  const usati = new Set(attivi.docs.filter(d => Number(d.data().fineTs) >= soglia).map(d => d.data().codice))
   // PIN già presenti sui terminali (abbonati caricati a mano): pubblicati dal Pi in cancelloStato
   const st = await db.collection('cancelloStato').doc(SEDE).get()
   for (const p of (st.data()?.pinOccupati || [])) usati.add(String(p))
