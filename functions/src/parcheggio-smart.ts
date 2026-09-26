@@ -40,6 +40,11 @@ const SUMUP_API_KEY = defineSecret('SUMUP_API_KEY')
 const SUMUP_MERCHANT_CODE = defineString('SUMUP_MERCHANT_CODE')
 const MAIL_USER = defineSecret('MAIL_USER')
 const MAIL_PASS = defineSecret('MAIL_PASS')
+// Openapi "Smart Receipt" = documento commerciale online (procedura web AdE pilotata da Openapi, intestato a LAST MILE SRL).
+// Token OAuth v2 con scope IT-receipts + IT-configurations. OPENAPI_ENV: 'test' (sandbox) | 'prod'. Vuoto/placeholder = scontrino disattivato.
+const OPENAPI_TOKEN = defineSecret('OPENAPI_TOKEN')
+const OPENAPI_ENV = defineString('OPENAPI_ENV', { default: 'test' })
+const OPENAPI_FISCAL_ID = defineString('OPENAPI_FISCAL_ID', { default: '' })   // P.IVA LAST MILE SRL (fiscal_id della IT-configuration)
 const MAIL_FROM = 'noreply@washhub.it'
 const MAIL_REPLY_TO = 'info@washhub.it'
 const SITE_URL = 'https://wash-hub.it'
@@ -140,7 +145,72 @@ const fmtIt = (local: string) => {   // 'YYYY-MM-DDTHH:mm' → 'gio 24/09 alle 0
   return `${giorno} ${m[3]}/${m[2]} alle ${m[4]}:${m[5]}`
 }
 
-async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
+// ─── Scontrino (documento commerciale) via Openapi ───
+function openapiBase() { return OPENAPI_ENV.value() === 'prod' ? 'https://invoice.openapi.com' : 'https://test.invoice.openapi.com' }
+function scontrinoAttivo() {
+  const t = OPENAPI_TOKEN.value(), f = OPENAPI_FISCAL_ID.value()
+  return !!t && t.length > 20 && /^\d{11}$/.test(f)
+}
+async function openapi(path: string, init: { method?: string; body?: unknown; pdf?: boolean } = {}) {
+  const r = await fetch(openapiBase() + path, {
+    method: init.method || 'GET',
+    headers: { Authorization: `Bearer ${OPENAPI_TOKEN.value()}`, 'Content-Type': init.pdf ? 'application/pdf' : 'application/json' },
+    body: init.body ? JSON.stringify(init.body) : undefined,
+  })
+  if (init.pdf) {
+    if (!r.ok) throw new Error(`Openapi PDF ${path} → ${r.status}`)
+    const ct = r.headers.get('content-type') || ''
+    if (!ct.includes('pdf')) throw new Error(`Openapi PDF ${path}: content-type ${ct}`)
+    return Buffer.from(await r.arrayBuffer())
+  }
+  const txt = await r.text()
+  let data: any = null
+  try { data = txt ? JSON.parse(txt) : null } catch { data = { raw: txt } }
+  if (!r.ok || data?.success === false) throw new Error(`Openapi ${init.method || 'GET'} ${path} → ${r.status}: ${txt.slice(0, 300)}`)
+  return data
+}
+
+/** Emette il documento commerciale per un codice pagato online. Idempotente: se il doc ha già scontrino.id non riemette. */
+async function emettiScontrino(ref: FirebaseFirestore.DocumentReference, d: FirebaseFirestore.DocumentData) {
+  if (!scontrinoAttivo()) { console.warn('Openapi non configurato: scontrino non emesso'); return null }
+  if (d.scontrino?.id) return d.scontrino
+  const prezzo = Number(d.prezzo) || 0
+  if (prezzo <= 0) return null
+  const r = await openapi('/IT-receipts', { method: 'POST', body: {
+    fiscal_id: OPENAPI_FISCAL_ID.value(),
+    items: [{ quantity: 1, description: `Parcheggio Smart WASH HUB · targa ${d.targa} · ${d.ore}h`, unit_price: prezzo, vat_rate_code: '22' }],
+    cash_payment_amount: 0,
+    electronic_payment_amount: prezzo,
+    tags: [String(ref.id).slice(0, 30), 'parcheggio-smart'],
+  } })
+  const data = r?.data || {}
+  const scontrino = { id: String(data.id || ''), numero: data.document_number || null, stato: data.status || null, env: OPENAPI_ENV.value(), emessoTs: Date.now() }
+  await ref.update({ scontrino, scontrinoErrore: null })
+  console.log(`🧾 scontrino ${scontrino.id} ${scontrino.numero || ''} per ${ref.id} (${OPENAPI_ENV.value()})`)
+  return scontrino
+}
+
+async function scaricaPdfScontrino(id: string): Promise<Buffer | null> {
+  try { return await openapi(`/IT-receipts/${encodeURIComponent(id)}`, { pdf: true }) }
+  catch (e: any) { console.warn('PDF scontrino non disponibile:', e.message); return null }
+}
+
+/** Seconda email: documento commerciale in allegato (usata dal callback Openapi o quando il PDF non era pronto subito). */
+async function inviaEmailScontrino(d: FirebaseFirestore.DocumentData, pdf: Buffer) {
+  if (!d.email) return
+  const user = MAIL_USER.value(), pass = MAIL_PASS.value()
+  if (!user || !pass || !user.includes('@')) return
+  const tr = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } })
+  const num = d.scontrino?.numero ? ` n. ${d.scontrino.numero}` : ''
+  await tr.sendMail({
+    from: `"WASH HUB" <${MAIL_FROM}>`, to: d.email, replyTo: MAIL_REPLY_TO,
+    subject: `Documento commerciale${num} · Parcheggio Smart targa ${d.targa}`,
+    text: `In allegato il documento commerciale${num} per il Parcheggio Smart WASH HUB (targa ${d.targa}, ${d.ore} ore, €${d.prezzo}).\nEmesso da LAST MILE SRL. Per assistenza scrivi a info@washhub.it`,
+    attachments: [{ filename: `documento-commerciale-${d.targa}.pdf`, content: pdf, contentType: 'application/pdf' }],
+  })
+}
+
+async function inviaEmailCodice(d: FirebaseFirestore.DocumentData, pdfScontrino?: Buffer | null) {
   if (!d.email) return
   const user = MAIL_USER.value(), pass = MAIL_PASS.value()
   if (!user || !pass || !user.includes('@')) { console.warn('MAIL_USER/MAIL_PASS non configurati (placeholder): email non inviata'); return }
@@ -162,6 +232,7 @@ async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
         <li>Digita il codice sul tastierino: il cancello si apre da solo.</li>
         <li>All'uscita ripeti il codice sul tastierino interno.</li>
       </ol>
+      ${pdfScontrino ? '<p style="font-size:13px;color:#6B6B6B">In allegato trovi il documento commerciale (emesso da LAST MILE SRL).</p>' : ''}
       <p style="font-size:13px;color:#6B6B6B">Oltre l'orario il codice non funziona più: prendi un nuovo codice su <a href="${SITE_URL}/parcheggio-smart/" style="color:#0F0F0F">wash-hub.it/parcheggio-smart</a> oppure passa al banco.</p>
       <p style="font-size:12px;color:#6B6B6B;margin-top:24px">WASH HUB Lungomare · Via Anfuso 35, Catania · Questa email è automatica: per assistenza scrivi a info@washhub.it</p>
     </div>
@@ -171,6 +242,7 @@ async function inviaEmailCodice(d: FirebaseFirestore.DocumentData) {
     subject: `Codice parcheggio ${d.codice} · targa ${d.targa}`,
     text: `Il tuo codice parcheggio WASH HUB è ${d.codice}.\nTarga ${d.targa} · ${d.ore} ore · €${d.prezzo}\nValido dal ${fmtIt(d.inizio)} alle ${fmtIt(d.fine)}.\nDigita il codice sul tastierino in entrata e in uscita. Via Anfuso 35, Catania.`,
     html,
+    attachments: pdfScontrino ? [{ filename: `documento-commerciale-${d.targa}.pdf`, content: pdfScontrino, contentType: 'application/pdf' }] : [],
   })
 }
 
@@ -230,7 +302,13 @@ async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) 
   }).catch((e: any) => { if (e?.code !== 6) throw e })  // 6 = ALREADY_EXISTS
   await ref.update({ giornalieroId: gref.id })
   console.log(`✅ parcheggioSmart ${docId} attivo: codice ${codice} targa ${d.targa} ${d.ore}h €${d.prezzo}`)
-  try { await inviaEmailCodice(d); await ref.update({ emailInviataTs: Date.now() }) }
+  // Documento commerciale (solo vendite online: al banco batte la cassa di sede). Errori non bloccano il codice.
+  let pdf: Buffer | null = null
+  try {
+    const sc = await emettiScontrino(ref, d)
+    if (sc?.id) { pdf = await scaricaPdfScontrino(sc.id); if (pdf) await ref.update({ 'scontrino.pdfInviatoTs': Date.now() }) }
+  } catch (e: any) { console.error('scontrino fallito:', e.message); await ref.update({ scontrinoErrore: String(e.message).slice(0, 300) }) }
+  try { await inviaEmailCodice(d, pdf); await ref.update({ emailInviataTs: Date.now() }) }
   catch (e: any) { console.error('email codice fallita:', e.message); await ref.update({ emailErrore: String(e.message).slice(0, 200) }) }
   try { await upsertCliente(db, d) } catch (e: any) { console.warn('CRM upsert:', e.message) }
 }
@@ -263,7 +341,7 @@ const TARGA_RE = /^[A-Z0-9]{5,10}$/
 const TEL_RE = /^\+?[0-9 ]{8,16}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY, MAIL_USER, MAIL_PASS], cors: false }, async (req, res) => {
+export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_KEY, MAIL_USER, MAIL_PASS, OPENAPI_TOKEN], cors: false }, async (req, res) => {
   cors(req, res)
   if (req.method === 'OPTIONS') { res.status(204).send(''); return }
   const db = getFirestore()
@@ -346,6 +424,28 @@ export const parcheggioSmart = onRequest({ region: REGION, secrets: [SUMUP_API_K
       if (q.empty) { res.status(200).send('unknown checkout'); return }   // 200: SumUp non deve ritentare
       const d = q.docs[0]
       if (d.data().stato === 'in_pagamento') await verificaEFinalizza(d.id, checkoutId)
+      res.status(200).send('ok')
+      return
+    }
+
+    // ── POST /scontrino-callback (Openapi: eventi receipt / receipt-error) ──
+    if (req.method === 'POST' && path === '/scontrino-callback') {
+      const b = (req.body || {}) as Record<string, any>
+      const ev = b.data || b
+      const scId = String(ev?.id || '')
+      console.log('Openapi callback', JSON.stringify(b).slice(0, 400))
+      if (!scId) { res.status(200).send('no id'); return }
+      const q = await db.collection('codiciParcheggio').where('scontrino.id', '==', scId).limit(1).get()
+      if (q.empty) { res.status(200).send('unknown receipt'); return }
+      const ref = q.docs[0].ref
+      const d = q.docs[0].data()
+      const upd: Record<string, unknown> = { 'scontrino.stato': ev?.status || null, 'scontrino.numero': ev?.document_number || d.scontrino?.numero || null, 'scontrino.callbackTs': Date.now() }
+      if (ev?.error_message || ev?.error_code) upd.scontrinoErrore = `${ev.error_code || ''} ${ev.error_message || ''}`.trim()
+      await ref.update(upd)
+      if (!d.scontrino?.pdfInviatoTs && !ev?.error_code) {
+        const pdf = await scaricaPdfScontrino(scId)
+        if (pdf) { try { await inviaEmailScontrino({ ...d, scontrino: { ...d.scontrino, numero: upd['scontrino.numero'] } }, pdf); await ref.update({ 'scontrino.pdfInviatoTs': Date.now() }) } catch (e: any) { console.error('email scontrino:', e.message) } }
+      }
       res.status(200).send('ok')
       return
     }
