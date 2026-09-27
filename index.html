@@ -27,7 +27,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260927d';
+    var APP_VERSION = '20260927e';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -124,6 +124,7 @@
             <button class="btn">Oggi</button>
         </div>
         
+        <div id="meteoCard" style="margin-bottom:12px"></div>
         <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
             <div class="kpi g"><div class="kpi-label">Entrate Contanti</div><div class="kpi-val" id="cassaEntCont">€0</div></div>
             <div class="kpi b"><div class="kpi-label">Entrate POS</div><div class="kpi-val" id="cassaEntPos">€0</div></div>

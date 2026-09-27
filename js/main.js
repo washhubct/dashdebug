@@ -18,6 +18,7 @@ import { initPresenze, renderPresenze } from './moduli/presenze.js';
 import { initClienti, caricaClienti, renderClienti } from './moduli/clienti.js';
 import { initCassaAutomatica } from './moduli/cassa-automatica.js';
 import { initCassaStato } from './moduli/cassa-stato.js';
+import { initMeteo } from './moduli/meteo.js';
 import { initServiziAggiuntivi } from './moduli/servizi-aggiuntivi.js';
 import { initMarketing, renderMarketing } from './moduli/marketing.js';
 import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
@@ -39,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPresenze();
     initClienti();
     initCassaStato();
+    initMeteo();
     initMarketing();
     initReferralDash();
     initVouchers();

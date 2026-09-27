@@ -22,6 +22,9 @@ const functions = getFunctions(app, 'europe-west1');
 export const ficCall = (action, payload = {}) =>
     httpsCallable(functions, 'ficApi')({ action, payload }).then(r => r.data);
 
+// Meteo → semaforo giornata (functions/src/meteo.ts)
+export const meteoCall = (data = {}) => httpsCallable(functions, 'meteoApi')(data).then(r => r.data);
+
 // Esportiamo usando i "soprannomi" (aliases) esatti richiesti dai moduli!
 export { 
     auth, 
