@@ -29,7 +29,7 @@ export async function renderMeteo() {
         <span style="font-size:22px">${EMOJI[prossimo.livello] || '⚪'}</span>
         <div><div style="font:700 13px var(--f)">${prossimo.data > oggi ? 'Domani' : 'Oggi'} ${fmtD(prossimo.data)} · ${LABEL[prossimo.livello] || prossimo.livello}</div>
         <div style="font-size:11px;color:var(--tx2)">${esc(prossimo.motivo || '')} · prob. max ${prossimo.probMax ?? '–'}% · nuvole ${prossimo.nuvole ?? '–'}% · max ${prossimo.tmax ?? '–'}°${prossimo.orePioggia?.length ? ` · pioggia alle ${prossimo.orePioggia.map(h => String(h).padStart(2, '0')).join(' ')}` : ''}</div>
-        ${prossimo.consiglio ? `<div style="font:600 12px var(--f);margin-top:3px">👥 Personale consigliato: ${prossimo.consiglio.personale} <span style="font-weight:400;color:var(--tx2)">· attese ~${prossimo.consiglio.attese} auto (${prossimo.consiglio.prenotate} prenotate) · ~${prossimo.consiglio.capacita} auto a persona${prossimo.consiglio.nota ? ` · ${esc(prossimo.consiglio.nota)}` : ''}</span></div>` : ''}</div>
+        ${prossimo.consiglio ? `<div style="font:600 12px var(--f);margin-top:3px">👥 Personale consigliato: ${prossimo.consiglio.personale} <span style="font-weight:400;color:var(--tx2)">· attese ~${prossimo.consiglio.attese} auto (${prossimo.consiglio.prenotate} prenotate) · ~${prossimo.consiglio.capacita} auto a persona${prossimo.consiglio.tappezzerie ? ` · ${prossimo.consiglio.tappezzerie} tappezzerie in lavorazione (+${prossimo.consiglio.caricoTappezzeria} persona)` : ''}${prossimo.consiglio.nota ? ` · ${esc(prossimo.consiglio.nota)}` : ''}</span></div>` : ''}</div>
         <button class="btn" id="meteoToggle" style="margin-left:auto;font-size:10px;padding:3px 10px">${aperto ? 'Nascondi storico' : 'Storico taratura'}</button>
         <span style="font-size:10px;color:var(--tx3)">${prossimo.nFonti ? `mediana di ${prossimo.nFonti} modelli · ` : ''}in taratura · nessun blocco automatico</span></div>` : '';
     const passati = giorni.filter(g => g.data <= oggi);
@@ -40,7 +40,7 @@ export async function renderMeteo() {
             <td>${EMOJI[g.livelloSera || g.livello] || '·'} <span style="font-size:10px;color:var(--tx2)">${g.mm ?? '–'} mm / ${g.ore ?? '–'} h</span></td>
             <td>${g.livelloMattina ? EMOJI[g.livelloMattina] : '·'}</td>
             <td>${r ? `${EMOJI[r.livello] || '·'} <span style="font-size:10px;color:var(--tx2)">${r.mm} mm / ${r.ore} h</span>` : '·'}</td>
-            <td style="font:500 11px var(--mono)">${g.auto ?? '·'}</td>
+            <td style="font:500 11px var(--mono)">${g.auto ?? '·'}${g.tappezzerie?.inLavorazione ? ` <span style="color:var(--tx3)" title="tappezzerie in lavorazione / consegnate">🛋${g.tappezzerie.inLavorazione}</span>` : ''}</td>
             <td style="font:600 11px var(--mono)">${g.incassoLavaggi != null ? fEur(g.incassoLavaggi) : (g.incasso != null ? fEur(g.incasso) : '·')}</td>
             <td style="font:500 11px var(--mono)" title="${esc((g.presenze?.nomi || []).join(', '))}">${g.presenze ? `${g.presenze.dipendenti}${g.consiglioEsito ? ` <span style="color:${g.consiglioEsito.personaleConsigliato < g.consiglioEsito.personaleReale ? 'var(--amb)' : 'var(--tx3)'}" title="consigliati la sera prima">/ ${g.consiglioEsito.personaleConsigliato}</span>` : ''} <span style="color:var(--tx3)">(${fEur(g.presenze.costo)})</span>` : '·'}</td>
             <td style="font:500 11px var(--mono)">${g.incassoPerDipendente != null ? fEur(g.incassoPerDipendente) : '·'}</td><td>${g.storico ? '' : ok}</td></tr>`;

@@ -34,7 +34,7 @@ interface Cfg {
   oraApertura: number; oraChiusura: number
   soglie: { rosso: { mm: number; ore: number }; arancio: { mm: number; ore: number }; giallo: { mm: number; ore: number; nuvole: number; dopoMm: number } }
   telegram: { chatProposta: string; chatDipendenti: string; inviaDipendenti: boolean }
-  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number }
+  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number; oreTappezzeriaGiorno: number; oreGiornata: number }
 }
 const CFG_DEFAULT: Cfg = {
   sedi: {
@@ -45,7 +45,9 @@ const CFG_DEFAULT: Cfg = {
   soglie: { rosso: { mm: 8, ore: 8 }, arancio: { mm: 2, ore: 4 }, giallo: { mm: 0.1, ore: 1, nuvole: 70, dopoMm: 2 } },
   telegram: { chatProposta: '', chatDipendenti: '', inviaDipendenti: false },
   // Consiglio personale: capacità = auto/persona all'80° percentile delle giornate asciutte ("quanto lava una persona quando c'è lavoro")
-  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365 },
+  // Tappezzeria: ogni lavoro in lavorazione occupa una persona ~2.5 h/giorno (stima da tarare: nei dati i giorni con
+  // tappezzerie hanno 1 persona in più; ogni lavoro dura 3 giorni mediani)
+  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8 },
 }
 
 async function getCfg(): Promise<Cfg> {
@@ -201,7 +203,7 @@ function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg, lv: Livel
 
 // ── Quante persone domani? auto attese (storico stesso giorno della settimana × stesso livello meteo, con le
 // prenotazioni già in calendario come minimo) diviso quante auto lava una persona. Impara ogni sera dalla verifica.
-interface Consiglio { personale: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null }
+interface Consiglio { personale: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null; tappezzerie: number; caricoTappezzeria: number }
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0 }
 async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg: Cfg): Promise<Consiglio | null> {
   const db = getFirestore()
@@ -228,10 +230,14 @@ async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg
   const prenSnap = await db.collection('prenotazioni').where('dataPren', '==', data).get()
   const prenotate = prenSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
   attese = Math.max(attese, prenotate)
-  let personale = Math.min(cfg.personale.max, Math.max(cfg.personale.min, Math.ceil(attese / capacita)))
+  // Tappezzerie in lavorazione (status IN nella dash): carico in persone-giorno
+  const tapSnap = await db.collection('tappezzeria').where('status', '==', 'IN').get()
+  const tappezzerie = tapSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
+  const caricoTappezzeria = Math.round(tappezzerie * cfg.personale.oreTappezzeriaGiorno / cfg.personale.oreGiornata * 10) / 10
+  let personale = Math.min(cfg.personale.max, Math.max(cfg.personale.min, Math.ceil(attese / capacita + caricoTappezzeria)))
   let nota: string | null = null
-  if (lv === 'ROSSO') { personale = Math.min(personale, cfg.personale.min); nota = 'valutare chiusura' }
-  return { personale, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota }
+  if (lv === 'ROSSO') { personale = Math.min(personale, Math.max(cfg.personale.min, Math.ceil(caricoTappezzeria))); nota = 'valutare chiusura' + (tappezzerie ? ', le tappezzerie si lavorano al coperto' : '') }
+  return { personale, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota, tappezzerie, caricoTappezzeria }
 }
 
 function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, consiglio: Consiglio | null, precedente?: Livello): string {
@@ -244,7 +250,7 @@ ${lv.motivo}
 ${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
 Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
 Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}${consiglio ? `
-👥 <b>Personale consigliato: ${consiglio.personale}</b> · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
+👥 <b>Personale consigliato: ${consiglio.personale}</b> · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.tappezzerie ? ` · ${consiglio.tappezzerie} tappezzeri${consiglio.tappezzerie === 1 ? 'a' : 'e'} in lavorazione (+${String(consiglio.caricoTappezzeria).replace('.', ',')} persona)` : ''}${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
 }
 
 function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocchi: string[], nFonti: number): string {
@@ -353,6 +359,11 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
         db.collection('prenotazioni').where('dataPren', '==', data).get(),
       ])
       const auto = prenSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
+      const dataIta = data.split('-').reverse().join('/')
+      const tapSnap = await db.collection('tappezzeria').get()
+      const tapDocs = tapSnap.docs.map(d => d.data()).filter(t => (t.sedeId || 'lungomare') === sedeId)
+      const toIso = (ita: string) => { const [g, m, a] = String(ita || '').split('/'); return a ? `${a}-${m}-${g}` : '' }
+      const tappezzerie = { consegnate: tapDocs.filter(t => t.status === 'OUT' && t.dataOut === dataIta).length, inLavorazione: tapDocs.filter(t => toIso(t.dataIn) <= data && (t.status === 'IN' || toIso(t.dataOut) > data)).length }
       const inc = incassoDaPN(pn.docs.map(d => d.data()))
       const presenze = presenzeDaDocs(pres.docs.map(d => d.data()))
       const ref = db.doc(`meteoGiornata/${sedeId}_${data}`)
@@ -360,7 +371,7 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
       await ref.set({
         sedeId, data, reale: { mm: reale.mm, ore: reale.ore, mmGiorno: reale.mmGiorno, nuvole: reale.nuvole, tmax: reale.tmax, livello: lvReale.livello, orePioggia: reale.orePioggia },
         incasso: inc.totale, incassoLavaggi: inc.lavaggi, incassoParcheggio: inc.parcheggio, incassoAltro: inc.altro,
-        auto, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
+        auto, tappezzerie, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
         consiglioEsito: prev?.consiglio ? { personaleConsigliato: prev.consiglio.personale, personaleReale: presenze.dipendenti, autoAttese: prev.consiglio.attese, autoReali: auto } : null,
         presenze, incassoPerDipendente: presenze.dipendenti ? Math.round(inc.totale / presenze.dipendenti * 100) / 100 : null,
         margineLordo: Math.round((inc.totale - presenze.costo) * 100) / 100,
@@ -383,7 +394,7 @@ export const meteoApi = onCall({ region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }
   if (action === 'ultimi') {
     const da = giornoRome(-Math.min(60, Number(giorni) || 14))
     const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).get()   // date filtrate in memoria: niente indice composito
-    return { giorni: snap.docs.filter(d => d.data().data >= da).sort((a, b) => String(b.data().data).localeCompare(String(a.data().data))).map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
+    return { giorni: snap.docs.filter(d => d.data().data >= da).sort((a, b) => String(b.data().data).localeCompare(String(a.data().data))).map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, tappezzerie: x.tappezzerie || null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
   }
   if (action === 'config') return await getCfg()
   if (action === 'testOra') {   // admin: forza la previsione di stasera adesso (taratura)
