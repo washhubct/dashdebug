@@ -206,8 +206,10 @@ const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y)
 async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg: Cfg): Promise<Consiglio | null> {
   const db = getFirestore()
   const da = new Date(data + 'T12:00:00Z'); da.setUTCDate(da.getUTCDate() - cfg.personale.giorniStorico)
-  const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).where('data', '>=', da.toISOString().slice(0, 10)).where('data', '<', data).get()
-  const rows = snap.docs.map(d => d.data()).filter(x => x.reale && ((x.presenze?.dipendenti > 0) || x.incasso > 0))
+  // Solo filtro su sedeId (niente indice composito): le date si filtrano in memoria, sono poche centinaia di doc per sede
+  const daIso = da.toISOString().slice(0, 10)
+  const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).get()
+  const rows = snap.docs.map(d => d.data()).filter(x => x.data >= daIso && x.data < data && x.reale && ((x.presenze?.dipendenti > 0) || x.incasso > 0))
   const conAuto = rows.filter(x => Number(x.auto) > 0)
   if (conAuto.length < 30) return null   // sede senza storico prenotazioni (Paesi Etnei self-service)
   const wd = new Date(data + 'T12:00:00Z').getUTCDay()
@@ -380,8 +382,8 @@ export const meteoApi = onCall({ region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }
   const { action, sedeId = 'lungomare', giorni = 14 } = (request.data || {}) as { action: string; sedeId?: string; giorni?: number }
   if (action === 'ultimi') {
     const da = giornoRome(-Math.min(60, Number(giorni) || 14))
-    const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).where('data', '>=', da).orderBy('data', 'desc').get()
-    return { giorni: snap.docs.map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
+    const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).get()   // date filtrate in memoria: niente indice composito
+    return { giorni: snap.docs.filter(d => d.data().data >= da).sort((a, b) => String(b.data().data).localeCompare(String(a.data().data))).map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
   }
   if (action === 'config') return await getCfg()
   if (action === 'testOra') {   // admin: forza la previsione di stasera adesso (taratura)
