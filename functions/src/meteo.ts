@@ -34,6 +34,7 @@ interface Cfg {
   oraApertura: number; oraChiusura: number
   soglie: { rosso: { mm: number; ore: number }; arancio: { mm: number; ore: number }; giallo: { mm: number; ore: number; nuvole: number; dopoMm: number } }
   telegram: { chatProposta: string; chatDipendenti: string; inviaDipendenti: boolean }
+  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number }
 }
 const CFG_DEFAULT: Cfg = {
   sedi: {
@@ -43,6 +44,8 @@ const CFG_DEFAULT: Cfg = {
   oraApertura: 7, oraChiusura: 19,
   soglie: { rosso: { mm: 8, ore: 8 }, arancio: { mm: 2, ore: 4 }, giallo: { mm: 0.1, ore: 1, nuvole: 70, dopoMm: 2 } },
   telegram: { chatProposta: '', chatDipendenti: '', inviaDipendenti: false },
+  // Consiglio personale: capacità = auto/persona all'80° percentile delle giornate asciutte ("quanto lava una persona quando c'è lavoro")
+  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365 },
 }
 
 async function getCfg(): Promise<Cfg> {
@@ -51,7 +54,7 @@ async function getCfg(): Promise<Cfg> {
   const snap = await ref.get()
   if (!snap.exists) { await ref.set(CFG_DEFAULT); return CFG_DEFAULT }
   const d = snap.data() as Partial<Cfg>
-  return { ...CFG_DEFAULT, ...d, sedi: { ...CFG_DEFAULT.sedi, ...(d.sedi || {}) }, soglie: { ...CFG_DEFAULT.soglie, ...(d.soglie || {}) }, telegram: { ...CFG_DEFAULT.telegram, ...(d.telegram || {}) } }
+  return { ...CFG_DEFAULT, ...d, sedi: { ...CFG_DEFAULT.sedi, ...(d.sedi || {}) }, soglie: { ...CFG_DEFAULT.soglie, ...(d.soglie || {}) }, telegram: { ...CFG_DEFAULT.telegram, ...(d.telegram || {}) }, personale: { ...CFG_DEFAULT.personale, ...(d.personale || {}) } }
 }
 
 const giornoRome = (offset: number) => new Date(Date.now() + offset * 86400000).toLocaleDateString('en-CA', { timeZone: TZ })
@@ -196,7 +199,40 @@ function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg, lv: Livel
   return diverse.length ? 'dissenso: ' + diverse.map(k => { const f = fonti[k] as Sintesi; return `${FONTI[k]} ${EMOJI[livello(f, cfg).livello]} ${f.mm}mm/${f.ore}h` }).join(', ') : 'tutte d\'accordo'
 }
 
-function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, precedente?: Livello): string {
+// ── Quante persone domani? auto attese (storico stesso giorno della settimana × stesso livello meteo, con le
+// prenotazioni già in calendario come minimo) diviso quante auto lava una persona. Impara ogni sera dalla verifica.
+interface Consiglio { personale: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null }
+const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0 }
+async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg: Cfg): Promise<Consiglio | null> {
+  const db = getFirestore()
+  const da = new Date(data + 'T12:00:00Z'); da.setUTCDate(da.getUTCDate() - cfg.personale.giorniStorico)
+  const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).where('data', '>=', da.toISOString().slice(0, 10)).where('data', '<', data).get()
+  const rows = snap.docs.map(d => d.data()).filter(x => x.reale && ((x.presenze?.dipendenti > 0) || x.incasso > 0))
+  const conAuto = rows.filter(x => Number(x.auto) > 0)
+  if (conAuto.length < 30) return null   // sede senza storico prenotazioni (Paesi Etnei self-service)
+  const wd = new Date(data + 'T12:00:00Z').getUTCDay()
+  const wdOf = (x: any) => new Date(x.data + 'T12:00:00Z').getUTCDay()
+  const verdi = conAuto.filter(x => x.reale.livello === 'VERDE' && x.presenze?.dipendenti > 0)
+  const capacita = Math.max(3, pct(verdi.map(x => Number(x.auto) / x.presenze.dipendenti), cfg.personale.capacitaPercentile) || 6)
+  const stessoGiorno = conAuto.filter(x => x.reale.livello === lv && wdOf(x) === wd).map(x => Number(x.auto))
+  let attese: number, base: string
+  if (stessoGiorno.length >= 6) { attese = pct(stessoGiorno, 0.5); base = `${stessoGiorno.length} ${GIORNI[wd]} ${LABEL[lv].toLowerCase()}` }
+  else {
+    const livelloTutti = conAuto.filter(x => x.reale.livello === lv).map(x => Number(x.auto))
+    const verdiWd = verdi.filter(x => wdOf(x) === wd).map(x => Number(x.auto)), verdiAll = verdi.map(x => Number(x.auto))
+    const fattoreWd = verdiWd.length >= 5 && pct(verdiAll, 0.5) ? pct(verdiWd, 0.5) / pct(verdiAll, 0.5) : 1
+    attese = Math.round((pct(livelloTutti, 0.5) || 0) * fattoreWd); base = `${livelloTutti.length} giorni ${LABEL[lv].toLowerCase()} × ${GIORNI[wd]}`
+  }
+  const prenSnap = await db.collection('prenotazioni').where('dataPren', '==', data).get()
+  const prenotate = prenSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
+  attese = Math.max(attese, prenotate)
+  let personale = Math.min(cfg.personale.max, Math.max(cfg.personale.min, Math.ceil(attese / capacita)))
+  let nota: string | null = null
+  if (lv === 'ROSSO') { personale = Math.min(personale, cfg.personale.min); nota = 'valutare chiusura' }
+  return { personale, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota }
+}
+
+function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, consiglio: Consiglio | null, precedente?: Livello): string {
   const ore = s.orePioggia.length ? s.orePioggia.map(h => String(h).padStart(2, '0')).join(' ') : 'nessuna'
   const n = Object.keys(fonti).length, accordo = Object.values(fonti).filter(f => livello(f as Sintesi, cfg).livello === lv.livello).length
   const incerto = s.mm >= 0.1 && s.probMax < 50 ? '\n⚠️ probabilità bassa: previsione incerta' : ''
@@ -205,7 +241,8 @@ function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo
 ${lv.motivo}
 ${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
 Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
-Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}`
+Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}${consiglio ? `
+👥 <b>Personale consigliato: ${consiglio.personale}</b> · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
 }
 
 function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocchi: string[], nFonti: number): string {
@@ -252,10 +289,13 @@ async function previsione(tipo: 'sera' | 'mattina') {
         aggiornatoTs: Date.now(), ...(tipo === 'sera' || !prev ? { livelloSera: lv.livello, seraTs: Date.now() } : { livelloMattina: lv.livello, mattinaTs: Date.now() }),
         storia: FieldValue.arrayUnion({ tipo, ts: Date.now(), livello: lv.livello, mm: s.mm, ore: s.ore, probMax: s.probMax }),
       }, { merge: true })
-      console.log(`${tipo} ${sedeId} ${data}: ${lv.livello} — ${lv.motivo} (${Object.keys(fonti).length} fonti)`)
+      let consiglio: Consiglio | null = null
+      try { consiglio = await consiglioPersonale(sedeId, data, lv.livello, cfg) } catch (e: any) { console.warn('consiglio personale:', e.message) }
+      if (consiglio) await ref.set({ consiglio: { ...consiglio, tipo, ts: Date.now() } }, { merge: true })
+      console.log(`${tipo} ${sedeId} ${data}: ${lv.livello} — ${lv.motivo} (${Object.keys(fonti).length} fonti)${consiglio ? ` · personale ${consiglio.personale} per ~${consiglio.attese} auto` : ''}`)
       if (!precedente || precedente !== lv.livello) cambiato = true
       nFonti = Math.max(nFonti, Object.keys(fonti).length)
-      blocchi.push(bloccoSede(sede.nome, s, lv, cfg, fonti, tipo === 'mattina' ? precedente : undefined))
+      blocchi.push(bloccoSede(sede.nome, s, lv, cfg, fonti, consiglio, tipo === 'mattina' ? precedente : undefined))
       refs.push(ref)
     } catch (e: any) { console.error(`meteo ${tipo} ${sedeId}:`, e.message) }
   }
@@ -305,10 +345,12 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
     try {
       const reale = await realeOpenMeteo(sede, cfg, data)
       const lvReale = livello(reale, cfg)
-      const [pn, pres] = await Promise.all([
+      const [pn, pres, prenSnap] = await Promise.all([
         db.collection('primaNota').where('sedeId', '==', sedeId).where('dataISO', '==', data).get(),
         db.collection('presenzeDipendenti').where('sedeId', '==', sedeId).where('dataISO', '==', data).get(),
+        db.collection('prenotazioni').where('dataPren', '==', data).get(),
       ])
+      const auto = prenSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
       const inc = incassoDaPN(pn.docs.map(d => d.data()))
       const presenze = presenzeDaDocs(pres.docs.map(d => d.data()))
       const ref = db.doc(`meteoGiornata/${sedeId}_${data}`)
@@ -316,6 +358,8 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
       await ref.set({
         sedeId, data, reale: { mm: reale.mm, ore: reale.ore, mmGiorno: reale.mmGiorno, nuvole: reale.nuvole, tmax: reale.tmax, livello: lvReale.livello, orePioggia: reale.orePioggia },
         incasso: inc.totale, incassoLavaggi: inc.lavaggi, incassoParcheggio: inc.parcheggio, incassoAltro: inc.altro,
+        auto, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
+        consiglioEsito: prev?.consiglio ? { personaleConsigliato: prev.consiglio.personale, personaleReale: presenze.dipendenti, autoAttese: prev.consiglio.attese, autoReali: auto } : null,
         presenze, incassoPerDipendente: presenze.dipendenti ? Math.round(inc.totale / presenze.dipendenti * 100) / 100 : null,
         margineLordo: Math.round((inc.totale - presenze.costo) * 100) / 100,
         verificaTs: Date.now(),
@@ -324,7 +368,7 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
         // Affidabilità per fonte (previsione della sera prima vs reale)
         fontiEsito: Object.fromEntries(Object.entries((prev?.fontiSera || {}) as Record<string, any>).map(([k, f]) => [k, { erroreMm: r1(Math.abs(Number(f.mm) - reale.mm)), erroreOre: Math.abs(Number(f.ore) - reale.ore), livelloOk: f.livello === lvReale.livello }])),
       }, { merge: true })
-      console.log(`verifica ${sedeId} ${data}: previsto ${prev?.livelloSera || '-'} reale ${lvReale.livello} incasso €${inc.totale} dipendenti ${presenze.dipendenti} (costo €${presenze.costo})`)
+      console.log(`verifica ${sedeId} ${data}: previsto ${prev?.livelloSera || '-'} reale ${lvReale.livello} auto ${auto} incasso €${inc.totale} dipendenti ${presenze.dipendenti} (costo €${presenze.costo})${prev?.consiglio ? ` consigliati ${prev.consiglio.personale}` : ''}`)
     } catch (e: any) { console.error(`meteo verifica ${sedeId}:`, e.message) }
   }
 })
@@ -337,7 +381,7 @@ export const meteoApi = onCall({ region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }
   if (action === 'ultimi') {
     const da = giornoRome(-Math.min(60, Number(giorni) || 14))
     const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).where('data', '>=', da).orderBy('data', 'desc').get()
-    return { giorni: snap.docs.map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
+    return { giorni: snap.docs.map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
   }
   if (action === 'config') return await getCfg()
   if (action === 'testOra') {   // admin: forza la previsione di stasera adesso (taratura)

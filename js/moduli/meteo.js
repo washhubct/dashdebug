@@ -28,7 +28,8 @@ export async function renderMeteo() {
     const head = prossimo ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:22px">${EMOJI[prossimo.livello] || '⚪'}</span>
         <div><div style="font:700 13px var(--f)">${prossimo.data > oggi ? 'Domani' : 'Oggi'} ${fmtD(prossimo.data)} · ${LABEL[prossimo.livello] || prossimo.livello}</div>
-        <div style="font-size:11px;color:var(--tx2)">${esc(prossimo.motivo || '')} · prob. max ${prossimo.probMax ?? '–'}% · nuvole ${prossimo.nuvole ?? '–'}% · max ${prossimo.tmax ?? '–'}°${prossimo.orePioggia?.length ? ` · pioggia alle ${prossimo.orePioggia.map(h => String(h).padStart(2, '0')).join(' ')}` : ''}</div></div>
+        <div style="font-size:11px;color:var(--tx2)">${esc(prossimo.motivo || '')} · prob. max ${prossimo.probMax ?? '–'}% · nuvole ${prossimo.nuvole ?? '–'}% · max ${prossimo.tmax ?? '–'}°${prossimo.orePioggia?.length ? ` · pioggia alle ${prossimo.orePioggia.map(h => String(h).padStart(2, '0')).join(' ')}` : ''}</div>
+        ${prossimo.consiglio ? `<div style="font:600 12px var(--f);margin-top:3px">👥 Personale consigliato: ${prossimo.consiglio.personale} <span style="font-weight:400;color:var(--tx2)">· attese ~${prossimo.consiglio.attese} auto (${prossimo.consiglio.prenotate} prenotate) · ~${prossimo.consiglio.capacita} auto a persona${prossimo.consiglio.nota ? ` · ${esc(prossimo.consiglio.nota)}` : ''}</span></div>` : ''}</div>
         <button class="btn" id="meteoToggle" style="margin-left:auto;font-size:10px;padding:3px 10px">${aperto ? 'Nascondi storico' : 'Storico taratura'}</button>
         <span style="font-size:10px;color:var(--tx3)">${prossimo.nFonti ? `mediana di ${prossimo.nFonti} modelli · ` : ''}in taratura · nessun blocco automatico</span></div>` : '';
     const passati = giorni.filter(g => g.data <= oggi);
@@ -39,11 +40,12 @@ export async function renderMeteo() {
             <td>${EMOJI[g.livelloSera || g.livello] || '·'} <span style="font-size:10px;color:var(--tx2)">${g.mm ?? '–'} mm / ${g.ore ?? '–'} h</span></td>
             <td>${g.livelloMattina ? EMOJI[g.livelloMattina] : '·'}</td>
             <td>${r ? `${EMOJI[r.livello] || '·'} <span style="font-size:10px;color:var(--tx2)">${r.mm} mm / ${r.ore} h</span>` : '·'}</td>
-            <td style="font:600 11px var(--mono)">${g.incasso != null ? fEur(g.incasso) : '·'}</td>
-            <td style="font:500 11px var(--mono)" title="${esc((g.presenze?.nomi || []).join(', '))}">${g.presenze ? `${g.presenze.dipendenti} <span style="color:var(--tx3)">(${fEur(g.presenze.costo)})</span>` : '·'}</td>
+            <td style="font:500 11px var(--mono)">${g.auto ?? '·'}</td>
+            <td style="font:600 11px var(--mono)">${g.incassoLavaggi != null ? fEur(g.incassoLavaggi) : (g.incasso != null ? fEur(g.incasso) : '·')}</td>
+            <td style="font:500 11px var(--mono)" title="${esc((g.presenze?.nomi || []).join(', '))}">${g.presenze ? `${g.presenze.dipendenti}${g.consiglioEsito ? ` <span style="color:${g.consiglioEsito.personaleConsigliato < g.consiglioEsito.personaleReale ? 'var(--amb)' : 'var(--tx3)'}" title="consigliati la sera prima">/ ${g.consiglioEsito.personaleConsigliato}</span>` : ''} <span style="color:var(--tx3)">(${fEur(g.presenze.costo)})</span>` : '·'}</td>
             <td style="font:500 11px var(--mono)">${g.incassoPerDipendente != null ? fEur(g.incassoPerDipendente) : '·'}</td><td>${g.storico ? '' : ok}</td></tr>`;
     }).join('');
-    const storico = aperto ? `<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Giorno</th><th>Previsto (sera)</th><th>Mattina</th><th>Reale</th><th>Incasso</th><th>Dipendenti (costo)</th><th>€/dip.</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="8" class="empty">Ancora nessuna giornata verificata</td></tr>'}</tbody></table>
+    const storico = aperto ? `<div class="tbl-wrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Giorno</th><th>Previsto (sera)</th><th>Mattina</th><th>Reale</th><th>Auto</th><th>Lavaggi</th><th>Dip. reali / consigliati (costo)</th><th>€/dip.</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="9" class="empty">Ancora nessuna giornata verificata</td></tr>'}</tbody></table>
         <div style="font-size:10px;color:var(--tx3);margin-top:4px">Soglie: 🔴 ≥8 mm o ≥8 h · 🟠 ≥2 mm o ≥4 h · 🟡 pioggia debole, nuvole ≥70% o dopodomani ≥2 mm. Dati storici Lungomare: con 2–8 mm l'incasso scende al 28%, sopra 8 mm al 15%.</div></div>` : '';
     // Affidabilità per fonte: quante volte il livello previsto la sera coincide con il reale
     const acc = {};

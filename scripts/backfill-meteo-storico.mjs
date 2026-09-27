@@ -36,6 +36,8 @@ function presenzeDaDocs(docs) {
 const pn = {}, pres = {}
 ;(await db.collection('primaNota').where('dataISO', '>=', DA).where('dataISO', '<=', A).get()).forEach(d => { const x = d.data(); const k = `${x.sedeId || 'lungomare'}|${x.dataISO}`; (pn[k] ||= []).push(x) })
 ;(await db.collection('presenzeDipendenti').where('dataISO', '>=', DA).where('dataISO', '<=', A).get()).forEach(d => { const x = d.data(); const k = `${x.sedeId || 'lungomare'}|${x.dataISO}`; (pres[k] ||= []).push(x) })
+const auto = {}
+;(await db.collection('prenotazioni').where('dataPren', '>=', DA).where('dataPren', '<=', A).get()).forEach(d => { const x = d.data(); const k = `${x.sedeId || 'lungomare'}|${x.dataPren}`; auto[k] = (auto[k] || 0) + 1 })
 const esistenti = new Set(); (await db.collection('meteoGiornata').get()).forEach(d => { if (d.data().reale) esistenti.add(d.id) })
 
 let scritti = 0
@@ -56,7 +58,7 @@ for (const [sedeId, sede] of Object.entries(cfg.sedi)) {
     batch.set(db.doc(`meteoGiornata/${sedeId}_${data}`), {
       sedeId, data, storico: true, reale: { ...s, livello: livello(s) },
       incasso: inc.totale, incassoLavaggi: inc.lavaggi, incassoParcheggio: inc.parcheggio, incassoAltro: inc.altro,
-      presenze: pz, incassoPerDipendente: pz.dipendenti ? Math.round(inc.totale / pz.dipendenti * 100) / 100 : null,
+      auto: auto[`${sedeId}|${data}`] || 0, presenze: pz, incassoPerDipendente: pz.dipendenti ? Math.round(inc.totale / pz.dipendenti * 100) / 100 : null,
       margineLordo: Math.round((inc.totale - pz.costo) * 100) / 100, esito: 'nessuna_previsione', verificaTs: Date.now(),
     }, { merge: true })
     n++; scritti++
