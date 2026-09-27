@@ -190,8 +190,10 @@ function livello(s: Sintesi, cfg: Cfg): { livello: Livello; motivo: string } {
 
 const WC: Record<number, string> = { 0: 'sereno', 1: 'poco nuvoloso', 2: 'nuvoloso', 3: 'coperto', 45: 'nebbia', 48: 'nebbia', 51: 'pioviggine', 53: 'pioviggine', 55: 'pioviggine', 61: 'pioggia debole', 63: 'pioggia', 65: 'pioggia forte', 80: 'rovesci', 81: 'rovesci', 82: 'rovesci forti', 95: 'temporale', 96: 'temporale', 99: 'temporale' }
 
-function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg): string {
-  return (Object.keys(FONTI) as FonteId[]).filter(k => fonti[k]).map(k => { const f = fonti[k] as Sintesi; return `${EMOJI[livello(f, cfg).livello]} ${FONTI[k]} ${f.mm}mm/${f.ore}h` }).join(' · ')
+// Solo le fonti che NON sono d'accordo con il semaforo (Guido: troppi bollini)
+function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg, lv: Livello): string {
+  const diverse = (Object.keys(FONTI) as FonteId[]).filter(k => fonti[k] && livello(fonti[k] as Sintesi, cfg).livello !== lv)
+  return diverse.length ? 'dissenso: ' + diverse.map(k => { const f = fonti[k] as Sintesi; return `${FONTI[k]} ${EMOJI[livello(f, cfg).livello]} ${f.mm}mm/${f.ore}h` }).join(', ') : 'tutte d\'accordo'
 }
 
 function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, precedente?: Livello): string {
@@ -203,7 +205,7 @@ function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo
 ${lv.motivo}
 ${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
 Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
-Fonti (${accordo}/${n} d'accordo): ${rigaFonti(fonti, cfg)}`
+Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}`
 }
 
 function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocchi: string[], nFonti: number): string {
