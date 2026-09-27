@@ -38,7 +38,7 @@ interface Cfg {
 const CFG_DEFAULT: Cfg = {
   sedi: {
     lungomare: { nome: 'Lungomare', lat: 37.5275, lon: 15.1145, attivo: true },
-    'paesi-etnei': { nome: 'Paesi Etnei', lat: 37.57, lon: 15.08, attivo: false },   // coordinate da confermare (indirizzo sede)
+    'paesi-etnei': { nome: 'Paesi Etnei', lat: 37.5665, lon: 15.1002, attivo: true },   // Via Galileo Galilei 28 (Lukoil), San Giovanni La Punta
   },
   oraApertura: 7, oraChiusura: 19,
   soglie: { rosso: { mm: 8, ore: 8 }, arancio: { mm: 2, ore: 4 }, giallo: { mm: 0.1, ore: 1, nuvole: 70, dopoMm: 2 } },
