@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { nascondiContante } from './contanti-passati.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
@@ -76,7 +77,7 @@ export function renderGiornalieri() {
 
     let inSosta = 0, incContanti = 0, incPos = 0;
     
-    const filtrati = state.giornDB.filter(g => g.dataIn === dateStr || g.status === 'IN');
+    const filtrati = state.giornDB.filter(g => (g.dataIn === dateStr || g.status === 'IN') && !(g.status === 'OUT' && nascondiContante(g.pagamento, g.dataOut)));
     
     if (!filtrati.length) { 
         tb.innerHTML = '<tr><td colspan="8" class="empty">Nessun parcheggio registrato</td></tr>'; 

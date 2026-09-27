@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
+import { nascondiContante, toISO } from './contanti-passati.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity, pivaValida } from '../utils.js';
 import { mostraEsitoFattura } from './fic-ui.js';
@@ -102,7 +103,8 @@ export function renderPren() {
 
     PREN_SLOTS.forEach(slot => {
         const isPausa = slot === '13:30';
-        const entries = dayData.filter(e => e.orario === slot);
+        // Contanti dei giorni conclusi: nascosti (vedi contanti-passati.js)
+        const entries = dayData.filter(e => e.orario === slot && !(e.saldato === 'SI' && nascondiContante(e.saldo, date)));
 
         if (isPausa && entries.length === 0) {
             html += `<tr style="background:rgba(240,165,0,.05)"><td style="font:600 11px var(--mono);color:var(--amb)">${slot}</td><td colspan="7" style="color:var(--amb);font-size:12px;font-style:italic">🍽️ Pausa pranzo (13:30 - 14:30)</td></tr>`;
@@ -832,7 +834,7 @@ export function renderTap() {
     });
 
     // Completate nel giorno selezionato
-    const outData = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === selDataIta);
+    const outData = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === selDataIta && !nascondiContante(t.pagamento, toISO(t.dataOut)));
 
     let html = '';
     if (inLav.length === 0) {

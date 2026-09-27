@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { nascondiContante } from './contanti-passati.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
@@ -37,7 +38,7 @@ export function renderIncassiManuali() {
     if (!tb) return;
 
     const lista = (state.incassiManualiDB || [])
-        .filter(i => i.dataISO === dStr)
+        .filter(i => i.dataISO === dStr && !nascondiContante(i.metodo, i.dataISO))
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     if (lista.length === 0) {

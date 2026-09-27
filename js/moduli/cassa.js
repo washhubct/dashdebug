@@ -1,4 +1,5 @@
 import { db, fsCollection, fsAddDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { giornoPassato } from './contanti-passati.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
@@ -45,6 +46,8 @@ export function renderCassa() {
     let eC = 0, eP = 0, eB = 0;
     let cLav = 0, cTap = 0, cParOre = 0, cParAbb = 0;
     let sospGiorno = 0;
+    // Giorno concluso: i contanti non si mostrano (restano in Prima Nota e nell'archivio serale)
+    const passato = giornoPassato(dStr);
     
     // 1. Prenotazioni (Lavaggi)
     let prenAutoEntries = []; // per render dettaglio entrate cassa auto
@@ -52,6 +55,7 @@ export function renderCassa() {
         if(p.saldo === 'SOSPESO') {
             sospGiorno += pNum(p.prezzo);
         } else if(p.saldato === 'SI') {
+            if (passato && p.saldo === 'CONTANTI') return;
             let imp = pNum(p.prezzo);
             if(p.saldo === 'CONTANTI') eC += imp;
             else if(p.saldo === 'POS') eP += imp;
@@ -66,6 +70,7 @@ export function renderCassa() {
         if(t.status === 'OUT' && t.dataOut === dIta) {
             let imp = pNum(t.prezzo);
             let mod = (t.pagamento || '').toUpperCase();
+            if (passato && mod === 'CONTANTI') return;
             if(mod === 'SOSPESO' || mod === 'FATTURATO') {
                 sospGiorno += imp;
             } else {
@@ -80,6 +85,7 @@ export function renderCassa() {
     // 3. Giornalieri (Parcheggio Ore)
     state.giornDB.forEach(g => {
         if(g.status === 'OUT' && g.dataOut === dStr) {
+            if (passato && g.pagamento === 'CONTANTI') return;
             let imp = pNum(g.prezzoFinale);
             if(g.pagamento === 'CONTANTI') eC += imp;
             else if(g.pagamento === 'POS') eP += imp;
@@ -95,6 +101,7 @@ export function renderCassa() {
         if((r.dataISO || '') !== dStr && String(r.DATA || '') !== dIta) return;
         let imp = pNum(r.ENTRATA || r.Entrata || 0);
         let mod = (r["MODALITA'"] || r.Modalita || '').toUpperCase();
+        if (passato && mod === 'CONTANTI') return;
         if(mod === 'CONTANTI') eC += imp;
         else if(mod === 'POS') eP += imp;
         else if(mod === 'BONIFICO') eB += imp;
@@ -106,6 +113,7 @@ export function renderCassa() {
         if(s._pagato && s._dataPag === dIta) {
             let imp = pNum(s.importo);
             let mod = (s._modPag || '').toUpperCase();
+            if (passato && mod === 'CONTANTI') return;
             if(mod === 'CONTANTI') eC += imp;
             else if(mod === 'POS') eP += imp;
             else if(mod === 'BONIFICO' || mod === 'FATTURA') eB += imp;
@@ -119,6 +127,7 @@ export function renderCassa() {
         if(i.dataISO !== dStr) return;
         const imp = pNum(i.importo);
         const mod = (i.metodo || '').toUpperCase();
+        if (passato && mod === 'CONTANTI') return;
         if(mod === 'CONTANTI') eC += imp;
         else if(mod === 'POS') eP += imp;
         else if(mod === 'BONIFICO') eB += imp;
@@ -141,7 +150,7 @@ export function renderCassa() {
         });
     }
 
-    if(document.getElementById('cassaEntCont')) document.getElementById('cassaEntCont').textContent = fEur(eC);
+    if(document.getElementById('cassaEntCont')) document.getElementById('cassaEntCont').textContent = passato ? '—' : fEur(eC);
     if(document.getElementById('cassaEntPos')) document.getElementById('cassaEntPos').textContent = fEur(eP);
     if(document.getElementById('cassaSospGiorno')) document.getElementById('cassaSospGiorno').textContent = fEur(sospGiorno);
     if(document.getElementById('cassaCatLav')) document.getElementById('cassaCatLav').textContent = fEur(cLav);
@@ -149,7 +158,7 @@ export function renderCassa() {
     if(document.getElementById('cassaCatPar')) document.getElementById('cassaCatPar').textContent = fEur(cParAbb + cParOre);
     if(document.getElementById('cassaCatParSub')) document.getElementById('cassaCatParSub').textContent = `Abb. ${fEur(cParAbb)} · Ore ${fEur(cParOre)}`;
     if(document.getElementById('uscitaTb')) document.getElementById('uscitaTb').innerHTML = uHtml;
-    if(document.getElementById('cassaNetta')) document.getElementById('cassaNetta').textContent = fEur(eC - uC);
+    if(document.getElementById('cassaNetta')) document.getElementById('cassaNetta').textContent = passato ? '—' : fEur(eC - uC);
 
     // Tag visivo pagamenti via cassa automatica (non altera i totali sopra)
     renderCassaAutoEntries(prenAutoEntries);
