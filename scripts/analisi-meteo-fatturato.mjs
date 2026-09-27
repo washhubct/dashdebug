@@ -14,15 +14,21 @@ const csv = ['sede;data;giorno;livello_reale;mm_apertura;ore_pioggia;mm_24h;nuvo
 const dir = join(homedir(), 'Archivio-WashHub', 'analisi'); mkdirSync(dir, { recursive: true })
 writeFileSync(join(dir, 'meteo-fatturato.csv'), csv)
 console.log('CSV:', join(dir, 'meteo-fatturato.csv'), rows.length, 'righe')
-// riepilogo per sede e livello (solo giorni con incasso > 0 o dipendenti > 0)
+// Riepilogo per sede e livello: statistiche PER GIORNATA coerenti (stesse giornate per tutte le colonne),
+// solo giornate lavorate (dipendenti>0 o incasso>0), incasso SOLO lavaggi (abbonamenti e sospesi saldati non dipendono dal meteo),
+// auto lavate = prenotazioni del giorno. Margine = lavaggi − costo personale.
 const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0 }
+const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0
+const pren = await admin.firestore().collection('prenotazioni').where('dataPren', '>=', rows[0]?.data || '2025-08-01').get()
+const auto = {}; pren.forEach(d => { const p = d.data(); const k = `${p.sedeId || 'lungomare'}|${p.dataPren}`; auto[k] = (auto[k] || 0) + 1 })
 for (const sede of [...new Set(rows.map(r => r.sedeId))]) {
-  console.log(`\n== ${sede} ==`)
+  const aperti = rows.filter(r => r.sedeId === sede && ((r.presenze?.dipendenti > 0) || r.incasso > 0))
+  console.log(`\n== ${sede} — ${aperti.length} giornate lavorate (mediane per giornata) ==`)
+  console.log('livello    n  auto/g  lavaggi€  dip  costo€  margine€ | media margine | giorni in perdita')
   for (const lv of ['VERDE', 'GIALLO', 'ARANCIO', 'ROSSO']) {
-    const g = rows.filter(r => r.sedeId === sede && r.reale.livello === lv && (r.incasso > 0 || r.presenze?.dipendenti > 0))
+    const g = aperti.filter(r => r.reale.livello === lv).map(r => ({ auto: auto[`${sede}|${r.data}`] || 0, lav: r.incassoLavaggi || 0, dip: r.presenze?.dipendenti || 0, costo: r.presenze?.costo || 0, m: (r.incassoLavaggi || 0) - (r.presenze?.costo || 0) }))
     if (!g.length) continue
-    const conPres = g.filter(r => r.presenze?.dipendenti > 0)
-    console.log(`${lv.padEnd(8)} n=${String(g.length).padStart(3)}  incasso mediano €${med(g.map(r => r.incasso)).toFixed(0).padStart(5)}  dipendenti mediani ${med(conPres.map(r => r.presenze.dipendenti))}  €/dip. mediano €${med(conPres.filter(r => r.incassoPerDipendente != null).map(r => r.incassoPerDipendente)).toFixed(0)}  margine mediano €${med(conPres.map(r => r.margineLordo)).toFixed(0)}  giorni a 0€: ${g.filter(r => !r.incasso).length}`)
+    console.log(`${lv.padEnd(8)} ${String(g.length).padStart(4)}  ${String(med(g.map(x => x.auto))).padStart(6)}  ${med(g.map(x => x.lav)).toFixed(0).padStart(8)}  ${String(med(g.map(x => x.dip))).padStart(3)}  ${med(g.map(x => x.costo)).toFixed(0).padStart(6)}  ${med(g.map(x => x.m)).toFixed(0).padStart(8)} | ${mean(g.map(x => x.m)).toFixed(0).padStart(6)} | ${g.filter(x => x.m < 0).length}/${g.length}`)
   }
 }
 process.exit(0)
