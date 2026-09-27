@@ -194,18 +194,24 @@ function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg): string {
   return (Object.keys(FONTI) as FonteId[]).filter(k => fonti[k]).map(k => { const f = fonti[k] as Sintesi; return `${EMOJI[livello(f, cfg).livello]} ${FONTI[k]} ${f.mm}mm/${f.ore}h` }).join(' · ')
 }
 
-function messaggio(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, tipo: 'sera' | 'mattina', cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, precedente?: Livello): string {
+function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, precedente?: Livello): string {
   const ore = s.orePioggia.length ? s.orePioggia.map(h => String(h).padStart(2, '0')).join(' ') : 'nessuna'
   const n = Object.keys(fonti).length, accordo = Object.values(fonti).filter(f => livello(f as Sintesi, cfg).livello === lv.livello).length
   const incerto = s.mm >= 0.1 && s.probMax < 50 ? '\n⚠️ probabilità bassa: previsione incerta' : ''
-  const cambio = precedente && precedente !== lv.livello ? `\n↪️ ieri sera era ${EMOJI[precedente]} ${LABEL[precedente]}` : ''
-  return `${EMOJI[lv.livello]} <b>${tipo === 'sera' ? 'DOMANI' : 'OGGI'} ${fmtData(s.data)} · ${sedeNome} — ${LABEL[lv.livello]}</b>${cambio}
+  const cambio = precedente && precedente !== lv.livello ? ` (ieri sera ${EMOJI[precedente]})` : ''
+  return `${EMOJI[lv.livello]} <b>${sedeNome} — ${LABEL[lv.livello]}</b>${cambio}
 ${lv.motivo}
-Fascia ${String(cfg.oraApertura).padStart(2, '0')}–${cfg.oraChiusura}: ${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
-Ore con pioggia: ${ore}
-Dopodomani: ${s.dopoMm} mm${incerto}
-Fonti (${accordo}/${n} d'accordo): ${rigaFonti(fonti, cfg)}
-<i>Mediana di ${n} modelli. Previsione automatica in taratura, non è una decisione.</i>`
+${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
+Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
+Fonti (${accordo}/${n} d'accordo): ${rigaFonti(fonti, cfg)}`
+}
+
+function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocchi: string[], nFonti: number): string {
+  return `<b>${tipo === 'sera' ? 'DOMANI' : 'OGGI'} ${fmtData(data)}</b> · fascia ${String(cfg.oraApertura).padStart(2, '0')}–${cfg.oraChiusura}
+
+${blocchi.join('\n\n')}
+
+<i>Mediana di ${nFonti} modelli. Previsione automatica in taratura, non è una decisione.</i>`
 }
 
 // chatId: uno o più id separati da virgola (chat private di Guido e Skippa, o un gruppo)
@@ -226,6 +232,8 @@ async function previsione(tipo: 'sera' | 'mattina') {
   const cfg = await getCfg()
   const data = giornoRome(tipo === 'sera' ? 1 : 0)
   if (isDomenica(data)) { console.log('domenica: chiuso, niente semaforo'); return }
+  const blocchi: string[] = [], refs: FirebaseFirestore.DocumentReference[] = []
+  let cambiato = false, nFonti = 0
   for (const [sedeId, sede] of Object.entries(cfg.sedi)) {
     if (!sede.attivo) continue
     try {
@@ -242,13 +250,17 @@ async function previsione(tipo: 'sera' | 'mattina') {
         aggiornatoTs: Date.now(), ...(tipo === 'sera' || !prev ? { livelloSera: lv.livello, seraTs: Date.now() } : { livelloMattina: lv.livello, mattinaTs: Date.now() }),
         storia: FieldValue.arrayUnion({ tipo, ts: Date.now(), livello: lv.livello, mm: s.mm, ore: s.ore, probMax: s.probMax }),
       }, { merge: true })
-      console.log(`${tipo} ${sedeId} ${data}: ${lv.livello} — ${lv.motivo}`)
-      const manda = tipo === 'sera' || !precedente || precedente !== lv.livello
-      if (manda) {
-        const ok = await telegram(cfg.telegram.chatProposta, messaggio(sede.nome, s, lv, tipo, cfg, fonti, tipo === 'mattina' ? precedente : undefined))
-        await ref.set({ [`telegram${tipo === 'sera' ? 'Sera' : 'Mattina'}`]: ok ? Date.now() : null }, { merge: true })
-      }
+      console.log(`${tipo} ${sedeId} ${data}: ${lv.livello} — ${lv.motivo} (${Object.keys(fonti).length} fonti)`)
+      if (!precedente || precedente !== lv.livello) cambiato = true
+      nFonti = Math.max(nFonti, Object.keys(fonti).length)
+      blocchi.push(bloccoSede(sede.nome, s, lv, cfg, fonti, tipo === 'mattina' ? precedente : undefined))
+      refs.push(ref)
     } catch (e: any) { console.error(`meteo ${tipo} ${sedeId}:`, e.message) }
+  }
+  // UN SOLO messaggio nel gruppo (Guido 27/09): la sera sempre, la mattina solo se almeno una sede cambia livello
+  if (blocchi.length && (tipo === 'sera' || cambiato)) {
+    const ok = await telegram(cfg.telegram.chatProposta, messaggioUnico(data, tipo, cfg, blocchi, nFonti))
+    for (const ref of refs) await ref.set({ [`telegram${tipo === 'sera' ? 'Sera' : 'Mattina'}`]: ok ? Date.now() : null }, { merge: true })
   }
 }
 
