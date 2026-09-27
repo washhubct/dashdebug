@@ -98,7 +98,19 @@ export function initParcheggioSmart() {
         document.getElementById('psInizio').style.display = inizioSel.value === 'custom' ? '' : 'none';
         aggiornaPreview();
     });
-    ['psOre', 'psInizio'].forEach(id => document.getElementById(id)?.addEventListener('input', aggiornaPreview));
+    ['psOre', 'psInizio'].forEach(id => document.getElementById(id)?.addEventListener('input', () => { sincronizzaFine(); aggiornaPreview(); }));
+    inizioSel?.addEventListener('change', () => { sincronizzaFine(); aggiornaPreview(); });
+    // Fine scelta a mano → ore = arrotondate per eccesso all'ora intera (la tariffa è a ore), poi fine riallineata
+    document.getElementById('psFine')?.addEventListener('change', () => {
+        const f = leggiForm();
+        const v = document.getElementById('psFine').value;
+        if (v) {
+            const ore = Math.ceil((new Date(v).getTime() - f.inizio.getTime()) / 3600e3);
+            document.getElementById('psOre').value = Math.max(config.minOre ?? 2, Math.min(config.maxOre ?? 24, ore || 0));
+        }
+        sincronizzaFine(); aggiornaPreview();
+    });
+    sincronizzaFine();
     document.getElementById('psVendi')?.addEventListener('click', vendiAlBanco);
     document.getElementById('psRefresh')?.addEventListener('click', renderParcheggioSmart);
     document.getElementById('psCfgSave')?.addEventListener('click', salvaConfig);
@@ -236,6 +248,14 @@ function leggiForm() {
     inizio.setSeconds(0, 0);
     const fine = new Date(inizio.getTime() + ore * 3600e3);
     return { targa, telefono, vettura, ore, inizio, fine, prezzo: prezzoParcheggioOre(ore) };
+}
+
+const toLocalInput = (d) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+function sincronizzaFine() {
+    const el = document.getElementById('psFine'); if (!el) return;
+    const f = leggiForm();
+    el.value = toLocalInput(f.fine);
+    el.min = toLocalInput(new Date(f.inizio.getTime() + (config.minOre ?? 2) * 3600e3));
 }
 
 function aggiornaPreview() {

@@ -27,7 +27,7 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260926a';
+    var APP_VERSION = '20260927a';
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -348,6 +348,7 @@
 <div class="ff" style="width:120px"><label>Inizio</label><select id="psInizioMode"><option value="now">Adesso</option><option value="custom">Scegli orario</option></select></div>
 <div class="ff" style="width:190px;display:none"><label>Data e ora inizio</label><input id="psInizio" type="datetime-local"></div>
 <div class="ff" style="width:80px"><label>Ore</label><input id="psOre" type="number" min="2" max="24" step="1" value="2"></div>
+<div class="ff" style="width:190px"><label>Fine</label><input id="psFine" type="datetime-local"></div>
 <button class="btn btn-primary" id="psVendi" style="height:37px;padding:0 20px">Incassa e genera</button>
 </div>
 <div id="psPreview" style="margin-top:10px;font:400 13px var(--f)"></div>
