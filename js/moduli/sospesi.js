@@ -1,6 +1,7 @@
 import { state } from '../state.js';
 import { fEur, esc, pDate, fmtDI } from '../utils.js';
 import { renderCassa } from './cassa.js';
+import { nascondiContante } from './contanti-passati.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db, ficCall } from '../firebase-config.js';
 import { mostraEsitoFattura, segnaPagataFIC } from './fic-ui.js';
 import { richiediPagamento } from './cassa-automatica.js';
@@ -43,7 +44,8 @@ export function sospesiVisualizzati() {
     const filter = state.sospFilter || 'aperti';
     let items;
     if (filter === 'fatturati') items = state.localSosp.filter(s => s._fatturato && !s._pagato);
-    else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato);
+    // Tab Pagati: i saldati in contanti nei giorni conclusi non si mostrano (contanti-passati.js)
+    else if (filter === 'pagati') items = state.localSosp.filter(s => s._pagato && !nascondiContante(s._modPag, s._dataPag));
     else items = state.localSosp.filter(s => !s._pagato && !s._fatturato);
     if (_sospDateFilter) {
         items = items.filter(s => {
