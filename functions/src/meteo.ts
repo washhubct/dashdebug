@@ -34,7 +34,7 @@ interface Cfg {
   oraApertura: number; oraChiusura: number
   soglie: { rosso: { mm: number; ore: number }; arancio: { mm: number; ore: number }; giallo: { mm: number; ore: number; nuvole: number; dopoMm: number } }
   telegram: { chatProposta: string; chatDipendenti: string; inviaDipendenti: boolean }
-  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number; oreTappezzeriaGiorno: number; oreGiornata: number }
+  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number; oreTappezzeriaGiorno: number; oreGiornata: number; giorniLavorativiMese: number; fissi: { nome: string; sedeId: string; costoMese: number; dal: string }[] }
 }
 const CFG_DEFAULT: Cfg = {
   sedi: {
@@ -47,7 +47,9 @@ const CFG_DEFAULT: Cfg = {
   // Consiglio personale: capacità = auto/persona all'80° percentile delle giornate asciutte ("quanto lava una persona quando c'è lavoro")
   // Tappezzeria: ogni lavoro in lavorazione occupa una persona ~2.5 h/giorno (stima da tarare: nei dati i giorni con
   // tappezzerie hanno 1 persona in più; ogni lavoro dura 3 giorni mediani)
-  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8 },
+  // Fissi: dipendenti a stipendio mensile, sempre presenti anche se non registrati nelle presenze giornaliere
+  // (Sony, subordinato, €1.700/mese, da settembre 2026 non più nelle presenze). Turno unico: tutti iniziano insieme.
+  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8, giorniLavorativiMese: 26, fissi: [{ nome: 'SONY', sedeId: 'lungomare', costoMese: 1700, dal: '2026-09-01' }] },
 }
 
 async function getCfg(): Promise<Cfg> {
@@ -203,7 +205,7 @@ function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg, lv: Livel
 
 // ── Quante persone domani? auto attese (storico stesso giorno della settimana × stesso livello meteo, con le
 // prenotazioni già in calendario come minimo) diviso quante auto lava una persona. Impara ogni sera dalla verifica.
-interface Consiglio { personale: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null; tappezzerie: number; caricoTappezzeria: number }
+interface Consiglio { personale: number; fissi: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null; tappezzerie: number; caricoTappezzeria: number }
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0 }
 async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg: Cfg): Promise<Consiglio | null> {
   const db = getFirestore()
@@ -237,7 +239,9 @@ async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg
   let personale = Math.min(cfg.personale.max, Math.max(cfg.personale.min, Math.ceil(attese / capacita + caricoTappezzeria)))
   let nota: string | null = null
   if (lv === 'ROSSO') { personale = Math.min(personale, Math.max(cfg.personale.min, Math.ceil(caricoTappezzeria))); nota = 'valutare chiusura' + (tappezzerie ? ', le tappezzerie si lavorano al coperto' : '') }
-  return { personale, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota, tappezzerie, caricoTappezzeria }
+  const fissi = cfg.personale.fissi.filter(f => f.sedeId === sedeId && data >= f.dal).length
+  personale = Math.max(personale, fissi)
+  return { personale, fissi, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota, tappezzerie, caricoTappezzeria }
 }
 
 function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, consiglio: Consiglio | null, precedente?: Livello): string {
@@ -250,7 +254,7 @@ ${lv.motivo}
 ${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
 Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
 Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}${consiglio ? `
-👥 <b>Personale consigliato: ${consiglio.personale}</b> · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.tappezzerie ? ` · ${consiglio.tappezzerie} tappezzeri${consiglio.tappezzerie === 1 ? 'a' : 'e'} in lavorazione (+${String(consiglio.caricoTappezzeria).replace('.', ',')} persona)` : ''}${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
+👥 <b>Personale consigliato: ${consiglio.personale}</b>${consiglio.fissi ? ` (${consiglio.fissi} fiss${consiglio.fissi === 1 ? 'o' : 'i'} + ${consiglio.personale - consiglio.fissi} a giornata)` : ''} · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.tappezzerie ? ` · ${consiglio.tappezzerie} tappezzeri${consiglio.tappezzerie === 1 ? 'a' : 'e'} in lavorazione (+${String(consiglio.caricoTappezzeria).replace('.', ',')} persona)` : ''}${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
 }
 
 function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocchi: string[], nFonti: number): string {
@@ -334,13 +338,21 @@ export function incassoDaPN(rows: any[]) {
 }
 
 // Presenze del giorno: doc presenzeDipendenti {dettaglio: {NOME: costo}, costoTotale}. Dipendente presente = costo > 0
-export function presenzeDaDocs(docs: any[]) {
+export function presenzeDaDocs(docs: any[], cfg?: Cfg, sedeId?: string, data?: string) {
   const nomi: string[] = []; let costo = 0
   for (const d of docs) {
     for (const [nome, c] of Object.entries(d.dettaglio || {})) if (Number(c) > 0 && !nomi.includes(nome)) nomi.push(nome)
     costo += Number(d.costoTotale) || 0
   }
-  return { dipendenti: nomi.length, nomi, costo: Math.round(costo * 100) / 100 }
+  // Fissi a stipendio: presenti sempre, costo = quota giornaliera del mensile
+  const fissi: string[] = []
+  for (const f of cfg?.personale.fissi || []) {
+    if (f.sedeId !== sedeId || !data || data < f.dal) continue
+    if (!nomi.includes(f.nome)) nomi.push(f.nome)
+    fissi.push(f.nome)
+    costo += f.costoMese / (cfg?.personale.giorniLavorativiMese || 26)
+  }
+  return { dipendenti: nomi.length, nomi, fissi, costo: Math.round(costo * 100) / 100 }
 }
 
 // 21:05 (dopo la chiusura contabile): com'è andata davvero? pioggia reale + incasso + presenze → taratura
@@ -358,20 +370,24 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
         db.collection('presenzeDipendenti').where('sedeId', '==', sedeId).where('dataISO', '==', data).get(),
         db.collection('prenotazioni').where('dataPren', '==', data).get(),
       ])
-      const auto = prenSnap.docs.filter(d => (d.data().sedeId || 'lungomare') === sedeId).length
+      const prenSede = prenSnap.docs.map(d => d.data()).filter(p => (p.sedeId || 'lungomare') === sedeId)
+      const auto = prenSede.length
+      const oreAuto = [...new Set(prenSede.map(p => Number(String(p.orario || '').slice(0, 2))).filter(h => h >= 0))].sort((a, b) => a - b)
+      const oreVuote = oreAuto.length ? Array.from({ length: cfg.oraChiusura - cfg.oraApertura }, (_, i) => cfg.oraApertura + i).filter(h => !oreAuto.includes(h) && h !== 13) : []
+      const profilo = { primaAuto: oreAuto[0] ?? null, ultimaAuto: oreAuto.at(-1) ?? null, oreVuote }
       const dataIta = data.split('-').reverse().join('/')
       const tapSnap = await db.collection('tappezzeria').get()
       const tapDocs = tapSnap.docs.map(d => d.data()).filter(t => (t.sedeId || 'lungomare') === sedeId)
       const toIso = (ita: string) => { const [g, m, a] = String(ita || '').split('/'); return a ? `${a}-${m}-${g}` : '' }
       const tappezzerie = { consegnate: tapDocs.filter(t => t.status === 'OUT' && t.dataOut === dataIta).length, inLavorazione: tapDocs.filter(t => toIso(t.dataIn) <= data && (t.status === 'IN' || toIso(t.dataOut) > data)).length }
       const inc = incassoDaPN(pn.docs.map(d => d.data()))
-      const presenze = presenzeDaDocs(pres.docs.map(d => d.data()))
+      const presenze = presenzeDaDocs(pres.docs.map(d => d.data()), cfg, sedeId, data)
       const ref = db.doc(`meteoGiornata/${sedeId}_${data}`)
       const prev = (await ref.get()).data()
       await ref.set({
         sedeId, data, reale: { mm: reale.mm, ore: reale.ore, mmGiorno: reale.mmGiorno, nuvole: reale.nuvole, tmax: reale.tmax, livello: lvReale.livello, orePioggia: reale.orePioggia },
         incasso: inc.totale, incassoLavaggi: inc.lavaggi, incassoParcheggio: inc.parcheggio, incassoAltro: inc.altro,
-        auto, tappezzerie, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
+        auto, profilo, tappezzerie, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
         consiglioEsito: prev?.consiglio ? { personaleConsigliato: prev.consiglio.personale, personaleReale: presenze.dipendenti, autoAttese: prev.consiglio.attese, autoReali: auto } : null,
         presenze, incassoPerDipendente: presenze.dipendenti ? Math.round(inc.totale / presenze.dipendenti * 100) / 100 : null,
         margineLordo: Math.round((inc.totale - presenze.costo) * 100) / 100,
