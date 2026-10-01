@@ -96,7 +96,10 @@ export function formatPhoneForWA(tel) {
         else if (clean.startsWith('3') && (clean.length === 10 || clean.length === 9)) clean = '+39' + clean;
         else return null;
     }
-    return clean.replace(/^\+/, '');
+    const digits = clean.replace(/^\+/, '');
+    // Placeholder (000…, 111…, 123456789) e numeri troppo corti non sono contattabili
+    if (digits.length < 10 || /^(\d)\1+$/.test(digits) || /^(39)?0+$/.test(digits) || /123456789/.test(digits)) return null;
+    return digits;
 }
 
 // ═══ Similarità tra due nomi (0-1) ═══
