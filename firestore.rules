@@ -316,6 +316,14 @@ service cloud.firestore {
     // I messaggi (sub-collection) sono scritti solo da Cloud Function
     // (webhook inbound, send outbound) tramite Admin SDK.
     // ═══════════════════════════════════════════════════════════
+    // CODA CAMPAGNE WHATSAPP WEB — la dash accoda (create), il worker sul Mac Mini
+    // (service account, bypassa le rules) manda e aggiorna lo stato
+    match /whatsappCoda/{doc} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn() && writeOk() && request.resource.data.stato == 'in_coda';
+      allow update, delete: if isAdmin();
+    }
+
     match /whatsappChats/{phone} {
       allow read:           if isSignedIn();
       allow update:         if isSignedIn();

@@ -24,3 +24,8 @@ functions/lib/
 *-service-account*.json
 firebase-adminsdk-*.json
 scripts/backup-*.json
+# WhatsApp Web worker: sessione e cache (contengono il login del numero aziendale)
+scripts/wa-worker/.wwebjs_auth/
+scripts/wa-worker/.wwebjs_cache/
+scripts/wa-worker/qr.png
+scripts/wa-worker/*.log

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>it.washhub.wa-worker</string>
+  <key>ProgramArguments</key><array><string>/opt/homebrew/bin/node</string><string>/Users/macia/Progetti/dashdebug/scripts/wa-worker/wa-worker.mjs</string></array>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>EnvironmentVariables</key><dict><key>GOOGLE_APPLICATION_CREDENTIALS</key><string>/Users/macia/.config/gcloud-keys/dashboard-washhub-claude-cli.json</string><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string></dict>
+  <key>WorkingDirectory</key><string>/Users/macia/Progetti/dashdebug/scripts/wa-worker</string>
+  <key>StandardOutPath</key><string>/Users/macia/Progetti/dashdebug/scripts/wa-worker/worker.log</string>
+  <key>StandardErrorPath</key><string>/Users/macia/Progetti/dashdebug/scripts/wa-worker/worker.log</string>
+</dict></plist>

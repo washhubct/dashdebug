@@ -1,0 +1,8 @@
+{
+  "name": "washhub-wa-worker",
+  "private": true,
+  "type": "module",
+  "description": "Worker WhatsApp Web sul Mac Mini: svuota la coda whatsappCoda (campagne richiamo CRM) a ritmo umano",
+  "scripts": { "start": "node wa-worker.mjs" },
+  "dependencies": { "whatsapp-web.js": "^1.26.0", "qrcode": "^1.5.4" }
+}

@@ -307,7 +307,15 @@ export const whatsappSend = onCall({
   return { ok: true, metaMessageId, chatId: cid }
 })
 
-// ─────────────────────────── whatsappSendBulk (stub) ───────────────────────────
+// ─────────────────────────── whatsappSendBulk ───────────────────────────
+// Campagna (richiamo a rischio/dormienti): un template approvato con variabili
+// body {{1}}.. a N destinatari in una chiamata. Parallelismo 5 (cap Meta 80 msg/s),
+// ogni invio logga la bolla in whatsappChats e segna sul cliente ultimoRichiamo +
+// richiami[] (stesso formato della campagna manuale wa.me in js/moduli/campagna.js).
+// Max 200 destinatari per chiamata: il client spezza in blocchi.
+
+interface BulkDest { telefono: string; clienteId?: string; params?: string[]; nome?: string }
+interface BulkArgs { templateName: string; languageCode?: string; segmento?: string; destinatari: BulkDest[] }
 
 export const whatsappSendBulk = onCall({
   region: REGION,
@@ -316,6 +324,57 @@ export const whatsappSendBulk = onCall({
   timeoutSeconds: 540,
 }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login richiesto')
-  // TODO Fase 3: batching + rate limit + log invii per template
-  throw new HttpsError('unimplemented', 'Bulk send da implementare in Fase 3')
+  const args = (request.data || {}) as BulkArgs
+  if (!args.templateName) throw new HttpsError('invalid-argument', 'templateName richiesto')
+  const dest = Array.isArray(args.destinatari) ? args.destinatari.slice(0, 200) : []
+  if (!dest.length) throw new HttpsError('invalid-argument', 'nessun destinatario')
+
+  const db = getFirestore()
+  const url = `${GRAPH_API}/${META_PHONE_NUMBER_ID.value()}/messages`
+  const oggi = new Date().toISOString().slice(0, 10)
+  const esiti: { telefono: string; ok: boolean; errore?: string }[] = []
+
+  const invia = async (d: BulkDest) => {
+    const cid = normalizePhone(d.telefono)
+    if (!cid) { esiti.push({ telefono: d.telefono, ok: false, errore: 'telefono non valido' }); return }
+    const components = d.params?.length
+      ? [{ type: 'body', parameters: d.params.map(p => ({ type: 'text', text: String(p).slice(0, 1024) })) }]
+      : undefined
+    const payload = {
+      messaging_product: 'whatsapp', to: toMetaPhone(cid), type: 'template',
+      template: { name: args.templateName, language: { code: args.languageCode || 'it' }, ...(components ? { components } : {}) },
+    }
+    try {
+      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${META_WHATSAPP_TOKEN.value()}` }, body: JSON.stringify(payload) })
+      const data: any = await resp.json().catch(() => ({}))
+      if (!resp.ok) { esiti.push({ telefono: d.telefono, ok: false, errore: data?.error?.message || `Meta HTTP ${resp.status}` }); return }
+      const metaMessageId: string | null = data?.messages?.[0]?.id || null
+      const chatRef = db.doc(`whatsappChats/${cid}`)
+      await chatRef.collection('messages').doc(metaMessageId || `out-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).set({
+        direction: 'out', type: 'template', text: null, templateName: args.templateName, components: components || null,
+        metaMessageId, sentBy: request.auth!.uid, sentByEmail: request.auth!.token?.email || null, status: 'queued',
+        campagna: args.segmento || 'bulk', createdAt: FieldValue.serverTimestamp(),
+      })
+      await chatRef.set({ phone: cid, nome: d.nome || null, lastMessage: `[template:${args.templateName}]`, lastMessageAt: FieldValue.serverTimestamp(), lastDirection: 'out', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+      if (d.clienteId) {
+        const ric = { data: oggi, segmento: args.segmento || 'bulk', template: args.templateName, operatore: request.auth!.token?.email || 'cloud', via: 'cloud-api' }
+        await db.doc(`clienti/${d.clienteId}`).set({ ultimoRichiamo: oggi, richiami: FieldValue.arrayUnion(ric) }, { merge: true })
+      }
+      esiti.push({ telefono: d.telefono, ok: true })
+    } catch (err: any) {
+      esiti.push({ telefono: d.telefono, ok: false, errore: String(err?.message || err).slice(0, 200) })
+    }
+  }
+
+  // 5 in parallelo
+  const coda = [...dest]
+  await Promise.all(Array.from({ length: 5 }, async () => { while (coda.length) await invia(coda.shift()!) }))
+
+  const inviati = esiti.filter(e => e.ok).length
+  await db.collection('whatsappCampagne').add({
+    templateName: args.templateName, segmento: args.segmento || null, totale: dest.length, inviati, falliti: esiti.filter(e => !e.ok),
+    sentBy: request.auth.token?.email || request.auth.uid, createdAt: FieldValue.serverTimestamp(),
+  })
+  console.log(`[whatsapp] bulk ${args.templateName}: ${inviati}/${dest.length}`)
+  return { inviati, totale: dest.length, falliti: esiti.filter(e => !e.ok) }
 })
