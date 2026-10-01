@@ -94,13 +94,15 @@ export async function caricaClienti() {
 }
 
 function calcolaStatsCliente(nomeCliente) {
-    if (!nomeCliente) return { numLavaggi:0, ultimaVisita:null, spesaTotale:0, giorniDaUltimaVisita:999, sospesiAperti:0, ticketMedio:0, frequenzaMedia:0 };
+    if (!nomeCliente) return { numLavaggi:0, ultimaVisita:null, spesaTotale:0, giorniDaUltimaVisita:999, sospesiAperti:0, ticketMedio:0, frequenzaMedia:0, noShow:0 };
     const nomeUp = nomeCliente.toUpperCase();
-    let numLavaggi=0, spesaTotale=0, ultimaData=null, primaData=null, sospesiAperti=0;
+    let numLavaggi=0, spesaTotale=0, ultimaData=null, primaData=null, sospesiAperti=0, noShow=0;
 
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         entries.forEach(p => {
             if ((p.cliente||'').toUpperCase() === nomeUp) {
+                // Non presentato: non è un lavaggio né una visita, ma lo contiamo a parte
+                if (p.stato === 'NO_SHOW') { noShow++; return; }
                 numLavaggi++;
                 if (p.saldato==='SI') spesaTotale += pNum(p.prezzo);
                 if (p.saldo==='SOSPESO') sospesiAperti += pNum(p.prezzo);
@@ -127,7 +129,7 @@ function calcolaStatsCliente(nomeCliente) {
     const ticketMedio = numLavaggi > 0 ? Math.round(spesaTotale / numLavaggi) : 0;
     const giorniAttivo = primaData ? Math.max(1, Math.floor((oggi - primaData) / 864e5)) : 1;
     const frequenzaMedia = numLavaggi > 1 ? Math.round(giorniAttivo / numLavaggi) : 0;
-    return { numLavaggi, ultimaVisita, spesaTotale, giorniDaUltimaVisita:giorniDa, sospesiAperti, ticketMedio, frequenzaMedia };
+    return { numLavaggi, ultimaVisita, spesaTotale, giorniDaUltimaVisita:giorniDa, sospesiAperti, ticketMedio, frequenzaMedia, noShow };
 }
 
 function buildStorico(nomeCliente) {
@@ -136,8 +138,9 @@ function buildStorico(nomeCliente) {
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         entries.forEach(p => {
             if ((p.cliente||'').toUpperCase() === nomeUp) {
-                eventi.push({ data:date, dataSort:new Date(date), tipo:'🧼 Lavaggio', vettura:p.vettura||'—', importo:pNum(p.prezzo),
-                    pagamento: p.saldato==='SI' ? (p.saldo||'SI') : (p.saldo==='SOSPESO' ? '⏳ Sospeso' : '—') });
+                const noShow = p.stato === 'NO_SHOW';
+                eventi.push({ data:date, dataSort:new Date(date), tipo: noShow ? '👻 Non presentato' : '🧼 Lavaggio', vettura:p.vettura||'—', importo:pNum(p.prezzo),
+                    pagamento: noShow ? '👻 No-show' : p.saldato==='SI' ? (p.saldo||'SI') : (p.saldo==='SOSPESO' ? '⏳ Sospeso' : '—') });
             }
         });
     }
@@ -168,7 +171,8 @@ function mostraStorico(clienteId) {
             <div class="kpi b"><div class="kpi-label">Spesa Totale</div><div class="kpi-val">${fEur(stats.spesaTotale)}</div></div>
             <div class="kpi" style="border-color:var(--tx2)"><div class="kpi-label">Ticket Medio</div><div class="kpi-val">${fEur(stats.ticketMedio)}</div></div>
             <div class="kpi" style="border-color:var(--amb)"><div class="kpi-label">Ogni ~</div><div class="kpi-val">${stats.frequenzaMedia > 0 ? stats.frequenzaMedia+'gg' : '—'}</div></div>
-            ${stats.sospesiAperti > 0 ? `<div class="kpi r"><div class="kpi-label">Sospesi Aperti</div><div class="kpi-val">${fEur(stats.sospesiAperti)}</div></div>` : ''}`;
+            ${stats.sospesiAperti > 0 ? `<div class="kpi r"><div class="kpi-label">Sospesi Aperti</div><div class="kpi-val">${fEur(stats.sospesiAperti)}</div></div>` : ''}
+            ${stats.noShow > 0 ? `<div class="kpi" style="border-color:var(--tx3)"><div class="kpi-label">Non presentato</div><div class="kpi-val">👻 ${stats.noShow}</div></div>` : ''}`;
     }
     const tb = document.getElementById('storicoTb');
     if (tb) {
@@ -176,7 +180,7 @@ function mostraStorico(clienteId) {
         else {
             tb.innerHTML = eventi.map(e => {
                 const dataDisplay = e.data.includes('-') ? e.data.split('-').reverse().join('/') : e.data;
-                const pagClass = e.pagamento.includes('Sospeso') ? 'a' : (e.pagamento==='—'||e.pagamento.includes('lav.') ? '' : 'g');
+                const pagClass = e.pagamento.includes('Sospeso') ? 'a' : e.pagamento.includes('No-show') ? 'r' : (e.pagamento==='—'||e.pagamento.includes('lav.') ? '' : 'g');
                 return `<tr><td style="font:400 10px var(--mono)">${dataDisplay}</td><td>${e.tipo}</td><td style="font-size:11px">${esc(e.vettura)}</td><td style="font-weight:600">€${e.importo}</td><td>${pagClass?`<span class="badge ${pagClass}">${e.pagamento}</span>`:e.pagamento}</td></tr>`;
             }).join('');
         }
@@ -193,7 +197,7 @@ export function renderClienti() {
     clientiDB.forEach(c => {
         const s = calcolaStatsCliente(c.nome);
         c._numLavaggi=s.numLavaggi; c._ultimaVisita=s.ultimaVisita; c._spesaTotale=s.spesaTotale;
-        c._giorniDaUltimaVisita=s.giorniDaUltimaVisita; c._sospesiAperti=s.sospesiAperti;
+        c._giorniDaUltimaVisita=s.giorniDaUltimaVisita; c._sospesiAperti=s.sospesiAperti; c._noShow=s.noShow;
         c._ticketMedio=s.ticketMedio; c._frequenzaMedia=s.frequenzaMedia;
     });
 
@@ -231,7 +235,7 @@ export function renderClienti() {
         const tipoHtml=tipoIcon?`<span class="badge ${tipoBadge}" style="font-size:8px">${tipoIcon} ${(c.tipo||'').toUpperCase()}</span>`:'<span style="font-size:10px;color:var(--tx3)">Privato</span>';
 
         return `<tr>
-            <td><strong style="cursor:pointer;text-decoration:underline dotted" class="cli-storico" data-id="${c._id}">${esc(c.nome||'')}</strong>${isVip?' <span class="badge b" style="font-size:8px">⭐ VIP</span>':''}${c._sospesiAperti>0?` <span class="badge r" style="font-size:8px">€${c._sospesiAperti} sosp.</span>`:''}${c.note?`<div style="font:400 10px var(--f);color:var(--tx3);margin-top:2px" title="${esc(c.note)}">📝 ${esc(c.note.substring(0,40))}${c.note.length>40?'...':''}</div>`:''}</td>
+            <td><strong style="cursor:pointer;text-decoration:underline dotted" class="cli-storico" data-id="${c._id}">${esc(c.nome||'')}</strong>${isVip?' <span class="badge b" style="font-size:8px">⭐ VIP</span>':''}${c._sospesiAperti>0?` <span class="badge r" style="font-size:8px">€${c._sospesiAperti} sosp.</span>`:''}${c._noShow>0?` <span class="badge r" style="font-size:8px" title="Appuntamenti non presentati">👻 ${c._noShow}</span>`:''}${c.note?`<div style="font:400 10px var(--f);color:var(--tx3);margin-top:2px" title="${esc(c.note)}">📝 ${esc(c.note.substring(0,40))}${c.note.length>40?'...':''}</div>`:''}</td>
             <td style="font-size:11px">${esc(c.telefono||'—')}</td>
             <td>${tipoHtml}</td>
             <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${esc(vetture)}">${esc(vetture)}</td>
@@ -477,7 +481,7 @@ function showClienteSimileDialog(nomeInput, simili, resolve) {
         html += `
             <button class="dup-opt" data-idx="${i}" style="text-align:left;padding:12px 14px;background:var(--bg);border:1.5px solid var(--brd2);border-radius:var(--r2);cursor:pointer;transition:all .15s;font-family:var(--f)">
                 <div style="font:600 14px var(--f);color:var(--tx)">${esc(s.cliente.nome)}</div>
-                <div style="font:400 11px var(--f);color:var(--tx3);margin-top:4px">${stats.numLavaggi} lavaggi · ${esc(s.cliente.telefono||'no tel')} · ${simPerc}% simile</div>
+                <div style="font:400 11px var(--f);color:var(--tx3);margin-top:4px">${stats.numLavaggi} lavaggi${stats.noShow ? ` · <span style="color:var(--red)">👻 ${stats.noShow} no-show</span>` : ''} · ${esc(s.cliente.telefono||'no tel')} · ${simPerc}% simile</div>
             </button>
         `;
     });

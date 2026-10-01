@@ -370,7 +370,10 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
         db.collection('presenzeDipendenti').where('sedeId', '==', sedeId).where('dataISO', '==', data).get(),
         db.collection('prenotazioni').where('dataPren', '==', data).get(),
       ])
-      const prenSede = prenSnap.docs.map(d => d.data()).filter(p => (p.sedeId || 'lungomare') === sedeId)
+      const prenTutte = prenSnap.docs.map(d => d.data()).filter(p => (p.sedeId || 'lungomare') === sedeId)
+      // Non presentati (stato NO_SHOW dal 01/10/2026): non sono auto lavate, ma li salviamo per misurare il tasso di buca
+      const prenSede = prenTutte.filter(p => p.stato !== 'NO_SHOW')
+      const noShow = prenTutte.length - prenSede.length
       const auto = prenSede.length
       const oreAuto = [...new Set(prenSede.map(p => Number(String(p.orario || '').slice(0, 2))).filter(h => h >= 0))].sort((a, b) => a - b)
       const oreVuote = oreAuto.length ? Array.from({ length: cfg.oraChiusura - cfg.oraApertura }, (_, i) => cfg.oraApertura + i).filter(h => !oreAuto.includes(h) && h !== 13) : []
@@ -387,7 +390,7 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
       await ref.set({
         sedeId, data, reale: { mm: reale.mm, ore: reale.ore, mmGiorno: reale.mmGiorno, nuvole: reale.nuvole, tmax: reale.tmax, livello: lvReale.livello, orePioggia: reale.orePioggia },
         incasso: inc.totale, incassoLavaggi: inc.lavaggi, incassoParcheggio: inc.parcheggio, incassoAltro: inc.altro,
-        auto, profilo, tappezzerie, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
+        auto, noShow, profilo, tappezzerie, autoPerDipendente: presenze.dipendenti ? Math.round(auto / presenze.dipendenti * 10) / 10 : null,
         consiglioEsito: prev?.consiglio ? { personaleConsigliato: prev.consiglio.personale, personaleReale: presenze.dipendenti, autoAttese: prev.consiglio.attese, autoReali: auto } : null,
         presenze, incassoPerDipendente: presenze.dipendenti ? Math.round(inc.totale / presenze.dipendenti * 100) / 100 : null,
         margineLordo: Math.round((inc.totale - presenze.costo) * 100) / 100,

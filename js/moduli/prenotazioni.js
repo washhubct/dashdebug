@@ -115,8 +115,24 @@ export function renderPren() {
             html += `<tr><td style="font:500 11px var(--mono);color:var(--tx3)">${slot}</td><td colspan="6" style="color:var(--tx3);font-size:11px">—</td><td><button class="act-btn quick-add" data-slot="${slot}" title="Aggiungi qui">+</button></td></tr>`;
         } else {
             entries.forEach((e, i) => {
-                totCount++;
                 const prezzo = pNum(e.prezzo);
+                // Cliente non presentato: resta in calendario (storico CRM) ma fuori da conteggi e incassi
+                const noShow = isNoShow(e);
+                if (noShow) {
+                    html += `<tr style="opacity:.55">
+                        <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
+                        <td><strong style="text-decoration:line-through">${esc(e.cliente || '')}</strong>${noShowBadge(e)}</td>
+                        <td style="text-decoration:line-through">${esc(e.vettura || '')}</td>
+                        <td style="font:500 12px var(--mono);text-decoration:line-through">${prezzo ? '€' + prezzo : '—'}</td>
+                        <td colspan="2"><span class="badge r" title="Segnato il ${esc(e.noShowData || '')}">👻 NON PRESENTATO</span></td>
+                        <td style="font-size:11px;color:var(--tx2)">${esc(e.note || '')}</td>
+                        <td>
+                            <button class="act-btn edit-pren" data-id="${e._pid}">✎</button>
+                            <button class="act-btn undo-noshow" data-id="${e._pid}" title="Annulla: il cliente si è presentato">↩</button>
+                        </td></tr>`;
+                    return;
+                }
+                totCount++;
                 if (e.saldato === 'SI' && e.saldo === 'CONTANTI') incContanti += prezzo;
                 else if (e.saldato === 'SI' && e.saldo === 'POS') incPos += prezzo;
                 else incSospesi += prezzo;
@@ -126,7 +142,8 @@ export function renderPren() {
                              isPaid ? '<span class="badge g">SALDATO ✓</span>' :
                              `<button class="btn pay-btn" data-id="${e._pid}" data-mod="CONTANTI">💵</button>
                               <button class="btn pay-btn" data-id="${e._pid}" data-mod="POS">💳</button>
-                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>`;
+                              <button class="btn pay-btn" data-id="${e._pid}" data-mod="SOSPESO" style="border-color:var(--amb);color:var(--amb)">⏳</button>
+                              <button class="btn noshow-btn" data-id="${e._pid}" title="Cliente non presentato" style="border-color:var(--tx3);color:var(--tx3)">👻</button>`;
 
                 // Badge referral: presente sulla prenotazione (dal sito) ma non ancora scontato
                 let refBadge = '';
@@ -154,7 +171,7 @@ export function renderPren() {
 
                 html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
-                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${sospBadge(e)}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
+                    <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${sospBadge(e)}${isPaid ? '' : noShowBadge(e)}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
                     <td>${esc(e.vettura || '')}</td>
                     <td style="font:500 12px var(--mono)">${prezzoCellHtml}</td>
                     <td>${pagHtml}</td>
@@ -198,6 +215,12 @@ async function handlePrenActions(e) {
     } else if (btn.classList.contains('undo-pay')) {
         btn.disabled = true;
         try { await unmarkPaid(date, id); } finally { btn.disabled = false; }
+    } else if (btn.classList.contains('noshow-btn')) {
+        btn.disabled = true;
+        try { await markNoShow(date, id); } finally { btn.disabled = false; }
+    } else if (btn.classList.contains('undo-noshow')) {
+        btn.disabled = true;
+        try { await unmarkNoShow(date, id); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('del-pren')) {
         await delPren(date, id);
     } else if (btn.classList.contains('edit-pren')) {
@@ -666,6 +689,50 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
             const isNew = await autoSalvaCliente(entry.cliente, entry.vettura, entry.targa || '', entry.telefono || '');
             if (isNew) showWelcomeToast(entry.cliente);
         } catch (e) { console.warn('CRM da pagamento:', e?.message); }
+    } catch(e) { alert("Errore Cloud"); }
+}
+
+// ─── NO-SHOW: cliente non presentato (01/10/2026) ───
+// Prima non esisteva uno stato: la prenotazione restava "da incassare" (sembrava un
+// incasso dimenticato) o veniva forzata a €0 pagata POS (sporcava cassa, meteo e CRM).
+// Ora: stato 'NO_SHOW', prezzo intatto, fuori da conteggi/incassi, visibile nel CRM.
+export function isNoShow(e) { return e?.stato === 'NO_SHOW'; }
+
+// Quanti no-show ha il cliente (per avvisare Skippa quando chiede conferma il giorno prima)
+export function noShowCliente(nome, escludiPid = null) {
+    const up = (nome || '').toUpperCase();
+    if (!up) return 0;
+    let n = 0;
+    for (const entries of Object.values(state.prenDB || {}))
+        for (const p of entries) if (isNoShow(p) && p._pid !== escludiPid && (p.cliente || '').toUpperCase() === up) n++;
+    return n;
+}
+
+function noShowBadge(e) {
+    const n = noShowCliente(e?.cliente, e?._pid);
+    if (!n) return '';
+    return ` <span title="${n} appuntament${n === 1 ? 'o' : 'i'} non presentato — chiedi conferma" style="font:700 9px var(--f);color:#fff;background:var(--tx3);padding:2px 7px;border-radius:10px;white-space:nowrap;vertical-align:middle">👻 ${n} NO-SHOW</span>`;
+}
+
+async function markNoShow(date, pid) {
+    const entry = state.prenDB[date]?.find(e => e._pid === pid);
+    if (!entry || entry.saldato === 'SI') return;
+    if (!confirm(`${entry.cliente} non si è presentato?\nLa prenotazione resta in calendario (barrata) e nello storico cliente, ma non conta come lavaggio né come incasso.`)) return;
+    const upd = { stato: 'NO_SHOW', noShowData: new Date().toLocaleDateString('it-IT'), noShowTs: Date.now(), saldato: '', saldo: '' };
+    try {
+        await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), upd);
+        Object.assign(entry, upd);
+        renderPren();
+    } catch(e) { alert("Errore Cloud"); }
+}
+
+async function unmarkNoShow(date, pid) {
+    const entry = state.prenDB[date]?.find(e => e._pid === pid);
+    if (!entry || !isNoShow(entry)) return;
+    try {
+        await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { stato: '', noShowData: '', noShowTs: 0 });
+        entry.stato = ''; entry.noShowData = ''; entry.noShowTs = 0;
+        renderPren();
     } catch(e) { alert("Errore Cloud"); }
 }
 

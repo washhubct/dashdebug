@@ -80,6 +80,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
     for (const [date, entries] of Object.entries(state.prenDB || {})) {
         if (!inRange(date, from, to)) continue;
         entries.forEach(p => {
+            if (p.stato === 'NO_SHOW') return; // non presentato: non è un lavaggio
             numLavaggi++;
             const imp = pNum(p.prezzo);
             if (p.saldato === 'SI') {
