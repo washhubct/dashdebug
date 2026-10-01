@@ -16,7 +16,7 @@ function parseSede(raw) {
 const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
 const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
 
-const WA_TEMPLATES = [
+export const WA_TEMPLATES = [
     { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google + card)',
       text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\n🎁 La tua Fidelity Card Wash Hub:\nhttps://card.washhub.it/?c={telefono}\n\nA presto,\nStaff" },
     { id: 'benvenuto-pren', label: '👋 Benvenuto + conferma prenotazione',
@@ -34,7 +34,7 @@ const WA_TEMPLATES = [
     { id: 'custom', label: '✏️ Scrivi da zero', text: '' }
 ];
 
-function fillTemplate(tpl, cliente, stats, extra) {
+export function fillTemplate(tpl, cliente, stats, extra) {
     const e = extra || {};
     const nomeRaw = cliente.nome || '';
     const firstWord = nomeRaw.split(' ')[0] || nomeRaw;
@@ -93,7 +93,7 @@ export async function caricaClienti() {
     } catch (e) { console.warn('Errore caricamento clienti:', e); }
 }
 
-function calcolaStatsCliente(nomeCliente) {
+export function calcolaStatsCliente(nomeCliente) {
     if (!nomeCliente) return { numLavaggi:0, ultimaVisita:null, spesaTotale:0, giorniDaUltimaVisita:999, sospesiAperti:0, ticketMedio:0, frequenzaMedia:0, noShow:0 };
     const nomeUp = nomeCliente.toUpperCase();
     let numLavaggi=0, spesaTotale=0, ultimaData=null, primaData=null, sospesiAperti=0, noShow=0;
@@ -235,7 +235,7 @@ export function renderClienti() {
         const tipoHtml=tipoIcon?`<span class="badge ${tipoBadge}" style="font-size:8px">${tipoIcon} ${(c.tipo||'').toUpperCase()}</span>`:'<span style="font-size:10px;color:var(--tx3)">Privato</span>';
 
         return `<tr>
-            <td><strong style="cursor:pointer;text-decoration:underline dotted" class="cli-storico" data-id="${c._id}">${esc(c.nome||'')}</strong>${isVip?' <span class="badge b" style="font-size:8px">⭐ VIP</span>':''}${c._sospesiAperti>0?` <span class="badge r" style="font-size:8px">€${c._sospesiAperti} sosp.</span>`:''}${c._noShow>0?` <span class="badge r" style="font-size:8px" title="Appuntamenti non presentati">👻 ${c._noShow}</span>`:''}${c.note?`<div style="font:400 10px var(--f);color:var(--tx3);margin-top:2px" title="${esc(c.note)}">📝 ${esc(c.note.substring(0,40))}${c.note.length>40?'...':''}</div>`:''}</td>
+            <td><strong style="cursor:pointer;text-decoration:underline dotted" class="cli-storico" data-id="${c._id}">${esc(c.nome||'')}</strong>${isVip?' <span class="badge b" style="font-size:8px">⭐ VIP</span>':''}${c._sospesiAperti>0?` <span class="badge r" style="font-size:8px">€${c._sospesiAperti} sosp.</span>`:''}${c._noShow>0?` <span class="badge r" style="font-size:8px" title="Appuntamenti non presentati">👻 ${c._noShow}</span>`:''}${c.ultimoRichiamo?` <span class="badge b" style="font-size:8px" title="Ultimo messaggio di richiamo WhatsApp">📣 ${esc(String(c.ultimoRichiamo).split('-').reverse().join('/'))}</span>`:''}${c.note?`<div style="font:400 10px var(--f);color:var(--tx3);margin-top:2px" title="${esc(c.note)}">📝 ${esc(c.note.substring(0,40))}${c.note.length>40?'...':''}</div>`:''}</td>
             <td style="font-size:11px">${esc(c.telefono||'—')}</td>
             <td>${tipoHtml}</td>
             <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${esc(vetture)}">${esc(vetture)}</td>
