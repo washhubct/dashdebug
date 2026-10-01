@@ -90,7 +90,6 @@ export function goPage(id) {
         dashboard: ['📈', 'Dashboard Analitica'],
         abbonamenti: ['🅿️', 'Abbonamenti'],
         giornalieri: ['🎟️', 'Parcheggio a Ore'],
-        conti: ['📒', 'Conti Clienti'],
         parchsmart: ['🔐', 'Parcheggio Smart'],
         prenotazioni: ['📋', 'Prenotazioni'],
         sospesi: ['⏳', 'Sospesi'],

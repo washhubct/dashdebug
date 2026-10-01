@@ -24,10 +24,58 @@ let contoSel = null;       // id conto aperto nella pagina
 let filtroMese = '';       // 'YYYY-MM' o '' = tutti
 
 export function initConti() {
-    document.getElementById('page-conti')?.addEventListener('click', handleContiActions);
+    document.getElementById('contoPanel')?.addEventListener('click', handleContiActions);
     document.getElementById('contiMese')?.addEventListener('change', e => { filtroMese = e.target.value; renderConti(); });
+    document.getElementById('contoPanelClose')?.addEventListener('click', chiudiConto);
     document.getElementById('cassaAccontoBtn')?.addEventListener('click', () => accontoDaCassa());
-    document.addEventListener('pageChanged', e => { if (e.detail?.pageId === 'conti') renderConti(); });
+}
+
+// Apre il partitario di un conto nel pannello della pagina Abbonamenti (riga 📒)
+export function apriConto(id) {
+    contoSel = id; filtroMese = '';
+    const panel = document.getElementById('contoPanel');
+    if (panel) { panel.classList.add('show'); panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    renderConti();
+}
+
+function chiudiConto() {
+    document.getElementById('contoPanel')?.classList.remove('show');
+}
+
+// Trasforma un abbonamento in "conto a canone": crea contiClienti/{id} (canone = IMPORTO)
+// e collega l'abbonamento con contoId. Solo admin.
+export async function creaContoDaAbbonamento(abbId) {
+    if (!isAdmin()) { alert('Solo admin'); return; }
+    const r = (state.localAbb || []).find(x => x._id === abbId);
+    if (!r || r.contoId) return;
+    const nome = r['NOME E COGNOME'] || '';
+    const canone = pNum(r.IMPORTO);
+    const prezzoKwh = prompt(`Conto a canone per ${nome}
+Canone mensile: €${canone} (dall'abbonamento)
+
+Prezzo luce €/kWh (0 = senza luce):`, '0.40');
+    if (prezzoKwh === null) return;
+    const saldoIni = prompt('Saldo iniziale dovuto € (0 se parte da zero):', '0');
+    if (saldoIni === null) return;
+    const id = nome.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || abbId;
+    const now = new Date();
+    try {
+        await fsSetDoc(fsDoc(db, 'contiClienti', id), {
+            nome, abbonamentoId: abbId, tipo: 'affitto', sedeId: r.sedeId || state.sedeAttiva, attivo: true,
+            canone, giornoAddebito: 1, telefono: r['NUMERO CELL.'] || '',
+            luce: { modo: 'manuale', prezzoKwh: parseFloat(String(prezzoKwh).replace(',', '.')) || 0, shelly: null },
+            note: r.NOTE || '', creato: now.getTime()
+        });
+        const c = { _id: id, nome, abbonamentoId: abbId, sedeId: r.sedeId || state.sedeAttiva, attivo: true, canone, giornoAddebito: 1, telefono: r['NUMERO CELL.'] || '', luce: { modo: 'manuale', prezzoKwh: parseFloat(String(prezzoKwh).replace(',', '.')) || 0 }, movimenti: [] };
+        const ini = parseFloat(String(saldoIni).replace(',', '.')) || 0;
+        if (ini) await salvaMovimento(c, nuovoMovimento(c, { tipo: 'APERTURA', importo: ini, note: 'Saldo iniziale' }), 'apertura');
+        await fsUpdateDoc(fsDoc(db, 'abbonamenti', abbId), { contoId: id });
+        r.contoId = id;
+        state.contiDB.push(c);
+        aggiornaBottoneCassa();
+        document.dispatchEvent(new CustomEvent('contoAggiornato'));
+        apriConto(id);
+    } catch (e) { console.error(e); alert('❌ Errore creazione conto: ' + (e.message || '')); }
 }
 
 export async function caricaConti() {
@@ -43,7 +91,7 @@ export async function caricaConti() {
         }
     } catch (e) { console.warn('Conti clienti non disponibili:', e.message); }
     aggiornaBottoneCassa();
-    renderConti();
+    document.dispatchEvent(new CustomEvent('contoAggiornato'));
 }
 
 // Saldo = addebiti − acconti (mai salvato: si ricalcola sempre dai movimenti)
@@ -73,30 +121,10 @@ function aggiornaBottoneCassa() {
 
 // ─── RENDER ───
 export function renderConti() {
-    const wrap = document.getElementById('contiCards');
-    if (!wrap) return;
-    const conti = (state.contiDB || []);
-    if (!conti.length) {
-        wrap.innerHTML = '<div class="empty">Nessun conto cliente per questa sede</div>';
-        document.getElementById('contiDettaglio').innerHTML = '';
-        return;
-    }
-    if (!contoSel || !conti.find(c => c._id === contoSel)) contoSel = conti[0]._id;
-
-    wrap.innerHTML = conti.map(c => {
-        const saldo = saldoConto(c);
-        const ua = ultimoAcconto(c);
-        const gg = giorniDa(ua?.dataISO);
-        const allarme = gg !== null && gg >= 7;
-        return `<div class="kpi ${saldo > 0 ? 'r' : 'g'} conto-card" data-id="${c._id}" style="cursor:pointer;${c._id === contoSel ? 'outline:2px solid var(--gold)' : ''}">
-            <div class="kpi-label">${esc(c.nome)}${c.attivo === false ? ' · chiuso' : ''}</div>
-            <div class="kpi-val">${fEur(saldo)}</div>
-            <div class="kpi-sub" style="font:400 10px var(--mono);color:${allarme ? 'var(--red)' : 'var(--tx3)'};margin-top:2px">
-                ${ua ? `ultimo acconto ${fEur(pNum(ua.importo))} il ${esc(ua.data)}${allarme ? ` · ${gg} gg fa ⚠️` : ''}` : 'nessun acconto'}
-            </div></div>`;
-    }).join('');
-
-    const c = conti.find(x => x._id === contoSel);
+    const el = document.getElementById('contiDettaglio');
+    if (!el) return;
+    const c = (state.contiDB || []).find(x => x._id === contoSel);
+    if (!c) { el.innerHTML = '<div class="empty">Conto non trovato</div>'; return; }
     renderDettaglio(c);
 }
 
@@ -111,6 +139,9 @@ function renderDettaglio(c) {
     const affittoMese = c.movimenti.find(m => m.tipo === 'ADDEBITO_AFFITTO' && m.meseRif === ymOggi);
     const luceMese = c.movimenti.find(m => m.tipo === 'ADDEBITO_LUCE' && m.meseRif === ymOggi);
     const mesiLuceMancanti = mesiSenzaLuce(c);
+    const ua = ultimoAcconto(c);
+    const gg = giorniDa(ua?.dataISO);
+    const allarme = gg !== null && gg >= 7;
     const mesi = [...new Set(c.movimenti.map(m => (m.dataISO || '').slice(0, 7)).filter(Boolean))].sort().reverse();
 
     const sel = document.getElementById('contiMese');
@@ -123,7 +154,7 @@ function renderDettaglio(c) {
     el.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <div>
-                <div style="font:700 16px var(--f)">${esc(c.nome)}</div>
+                <div style="font:700 16px var(--f)">📒 ${esc(c.nome)}</div>
                 <div style="font:400 11px var(--f);color:var(--tx2)">Canone ${fEur(pNum(c.canone))}/mese il giorno ${c.giornoAddebito || 1} · luce ${c.luce?.prezzoKwh ? `€${c.luce.prezzoKwh}/kWh` : 'n.d.'} (${c.luce?.modo === 'shelly' ? 'Shelly' : 'lettura manuale'})${c.telefono ? ' · ' + esc(c.telefono) : ''}</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -136,7 +167,7 @@ function renderDettaglio(c) {
         <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
             <div class="kpi ${saldo > 0 ? 'r' : 'g'}"><div class="kpi-label">Saldo dovuto</div><div class="kpi-val">${fEur(saldo)}</div></div>
             <div class="kpi"><div class="kpi-label">Addebitato</div><div class="kpi-val">${fEur(addebiti)}</div></div>
-            <div class="kpi b"><div class="kpi-label">Versato</div><div class="kpi-val">${fEur(acconti)}</div></div>
+            <div class="kpi b"><div class="kpi-label">Versato</div><div class="kpi-val">${fEur(acconti)}</div>${ua ? `<div class="kpi-sub" style="font:400 10px var(--mono);color:${allarme ? 'var(--red)' : 'var(--tx3)'};margin-top:2px">ultimo ${fEur(pNum(ua.importo))} il ${esc(ua.data)}${allarme ? ` · ${gg} gg fa ⚠️` : ''}</div>` : ''}</div>
             <div class="kpi" style="border-color:var(--amb)"><div class="kpi-label">${meseLabel(ymOggi)}</div>
                 <div class="kpi-val" style="font-size:15px">${affittoMese ? '🏠 ' + fEur(pNum(affittoMese.importo)) : '🏠 —'} ${luceMese ? '⚡ ' + fEur(pNum(luceMese.importo)) : ''}</div>
                 ${mesiLuceMancanti.length ? `<div class="kpi-sub" style="font:400 10px var(--mono);color:var(--amb);margin-top:2px">luce da addebitare: ${mesiLuceMancanti.map(meseLabel).join(', ')}</div>` : ''}
@@ -161,9 +192,14 @@ function renderDettaglio(c) {
 // Mesi passati (dal mese di apertura) senza addebito luce: promemoria per la lettura
 function mesiSenzaLuce(c) {
     const out = [];
-    const prima = c.movimenti.find(m => m.tipo === 'APERTURA' || m.tipo === 'ADDEBITO_AFFITTO');
-    if (!prima?.dataISO) return out;
-    const d = new Date(prima.dataISO.slice(0, 7) + '-01');
+    const apertura = c.movimenti.find(m => m.tipo === 'APERTURA');
+    const primoAff = c.movimenti.find(m => m.tipo === 'ADDEBITO_AFFITTO');
+    // L'apertura è un saldo "al giorno X": la luce si conta dal mese successivo
+    let d;
+    if (apertura?.dataISO) { d = new Date(apertura.dataISO.slice(0, 7) + '-01'); d.setMonth(d.getMonth() + 1); }
+    else if (primoAff?.dataISO) d = new Date(primoAff.dataISO.slice(0, 7) + '-01');
+    else return out;
+    if (!c.luce?.prezzoKwh) return out;
     const oggi = new Date();
     const fine = new Date(oggi.getFullYear(), oggi.getMonth() - 1, 1); // ultimo mese concluso
     for (; d <= fine; d.setMonth(d.getMonth() + 1)) {
@@ -175,8 +211,6 @@ function mesiSenzaLuce(c) {
 
 // ─── AZIONI ───
 async function handleContiActions(e) {
-    const card = e.target.closest('.conto-card');
-    if (card) { contoSel = card.dataset.id; renderConti(); return; }
     const btn = e.target.closest('button');
     if (!btn || btn.disabled) return;
     const c = (state.contiDB || []).find(x => x._id === btn.dataset.id);
@@ -247,6 +281,7 @@ async function registraAcconto(c, importoPreset = null) {
     } catch (e) { console.error('Errore Prima Nota acconto:', e); alert('⚠️ Acconto salvato ma NON in Prima Nota: avvisa Guido'); }
 
     renderConti(); renderCassa();
+    document.dispatchEvent(new CustomEvent('contoAggiornato'));
     alert(`✅ Acconto ${fEur(incassato)} registrato.\nResiduo ${c.nome}: ${fEur(residuo)}`);
 }
 
@@ -286,6 +321,7 @@ async function registraLuce(c) {
         if (esiste) c.movimenti = c.movimenti.filter(m => m._id !== esiste._id);
         await salvaMovimento(c, mov, `luce_${mese}`);
         renderConti();
+        document.dispatchEvent(new CustomEvent('contoAggiornato'));
     } catch (e) { console.error(e); alert('❌ Errore salvataggio luce'); }
 }
 
@@ -299,6 +335,7 @@ async function registraRettifica(c) {
     try {
         await salvaMovimento(c, nuovoMovimento(c, { tipo: 'RETTIFICA', importo, metodo: '', note: note.trim() }));
         renderConti();
+        document.dispatchEvent(new CustomEvent('contoAggiornato'));
     } catch (e) { console.error(e); alert('❌ Errore'); }
 }
 
@@ -328,6 +365,7 @@ async function eliminaMovimento(c, mid) {
         if (m.pnId) { try { await fsDeleteDoc(fsDoc(db, 'primaNota', m.pnId)); } catch (e) { console.warn('PN non rimossa:', e.message); } }
         c.movimenti = c.movimenti.filter(x => x._id !== mid);
         renderConti(); renderCassa();
+        document.dispatchEvent(new CustomEvent('contoAggiornato'));
     } catch (e) { console.error(e); alert('❌ Errore eliminazione'); }
 }
 

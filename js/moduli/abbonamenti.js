@@ -7,6 +7,8 @@ import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { showThankYouToast } from './clienti.js';
 import { richiediPagamento, avviaPagamento, healthBridge } from './cassa-automatica.js';
+import { apriConto, creaContoDaAbbonamento, saldoConto } from './conti.js';
+import { isAdmin } from './auth.js';
 
 // Guardia anti doppio-submit: impedisce che un click ripetuto su Salva/Paga/Rinnova
 // registri lo stesso incasso più volte mentre l'operazione async è in corso.
@@ -67,8 +69,12 @@ export function initAbbonamenti() {
             else if(btn.classList.contains('fic-abb')) fatturaFICAbb(id);
             else if(btn.classList.contains('disd-abb')) disdiciAbb(id);
             else if(btn.classList.contains('del-abb')) deleteAbb(id);
+            else if(btn.classList.contains('conto-abb')) apriConto(btn.dataset.conto);
+            else if(btn.classList.contains('conto-new-abb')) creaContoDaAbbonamento(id);
         });
     }
+    // Il saldo del conto cambia (acconto/addebito) → aggiorna il badge in tabella
+    document.addEventListener('contoAggiornato', () => renderAbb());
 
     const fDurata = document.getElementById('fDurata');
     const fInizio = document.getElementById('fInizio');
@@ -117,7 +123,8 @@ export function renderAbb() {
         );
     }
 
-    const attivi = state.localAbb.filter(r => !isDisd(r));
+    // Abbonati "a conto" (canone + acconti, vedi conti.js): niente scadenza né pagato/non pagato
+    const attivi = state.localAbb.filter(r => !isDisd(r) && !r.contoId);
     const scaduti = attivi.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) < 0; });
     const inScad  = attivi.filter(r => { const s = pDate(r['SCADENZA ABBONAMENTO']); return s && dBetween(now, s) >= 0 && dBetween(now, s) <= 7; });
 
@@ -125,7 +132,7 @@ export function renderAbb() {
     if(cntEl) cntEl.textContent = state.localAbb.length + ' totali';
 
     // KPI in alto: totale abbonati + fatturato abbonamenti (somma importi dei pagati)
-    const pagati = state.localAbb.filter(r => r.PAGAMENTO === 'SI');
+    const pagati = state.localAbb.filter(r => r.PAGAMENTO === 'SI' && !r.contoId);
     const fatturatoAbb = pagati.reduce((s, r) => s + pNum(r.IMPORTO), 0);
     const kpiEl = document.getElementById('abbKpis');
     if(kpiEl) {
@@ -199,6 +206,27 @@ export function renderAbb() {
         const noteDisp = note ? `<span title="${esc(note)}" style="cursor:help;margin-left:4px">📝</span>` : '';
         const notteDisp = notte ? `<span title="Notte" style="font-size:10px;color:var(--tx3)"> 🌙</span>` : '';
 
+        // Abbonato a conto: al posto di scadenza/pagamento mostra il dovuto e apre il partitario
+        if(r.contoId) {
+            const conto = (state.contiDB || []).find(c => c._id === r.contoId);
+            const saldo = conto ? saldoConto(conto) : null;
+            html += `<tr>
+                <td>
+                    <strong>${esc(nome)}</strong>${noteDisp}
+                    ${mod ? `<br><span style="font:400 10px var(--f);color:var(--tx3)">${esc(mod)}${cell ? ' · ' + esc(cell) : ''}</span>` : ''}
+                </td>
+                <td style="font:500 11px var(--mono)">${esc(targa)}</td>
+                <td><span class="badge ${saldo > 0 ? 'r' : 'g'}" title="Canone €${imp}/mese + luce a consumo: saldo del conto">📒 ${saldo === null ? 'conto' : 'dovuto ' + fEur(saldo)}</span></td>
+                <td style="font-weight:600">€${imp}<br><span style="font:400 10px var(--f);color:var(--tx3)">al mese</span></td>
+                <td style="white-space:nowrap">
+                    <button class="act-btn conto-abb" data-id="${id}" data-conto="${esc(r.contoId)}" title="Apri conto: acconti, luce, estratto conto" style="color:var(--gold);font-weight:700">📒</button>
+                    <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
+                    ${disdetto ? '' : `<button class="act-btn disd-abb" data-id="${id}" title="Disdetta" style="color:var(--tx3)">🚫</button>`}
+                </td>
+            </tr>`;
+            return;
+        }
+
         html += `<tr>
             <td>
                 <strong>${esc(nome)}</strong>${notteDisp}${noteDisp}
@@ -214,6 +242,7 @@ export function renderAbb() {
                 ${disdetto ? '' : `<button class="act-btn disd-abb" data-id="${id}" title="Disdetta: il cliente lascia il posto auto (resta in archivio, niente alert scadenza)" style="color:var(--tx3)">🚫</button>`}
                 <button class="act-btn fic-abb" data-id="${id}" title="${r.ficDocId ? 'Già fatturato n. ' + esc(String(r.ficNumero ?? '')) + ' — clicca per emetterne un\'altra' : 'Fattura elettronica (Fatture in Cloud)'}" style="color:var(--blu);${r.ficDocId ? 'opacity:.45' : ''}">🧾</button>
                 <button class="act-btn del del-abb" data-id="${id}" title="Elimina">✕</button>
+                ${isAdmin() && !disdetto ? `<button class="act-btn conto-new-abb" data-id="${id}" title="Trasforma in conto a canone (acconti + luce a consumo)" style="color:var(--tx3)">📒</button>` : ''}
             </td>
         </tr>`;
     });

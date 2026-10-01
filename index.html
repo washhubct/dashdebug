@@ -86,7 +86,6 @@
 <div class="sb-section">Gestione</div>
 <a class="sb-item" id="nav-abbonamenti"><span class="icon">🅿️</span>Abbonamenti</a>
 <a class="sb-item" id="nav-giornalieri"><span class="icon">🎟️</span>Parcheggio a Ore</a>
-<a class="sb-item" id="nav-conti"><span class="icon">📒</span>Conti Clienti</a>
 <a class="sb-item" id="nav-parchsmart"><span class="icon">🔐</span>Parcheggio Smart</a>
 <a class="sb-item" id="nav-prenotazioni"><span class="icon">📋</span>Prenotazioni</a>
 <a class="sb-item" id="nav-sospesi"><span class="icon">⏳</span>Sospesi<span class="badge-sm" id="navSospBadge" style="display:none;background:var(--amb1);color:var(--amb)">0</span></a>
@@ -277,18 +276,18 @@
 </div>
 <div id="abbScadAlert" style="display:none;padding:10px 14px;background:rgba(200,168,78,.08);border:1px solid rgba(200,168,78,.3);border-radius:var(--r2);margin-bottom:12px;font:400 12px var(--f)"></div>
 <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nome</th><th>Targa</th><th>Scadenza</th><th>€</th><th>Azioni</th></tr></thead><tbody id="abbTb"></tbody></table></div>
+<!-- Conto a canone (📒 sulla riga): acconti, luce a consumo, estratto conto — js/moduli/conti.js -->
+<div class="form-panel" id="contoPanel" style="margin-top:16px;border-color:var(--gold)">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+<span style="font:400 11px var(--f);color:var(--tx2)">Conto a canone: il saldo è sempre addebiti − acconti. Gli acconti finiscono in Prima Nota da soli.</span>
+<div style="display:flex;gap:8px;align-items:center">
+<select id="contiMese" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--f);outline:0"></select>
+<button class="btn" id="contoPanelClose">✕</button>
 </div>
 </div>
-
-<div class="page" id="page-conti">
-    <div class="sec">
-        <div style="font:400 12px var(--f);color:var(--tx2);margin-bottom:12px">Clienti a canone (affitto spazio, luce a consumo) che versano acconti: il saldo è sempre addebiti − acconti. Gli acconti finiscono in Prima Nota da soli.</div>
-        <div class="kpis" id="contiCards" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px"></div>
-        <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-            <select id="contiMese" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--f);outline:0"></select>
-        </div>
-        <div id="contiDettaglio"></div>
-    </div>
+<div id="contiDettaglio"></div>
+</div>
+</div>
 </div>
 
 <div class="page" id="page-giornalieri">
@@ -873,7 +872,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261001b"></script>
+<script type="module" src="js/main.js?v=20261001c"></script>
 
 </body>
 </html>
