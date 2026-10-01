@@ -54,7 +54,7 @@ async function apriCampagna() {
     for (const c of clienti) if (c._giorniDaUltimaVisita == null) { const s = calcolaStatsCliente(c.nome); c._giorniDaUltimaVisita = s.giorniDaUltimaVisita; c._numLavaggi = s.numLavaggi; c._ultimaVisita = s.ultimaVisita; }
 
     let seg = 'rischio', escludi = true, idx = 0, coda = lista(seg, escludi), inviati = 0;
-    let campagnaId = null, codaStato = null, unsubCoda = null; // avanzamento dell'ultima messa in coda
+    let campagnaId = null, codaStato = null, unsubCoda = null, accodando = false; // avanzamento dell'ultima messa in coda
     const tplIdx = Math.max(0, WA_TEMPLATES.findIndex(t => t.id === 'richiamo'));
     let testoTpl = WA_TEMPLATES[tplIdx].text;
 
@@ -131,7 +131,7 @@ async function apriCampagna() {
             const lim = cloud?.limiti?.maxGiorno || 70;
             const giorni = Math.ceil(restanti.length / lim);
             if (!confirm(`Mettere in coda ${restanti.length} messaggi (${seg})?\nIl Mac Mini li manda uno alla volta a ritmo umano (max ${lim}/giorno → circa ${giorni} giorn${giorni === 1 ? 'o' : 'i'}).`)) return;
-            const btn = ev.currentTarget; btn.disabled = true; btn.textContent = '⏳ metto in coda…';
+            const btn = ev.currentTarget; btn.disabled = true; btn.textContent = '⏳ metto in coda…'; accodando = true;
             campagnaId = `camp_${Date.now()}`;
             const operatore = state.currentUser?.user || 'Staff';
             const tplId = (WA_TEMPLATES.find(t => t.text === testoTpl)?.id) || 'custom';
@@ -144,7 +144,7 @@ async function apriCampagna() {
                     n++;
                 } catch (e) { console.warn('coda:', e.message); }
             }
-            inviati += n; idx = coda.length;
+            inviati += n; idx = coda.length; accodando = false;
             ascoltaCoda();
             render();
         });
@@ -173,6 +173,6 @@ async function apriCampagna() {
         });
     }
     const chiudi = () => { overlay.remove(); if (unsubCoda) unsubCoda(); if (unsubCfg) { unsubCfg(); unsubCfg = null; } };
-    ascoltaConfig(() => { if (document.body.contains(overlay) && !modal.querySelector('#cpBulk:disabled')) render(); });
+    ascoltaConfig(() => { if (document.body.contains(overlay) && !accodando) render(); });
     render();
 }

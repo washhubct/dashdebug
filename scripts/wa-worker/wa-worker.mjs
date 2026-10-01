@@ -41,10 +41,21 @@ const client = new Client({
   puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] },
 });
 
+// Collegamento: QR (default) oppure codice di abbinamento se WA_PAIR_PHONE=39xxxxxxxxxx
+// (WhatsApp → Dispositivi collegati → Collega un dispositivo → "Collega con numero di telefono")
+let pairingChiesto = false;
 client.on('qr', async qr => {
   await QRCode.toFile(QR_PNG, qr, { width: 420, margin: 2 });
   log('QR pronto →', QR_PNG, '(WhatsApp → Dispositivi collegati → Collega un dispositivo)');
   await statoWorker({ qrPending: true, errore: null });
+  if (process.env.WA_PAIR_PHONE && !pairingChiesto) {
+    pairingChiesto = true;
+    try {
+      const code = await client.requestPairingCode(process.env.WA_PAIR_PHONE.replace(/\D/g, ''), true);
+      log('CODICE ABBINAMENTO:', code);
+      fs.writeFileSync(path.join(DIR, 'pairing.txt'), code);
+    } catch (e) { log('pairing code fallito:', e.message); pairingChiesto = false; }
+  }
 });
 client.on('authenticated', () => log('autenticato'));
 client.on('auth_failure', async m => { log('AUTH FAILURE', m); pronto = false; await statoWorker({ errore: 'auth failure: ' + m, qrPending: false }); });
