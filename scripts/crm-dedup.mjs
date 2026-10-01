@@ -19,6 +19,9 @@ import { nameSimilarity } from '../js/utils.js';
 admin.initializeApp({ projectId: 'dashboard-washhub' });
 const db = admin.firestore();
 const APPLY = process.argv.includes('--apply');
+// --solo-telefono: unisce SOLO chi ha lo stesso numero (anche con nomi diversi), ignora i criteri sul nome
+// (decisione Guido 01/10/2026: i nomi simili senza numero in comune restano separati)
+const SOLO_TEL = process.argv.includes('--solo-telefono');
 
 const norm = s => String(s || '').trim().replace(/\s+/g, ' ').toUpperCase();
 const key = s => norm(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -57,9 +60,9 @@ const tokens = s => new Set(key(s).split(' ').filter(w => w.length >= 3));
 const nomiAffini = (a, b) => nameSimilarity(a.nome, b.nome) >= 0.4 || [...tokens(a.nome)].some(t => tokens(b.nome).has(t));
 const telDubbi = [];
 for (const g of Object.values(byTel)) for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
-  if (nomiAffini(g[i], g[j])) union(g[i]._id, g[j]._id); else telDubbi.push([g[i], g[j]]);
+  if (SOLO_TEL || nomiAffini(g[i], g[j])) union(g[i]._id, g[j]._id); else telDubbi.push([g[i], g[j]]);
 }
-for (const g of [...Object.values(byKey), ...Object.values(byTok)]) for (let i = 1; i < g.length; i++) union(g[0]._id, g[i]._id);
+if (!SOLO_TEL) for (const g of [...Object.values(byKey), ...Object.values(byTok)]) for (let i = 1; i < g.length; i++) union(g[0]._id, g[i]._id);
 
 const gruppi = {};
 for (const c of clienti) (gruppi[find(c._id)] ||= []).push(c);
