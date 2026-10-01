@@ -92,6 +92,24 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // CONTI CLIENTI — partitario (canone affitto + luce a consumo + acconti)
+    // Il conto lo gestisce l'admin; gli operatori registrano acconti/letture
+    // (create sui movimenti) ma non modificano né cancellano nulla.
+    // ═══════════════════════════════════════════════════════════
+    match /contiClienti/{conto} {
+      allow read:   if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create, update: if isAdmin() && writeOk();
+      allow delete:         if isAdmin();
+
+      match /movimenti/{mov} {
+        allow read:   if isSignedIn() && hasSedeAccess(get(/databases/$(database)/documents/contiClienti/$(conto)).data.sedeId);
+        allow create: if isSignedIn() && writeOk()
+                      && request.resource.data.sedeId == get(/databases/$(database)/documents/contiClienti/$(conto)).data.sedeId;
+        allow update, delete: if isAdmin();
+      }
+    }
+
     match /giornalieri/{doc} {
       allow read:           if isSignedIn() && hasSedeAccess(resource.data.sedeId);
       allow create:         if writeOk();

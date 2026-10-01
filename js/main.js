@@ -23,6 +23,7 @@ import { initServiziAggiuntivi } from './moduli/servizi-aggiuntivi.js';
 import { initMarketing, renderMarketing } from './moduli/marketing.js';
 import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
 import { initIncassiManuali } from './moduli/incassi-manuali.js';
+import { initConti, caricaConti } from './moduli/conti.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 import { initMessaggi } from './moduli/messaggi.js';
 import { initFidelai } from './moduli/fidelai.js';
@@ -45,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initReferralDash();
     initVouchers();
     initIncassiManuali();
+    initConti();
     initMessaggi();
     initFidelai();
     initDashDates();
@@ -386,6 +388,7 @@ async function initFirebaseData() {
             })(),
 
             caricaClienti().catch(e => { console.warn("Clienti non disponibili:", e.message); }),
+            caricaConti(),
         ];
 
         await Promise.all(tasks);
