@@ -310,7 +310,7 @@
 <div class="ff" style="width:100px"><label>Targa *</label><input id="gTarga" style="text-transform:uppercase"></div>
 <div class="ff" style="flex:1;min-width:120px"><label>Telefono *</label><input id="gTel" type="tel"></div>
 <div class="ff" style="width:90px"><label>Orario Arrivo *</label><input id="gArrivo" type="time"></div>
-<button class="btn btn-primary" style="height:37px;padding:0 20px">Registra IN</button>
+<button class="btn btn-primary" id="tapAddBtn" style="height:37px;padding:0 20px">Registra</button>
 </div>
 <div class="form-msg" id="gMsg"></div>
 </div>
@@ -489,6 +489,7 @@
     <div class="ff" style="width:110px"><label>Targa *</label><input id="tTarga" style="text-transform:uppercase" placeholder="AA000AA"></div>
     <div class="ff" style="width:130px"><label>Telefono</label><input id="tTelefono" type="tel" placeholder="Es: 3331234567"></div>
     <div class="ff" style="width:80px"><label>Prezzo € *</label><input id="tPrezzo" type="number" step="1"></div>
+    <div class="ff" style="width:140px"><label title="Se è un giorno futuro la tappezzeria va in &quot;In arrivo&quot; e non conta in lavorazione">Data ingresso</label><input id="tDataIn" type="date"></div>
     <div class="ff" style="width:150px"><label>Note</label><input id="tNote" placeholder="Opzionale"></div>
     <button class="btn btn-primary" style="height:37px;padding:0 20px">Registra IN</button>
   </div>
@@ -873,7 +874,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261001g"></script>
+<script type="module" src="js/main.js?v=20261002a"></script>
 
 </body>
 </html>

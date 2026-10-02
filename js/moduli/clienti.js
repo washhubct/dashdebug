@@ -113,7 +113,7 @@ export function calcolaStatsCliente(nomeCliente) {
         });
     }
     (state.tapDB||[]).forEach(t => {
-        if ((t.cliente||'').toUpperCase() === nomeUp) {
+        if ((t.cliente||'').toUpperCase() === nomeUp && t.status !== 'PRENOTATA') {
             numLavaggi++;
             if (t.status==='OUT' && t.pagamento!=='SOSPESO') spesaTotale += pNum(t.prezzo);
             if (t.pagamento==='SOSPESO') sospesiAperti += pNum(t.prezzo);

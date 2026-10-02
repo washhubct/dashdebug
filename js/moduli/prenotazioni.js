@@ -54,6 +54,8 @@ export function initPrenotazioni() {
 
     document.getElementById('prenTb')?.addEventListener('click', handlePrenActions);
     document.getElementById('tapTb')?.addEventListener('click', handleTapActions);
+    // La sezione "In arrivo" è creata da renderTap fuori da #tapTb: delega sul documento
+    document.addEventListener('click', e => { if (e.target.closest('#tapArrSection button')) handleTapActions(e); });
 
     // Flag richiesta fattura: mostra i dati fiscali, precompilati dal CRM se noti
     document.getElementById('pFattura')?.addEventListener('change', (e) => {
@@ -900,6 +902,32 @@ export function renderTap() {
         return false;
     });
 
+    // Prenotate (ingresso futuro o arrivo da confermare): sezione "In arrivo" sopra la tabella
+    const inArrivo = state.tapDB.filter(t => t.status === 'PRENOTATA').sort((a, b) => toISO(a.dataIn).localeCompare(toISO(b.dataIn)));
+    let arrSection = document.getElementById('tapArrSection');
+    if (!arrSection) {
+        arrSection = document.createElement('div');
+        arrSection.id = 'tapArrSection';
+        tb.closest('.tbl-wrap')?.before(arrSection);
+    }
+    const oggiISO = fmtDI(new Date());
+    arrSection.innerHTML = !inArrivo.length ? '' : `
+        <div style="margin-bottom:6px;font:600 11px var(--mono);color:var(--blu);text-transform:uppercase;letter-spacing:0.5px">📅 In arrivo (${inArrivo.length})</div>
+        <div class="tbl-wrap" style="margin-bottom:14px"><table class="tbl"><thead><tr><th>Ingresso</th><th>Cliente</th><th>Modello</th><th>Targa</th><th>Prezzo</th><th>Note</th><th></th><th></th></tr></thead><tbody>
+        ${inArrivo.map(t => {
+            const di = toISO(t.dataIn);
+            const badge = di < oggiISO ? '<span class="badge r">in ritardo</span>' : di === oggiISO ? '<span class="badge a">arriva oggi</span>' : '';
+            return `<tr>
+                <td style="font:500 11px var(--mono)">${esc(t.dataIn)} ${badge}</td>
+                <td><strong>${esc(t.cliente)}</strong></td>
+                <td>${esc(t.modello)}</td>
+                <td style="font:500 11px var(--mono)">${esc(t.targa)}</td>
+                <td style="font-weight:600">€${pNum(t.prezzo)}</td>
+                <td style="font-size:11px;color:var(--tx2)">${esc(t.note || '')}</td>
+                <td><button class="btn arr-tap" data-id="${t._id}" title="L'auto è arrivata: passa in lavorazione con la data di oggi">🚗 Arrivata</button></td>
+                <td><button class="act-btn del del-tap" data-id="${t._id}">✕</button></td></tr>`;
+        }).join('')}</tbody></table></div>`;
+
     // Completate nel giorno selezionato
     const outData = state.tapDB.filter(t => t.status === 'OUT' && t.dataOut === selDataIta && !nascondiContante(t.pagamento, toISO(t.dataOut)));
 
@@ -978,15 +1006,20 @@ async function addTap() {
         document.getElementById('tTelefono')?.focus();
         return;
     }
+    // Data ingresso: oggi di default; se futura è una tappezzeria prenotata (stato PRENOTATA),
+    // non ancora in lavorazione (non pesa sul carico personale meteo) — 02/10/2026
+    const oggiISO = fmtDI(new Date());
+    const dataInISO = document.getElementById('tDataIn')?.value || oggiISO;
+    const prenotata = dataInISO > oggiISO;
     const obj = {
-        dataIn: new Date().toLocaleDateString('it-IT'),
+        dataIn: dataInISO.split('-').reverse().join('/'),
         cliente: clienteFinale,
         modello: normalizeName(modelloRaw),
         targa: normalizeName(document.getElementById('tTarga').value),
         telefono,
         prezzo: prezzoRaw,
         note: (document.getElementById('tNote')?.value || '').trim(),
-        status: 'IN', pagamento: '', dataOut: '',
+        status: prenotata ? 'PRENOTATA' : 'IN', pagamento: '', dataOut: '',
         sedeId: state.sedeAttiva
     };
     try {
@@ -1000,11 +1033,11 @@ async function addTap() {
         const isNewClient = await autoSalvaCliente(obj.cliente, obj.modello, obj.targa, '');
 
         renderTap();
-        ['tCliente','tModello','tTarga','tTelefono','tPrezzo','tNote'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+        ['tCliente','tModello','tTarga','tTelefono','tPrezzo','tNote','tDataIn'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
 
         // Se è un nuovo cliente con telefono valido nel CRM, propone benvenuto
         if (isNewClient) showWelcomeToast(obj.cliente);
-        if(msg) { msg.style.color = 'var(--grn)'; msg.textContent = 'Tappezzeria registrata!'; setTimeout(() => msg.textContent = '', 2000); }
+        if(msg) { msg.style.color = 'var(--grn)'; msg.textContent = prenotata ? `📅 Tappezzeria prenotata per il ${obj.dataIn}` : 'Tappezzeria registrata!'; setTimeout(() => msg.textContent = '', 2500); }
     } catch(e) { console.error(e); if(msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Errore connessione Cloud'; } }
 }
 
@@ -1017,7 +1050,23 @@ async function handleTapActions(e) {
         try { await markPaidTap(id, btn.dataset.mod); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('del-tap')) {
         delTap(id);
+    } else if (btn.classList.contains('arr-tap')) {
+        btn.disabled = true;
+        try { await arrivataTap(id); } finally { btn.disabled = false; }
     }
+}
+
+// Tappezzeria prenotata → auto arrivata: in lavorazione con la data reale d'ingresso
+async function arrivataTap(id) {
+    const t = state.tapDB.find(x => x._id === id);
+    if (!t || t.status !== 'PRENOTATA') return;
+    const oggi = new Date().toLocaleDateString('it-IT');
+    const upd = { status: 'IN', dataIn: oggi, ...(t.dataIn !== oggi ? { dataInPrevista: t.dataIn } : {}) };
+    try {
+        await fsUpdateDoc(fsDoc(db, 'tappezzeria', id), upd);
+        Object.assign(t, upd);
+        renderTap();
+    } catch (e) { alert('Errore Cloud'); }
 }
 
 async function markPaidTap(id, modDefault) {
