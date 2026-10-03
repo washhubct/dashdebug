@@ -65,6 +65,40 @@ export function isAbbonamentoPN(r) {
     return getEntrata(r) > 0;
 }
 
+// ─── RICONCILIAZIONE CASSA VNE ───
+// Il report conta i lavaggi nel giorno del lavaggio; la macchina conta l'ora in cui entrano i soldi.
+// Un sospeso di settembre saldato in contanti il 30/09 per la macchina è del 30/09. Qui ogni incasso
+// con pagamentoVia CASSA_AUTO è datato dall'idVNE (timestamp della transazione) e contato una volta
+// per origine: il sospeso saldato vive sia sulla prenotazione sia nel record storico (03/10/2026).
+function vneTransazioni(from, to) {
+    const visti = new Set();
+    let totale = 0;
+    const tx = new Set();
+    const add = (idVNE, origine, imp, fallbackData) => {
+        const ts = Number(String(idVNE || '').slice(0, 13)) || 0;
+        const dt = ts ? new Date(ts) : fallbackData;
+        if (!dt || dt < from || dt > to) return;
+        const k = `${idVNE || 'noid'}|${origine}`;
+        if (visti.has(k)) return;
+        visti.add(k); totale += pNum(imp); tx.add(idVNE || k);
+    };
+    for (const [date, entries] of Object.entries(state.prenDB || {})) entries.forEach(p => {
+        if (p.saldo === 'CONTANTI' && p.pagamentoVia === 'CASSA_AUTO') add(p.idVNE, 'PREN-' + p._pid, p.prezzo, new Date(date + 'T12:00:00'));
+    });
+    (state.tapDB || []).forEach(t => { if ((t.pagamento || '').toUpperCase() === 'CONTANTI' && t.pagamentoVia === 'CASSA_AUTO') add(t.idVNE, 'TAP-' + t._id, t.prezzo, pDate(t.dataOut)); });
+    (state.giornDB || []).forEach(g => { if (g.pagamento === 'CONTANTI' && g.pagamentoVia === 'CASSA_AUTO') add(g.idVNE, 'GIO-' + (g._id || g.idVNE), g.prezzoFinale, g.dataOut ? new Date(g.dataOut + 'T12:00:00') : null); });
+    (state.localSosp || []).forEach(s => {
+        const via = s.pagamentoVia || s._pagamentoVia;
+        if (!s._pagato || via !== 'CASSA_AUTO') return;
+        add(s.idVNE || s._idVNE, s.origineSid || s._sid, s.importo, pDate(s._dataPag || s.dataPagamento));
+    });
+    (state.rawData?.primaNota?.rows || []).forEach(r => {
+        if (r.pagamentoVia !== 'CASSA_AUTO' || !isAbbonamentoPN(r)) return;
+        add(r.idVNE, 'PN-' + (r.Descrizione || '') + (r.timestamp || ''), getEntrata(r), getDataRecord(r));
+    });
+    return { totale: Math.round(totale * 100) / 100, n: tx.size };
+}
+
 function calcolaDatiOperativi(fromStr, toStr) {
     // Cutoff storico solo a Paesi Etnei: il periodo non può iniziare prima del 22/05/2026
     if (state.sedeAttiva === 'paesi-etnei' && fromStr < PAESI_ETNEI_START) {
@@ -248,6 +282,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
     // i sospesi saldati in contanti non portano il flag e ricadono nei manuali.
     const cashTotale = lavContanti + tapContanti + abbContanti + parContanti + imContanti;
     const cashManuale = cashTotale - cashVne;
+    const vne = vneTransazioni(from, to);
     const consumabili = fatLavaggio * 0.03;
 
     // Affitto Paesi Etnei: 3000 €/mese pro-rata
@@ -266,7 +301,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
         imSelfServ, imLavMano, imContanti, imPos, fatIncassiManuali,
         affittoPE,
         // Cash (riconciliazione cassa VNE)
-        cashTotale, cashVne, cashManuale,
+        cashTotale, cashVne, cashManuale, vne,
         // Totali
         fatturato, sospesiAperti, numSospesi,
         uscContanti, uscPos, usciteTot,
@@ -713,7 +748,8 @@ export function renderReport() {
             <div class="kpi r"><div class="kpi-label">Uscite Totali</div><div class="kpi-val">${fEur(totUscite)}</div><div class="kpi-sub">Personale ${fEur(d.costoPersonale)} + Fissi ${fEur(d.costiFissi.totale)} + Operative ${fEur(d.usciteTot)} + Cons. ${fEur(d.consumabili)}</div></div>
             <div class="kpi b"><div class="kpi-label">Margine Netto</div><div class="kpi-val">${fEur(margine)}</div><div class="kpi-sub">${margPct}%</div></div>
             <div class="kpi a"><div class="kpi-label">Sospesi</div><div class="kpi-val">${fEur(sospesiTotali)}</div><div class="kpi-sub">${d.numSospesi} in attesa</div></div>
-            <div class="kpi" style="border-color:#C8A84E"><div class="kpi-label">💵 Pagamenti Cash</div><div class="kpi-val">${fEur(d.cashTotale)}</div><div class="kpi-sub">🏧 Cassa VNE ${fEur(d.cashVne)} · Manuali ${fEur(d.cashManuale)}</div></div>`;
+            <div class="kpi" style="border-color:#C8A84E"><div class="kpi-label">💵 Pagamenti Cash</div><div class="kpi-val">${fEur(d.cashTotale)}</div><div class="kpi-sub">🏧 Cassa VNE ${fEur(d.cashVne)} · Manuali ${fEur(d.cashManuale)}</div></div>
+            <div class="kpi" style="border-color:var(--blu)" title="Per confrontare col totale della macchina (vneremote, solo transazioni completate): ogni incasso passato dalla cassa automatica contato nel giorno/ora in cui è entrato, compresi i sospesi saldati di lavaggi di giorni precedenti. Il blocco sopra invece conta i lavaggi nel giorno del lavaggio."><div class="kpi-label">🏧 Entrato in cassa VNE</div><div class="kpi-val">${fEur(d.vne.totale)}</div><div class="kpi-sub">${d.vne.n} transazioni nel periodo (per ora d'incasso)</div></div>`;
     }
 
     // Dettaglio uscite CON personale
