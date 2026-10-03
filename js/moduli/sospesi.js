@@ -200,7 +200,10 @@ export function buildSospesiArray() {
                 _sid: sid
             };
             if (e.saldo === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = e.dataFattura || ''; }
-            if (e.ficDocId || e.ficNumero) { obj._ficDocId = e.ficDocId || null; obj._ficNumero = e.ficNumero ?? null; }
+            // Prenotazione già fatturata su FIC (es. fattura immediata) ma rimasta a SOSPESO: è un
+            // fatturato in attesa di incasso. Prima restava tra gli "aperti" senza numero e veniva
+            // rifatturata (caso Buccheri: 27/08 in n.30 e di nuovo in n.142, 03/10/2026).
+            if (e.ficDocId || e.ficNumero) { obj._ficDocId = e.ficDocId || null; obj._ficNumero = e.ficNumero ?? null; obj._fatturato = true; obj._dataFatt = obj._dataFatt || e.dataFattura || ''; }
             state.localSosp.push(obj);
         });
     }
@@ -222,7 +225,7 @@ export function buildSospesiArray() {
             _sid: sid
         };
         if (t.pagamento === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = t.dataFattura || ''; }
-        if (t.ficDocId || t.ficNumero) { obj._ficDocId = t.ficDocId || null; obj._ficNumero = t.ficNumero ?? null; }
+        if (t.ficDocId || t.ficNumero) { obj._ficDocId = t.ficDocId || null; obj._ficNumero = t.ficNumero ?? null; obj._fatturato = true; obj._dataFatt = obj._dataFatt || t.dataFattura || ''; }
         state.localSosp.push(obj);
     });
 
@@ -272,7 +275,7 @@ export function avvisaSospesiCliente(nomeCliente, escludiSid = '') {
 // ─── HELPERS ───
 // Badge numero fattura (FIC) per un sospeso fatturato; vuoto se fatturato a mano senza numero
 function fattBadge(r) {
-    if (!r._fatturato && !r._pagato) return '';
+    if (!r._fatturato && !r._pagato && (r._ficNumero == null || r._ficNumero === '')) return '';
     if (r._ficNumero != null && r._ficNumero !== '') return ` <span class="badge b" title="Fattura n. ${esc(String(r._ficNumero))} su Fatture in Cloud${r._dataFatt ? ' del ' + esc(r._dataFatt) : ''}">🧾 n. ${esc(String(r._ficNumero))}</span>`;
     if (r._fatturato) return ` <span class="badge" title="Segnato fatturato a mano${r._dataFatt ? ' il ' + esc(r._dataFatt) : ''}: nessun numero FIC">🧾 manuale</span>`;
     return '';
