@@ -18,8 +18,12 @@ let _abbBusy = false;
 // stessa descrizione + stesso importo = stesso documento. Ri-registrare un
 // pagamento identico sovrascrive (admin) o viene rifiutato dalle rules
 // (operatore, update vietato) invece di creare un doppione (dedup lug 2026).
-async function scriviRigaAbbPrimaNota(pnRow) {
-    const slug = `${pnRow.Descrizione}-${pnRow.ENTRATA}`.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
+// `unico`: incasso reale e distinto (↻ Rinnova, 💰 Incassa) → l'id include la transazione VNE o
+// l'ora, così due rinnovi dello stesso giorno non si sovrascrivono (03/10/2026: Pellegriti 3×€80 in
+// cassa, 1 sola riga in Prima Nota). Il nuovo abbonamento resta deterministico (ri-salvataggi).
+async function scriviRigaAbbPrimaNota(pnRow, { unico = false } = {}) {
+    const extra = unico ? `-${pnRow.idVNE || pnRow.timestamp}` : '';
+    const slug = `${pnRow.Descrizione}-${pnRow.ENTRATA}${extra}`.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase();
     await setDoc(fsDoc(db, "primaNota", `${pnRow.sedeId}_${pnRow.dataISO}_${slug}`), pnRow);
 }
 
@@ -521,6 +525,7 @@ async function renewAbb(id) {
     let modalita = '';
     let dataPag = '';
     let prezzoFinale = imp;
+    let vneMeta = null;
 
     if(scelta.pagare) {
         const pag = await richiediPagamento(imp, r['NOME E COGNOME'] + ' — ' + (r.TARGA || ''), id, { addBonifico: true });
@@ -528,6 +533,7 @@ async function renewAbb(id) {
         modalita = pag.mod;
         prezzoFinale = pag.prezzoFinale;
         dataPag = new Date().toLocaleDateString('it-IT');
+        if (pag.meta?.pagamentoVia) vneMeta = pag.meta;
     }
 
     r['INIZIO ABBONAMENTO'] = d2s(fmtDI(old));
@@ -559,9 +565,10 @@ async function renewAbb(id) {
                 ENTRATA: prezzoFinale, Entrata: prezzoFinale,
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
-                sedeId: state.sedeAttiva
+                sedeId: state.sedeAttiva,
+                ...(vneMeta || {})
             };
-            await scriviRigaAbbPrimaNota(pnRow);
+            await scriviRigaAbbPrimaNota(pnRow, { unico: true });
             state.rawData?.primaNota?.rows?.push(pnRow);
         } catch(e) { console.warn("Errore Prima Nota rinnovo:", e); }
     }
@@ -618,9 +625,10 @@ async function pagaAbb(id) {
             ENTRATA: pag.prezzoFinale, Entrata: pag.prezzoFinale,
             USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
             "MODALITA'": pag.mod, timestamp: Date.now(),
-            sedeId: state.sedeAttiva
+            sedeId: state.sedeAttiva,
+            ...(pag.meta?.pagamentoVia ? pag.meta : {})
         };
-        await scriviRigaAbbPrimaNota(pnRow);
+        await scriviRigaAbbPrimaNota(pnRow, { unico: true });
         state.rawData?.primaNota?.rows?.push(pnRow);
     } catch(e) { console.warn("Errore Prima Nota:", e); }
 
