@@ -312,12 +312,7 @@ function calcScad() {
     const d = document.getElementById('fDurata'), i = document.getElementById('fInizio'), s = document.getElementById('fScadenza');
     if(!i.value) return;
     const dt = new Date(i.value);
-    const t = d.value;
-    if(t.includes('ANNO')) dt.setFullYear(dt.getFullYear() + 1);
-    else if(t.includes('8')) dt.setMonth(dt.getMonth() + 8);
-    else if(t.includes('6')) dt.setMonth(dt.getMonth() + 6);
-    else if(t.includes('3')) dt.setMonth(dt.getMonth() + 3);
-    else dt.setMonth(dt.getMonth() + 1);
+    dt.setMonth(dt.getMonth() + mesiDurata(d.value));
     s.value = fmtDI(dt);
 }
 
@@ -499,13 +494,16 @@ function editAbb(id) {
 }
 
 // Prossima scadenza a partire dalla scadenza attuale, secondo la durata dell'abbonamento
+// Mesi coperti da una durata ("1 MESE", "2 MESI", "3 MESI", "1 ANNO"…). 2 MESI aggiunto 05/10/2026:
+// prima il bimestrale si faceva a mano e il rinnovo avanzava/incassava un mese solo.
+function mesiDurata(dur) {
+    const t = String(dur || '').toUpperCase();
+    const n = parseInt(t, 10) || 1;
+    return t.includes('ANNO') ? 12 * n : n;
+}
 function _prossimaScadenza(dur, old) {
     const ns = new Date(old);
-    if(dur.includes('ANNO')) ns.setFullYear(ns.getFullYear() + 1);
-    else if(dur.includes('8')) ns.setMonth(ns.getMonth() + 8);
-    else if(dur.includes('6')) ns.setMonth(ns.getMonth() + 6);
-    else if(dur.includes('3')) ns.setMonth(ns.getMonth() + 3);
-    else ns.setMonth(ns.getMonth() + 1);
+    ns.setMonth(ns.getMonth() + mesiDurata(dur));
     return ns;
 }
 
