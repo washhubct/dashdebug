@@ -270,7 +270,11 @@ function showAbbF(data) {
         document.getElementById('fTarga').value = data.TARGA || '';
         document.getElementById('fProv').value = data.PROVENIENZA || '';
         document.getElementById('fCodice').value = data['CODICE CANCELLO'] || '';
-        document.getElementById('fDurata').value = data['DURATA ABB.'] || '1 MESE';
+        // Durate storiche fuori elenco (es. "1 ANNO"): le aggiungo al volo così la modifica non le perde
+        const selDur = document.getElementById('fDurata');
+        const durVal = data['DURATA ABB.'] || '1 MESE';
+        if (![...selDur.options].some(o => o.value === durVal)) selDur.add(new Option(durVal, durVal));
+        selDur.value = durVal;
         document.getElementById('fImporto').value = pNum(data.IMPORTO);
         document.getElementById('fNotte').value = data.NOTTE || 'SI';
         document.getElementById('fPag').value = data.PAGAMENTO || '';
