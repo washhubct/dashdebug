@@ -330,16 +330,19 @@ function renderRiepilogoMensile(mese, anno) {
         }),
     ];
 
-    // "Da pagare" = giornate NON marcate pagate su TUTTO lo storico (il
-    // pagamento è a quindicina, può stare a cavallo di più mesi)
-    const daPagare = {};
+    // Per mese (richiesta Guido 02/10/2026): pagato e da pagare del mese mostrato, più l'arretrato
+    // degli altri mesi. "Da pagare" totale resta = giornate non pagate su tutto lo storico.
+    const daPagare = {}, pagatoMese = {}, daPagareMese = {};
     presenzeLocali.forEach(p => {
         if (!p.dettaglio) return;
+        const d = p.dataISO ? new Date(p.dataISO) : null;
+        const nelMese = d && d.getMonth() === mese && d.getFullYear() === anno;
         for (const [nome, val] of Object.entries(p.dettaglio)) {
             const v = pNum(val);
             if (v <= 0) continue;
-            if (p.pagati && p.pagati[nome]) continue; // già saldata
-            daPagare[nome] = (daPagare[nome] || 0) + v;
+            const pagata = !!(p.pagati && p.pagati[nome]);
+            if (nelMese) { if (pagata) pagatoMese[nome] = (pagatoMese[nome] || 0) + v; else daPagareMese[nome] = (daPagareMese[nome] || 0) + v; }
+            if (!pagata) daPagare[nome] = (daPagare[nome] || 0) + v;
         }
     });
 
@@ -359,13 +362,20 @@ function renderRiepilogoMensile(mese, anno) {
         } else {
             cellaPagare = `<span style="color:var(--grn)">✓ coperto da acconto${netto < 0 ? ` (resta ${fEur(-netto)})` : ''}</span>`;
         }
+        const pm = pagatoMese[dip.nome] || 0, dm = daPagareMese[dip.nome] || 0;
+        const arretrato = Math.max(0, dovuto - dm);
+        const cellaMese = dm > 0
+            ? `<span style="color:var(--amb)">${fEur(dm)}</span>${acconto > 0 ? `<br><span style="font:400 9px var(--f);color:var(--tx3)">acconto disponibile ${fEur(acconto)}</span>` : ''}`
+            : (totDip[dip.nome] > 0 ? '<span style="color:var(--grn)">✓ saldato</span>' : '—');
         return `<tr>
             <td><strong>${dip.nome}</strong></td>
             <td>${dip.mod}</td>
             <td style="text-align:center">${giorniDip[dip.nome]}</td>
             <td style="font:700 13px var(--f);color:var(--red)">${fEur(totDip[dip.nome])}</td>
-            <td style="font:700 13px var(--f)">${cellaPagare}</td>
-            <td style="white-space:nowrap">${dovuto > 0 ? `<button class="btn btn-paga-dip" data-nome="${dip.nome}" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Segna pagato</button> ` : ''}<button class="btn btn-acconto-dip" data-nome="${dip.nome}" title="Registra/modifica acconto (anticipo su stipendio)" style="font-size:10px;padding:3px 8px">💶</button></td>
+            <td style="font:600 12px var(--f);color:var(--grn)">${pm ? fEur(pm) : '—'}</td>
+            <td style="font:700 13px var(--f)">${cellaMese}</td>
+            <td style="font:600 12px var(--f)" title="Totale non pagato su tutto lo storico: ${fEur(dovuto)}${acconto ? ' · acconto ' + fEur(acconto) : ''}">${arretrato > 0 ? `<span style="color:var(--red)">${fEur(arretrato)}</span>` : '—'}</td>
+            <td style="white-space:nowrap">${dm > 0 ? `<button class="btn btn-paga-mese" data-nome="${dip.nome}" title="Segna pagate le sole giornate di questo mese" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Paga mese</button> ` : ''}${arretrato > 0 ? `<button class="btn btn-paga-dip" data-nome="${dip.nome}" title="Segna pagato TUTTO l'arretrato (tutti i mesi)" style="font-size:10px;padding:3px 8px">tutto</button> ` : ''}<button class="btn btn-acconto-dip" data-nome="${dip.nome}" title="Registra/modifica acconto (anticipo su stipendio)" style="font-size:10px;padding:3px 8px">💶</button></td>
         </tr>`;
     }).join('');
 
@@ -373,11 +383,14 @@ function renderRiepilogoMensile(mese, anno) {
         <td colspan="2"><strong>TOTALE ${mesi[mese].toUpperCase()} ${anno}</strong></td>
         <td></td>
         <td style="font:700 14px var(--f);color:var(--red)">${fEur(totGenerale)}</td>
-        <td colspan="2"></td>
+        <td colspan="4"></td>
     </tr>`;
 
     tb.querySelectorAll('.btn-paga-dip').forEach(btn => {
         btn.addEventListener('click', () => segnaPagatoDipendente(btn.dataset.nome));
+    });
+    tb.querySelectorAll('.btn-paga-mese').forEach(btn => {
+        btn.addEventListener('click', () => segnaPagatoDipendente(btn.dataset.nome, { mese, anno }));
     });
     tb.querySelectorAll('.btn-acconto-dip').forEach(btn => {
         btn.addEventListener('click', () => impostaAcconto(btn.dataset.nome));
@@ -408,19 +421,28 @@ async function impostaAcconto(nome) {
 
 // Quindicina: marca come PAGATE tutte le giornate non saldate del dipendente
 // (su tutto lo storico), con la data odierna. Il "Da pagare" torna a zero.
-async function segnaPagatoDipendente(nome) {
-    const daSaldare = presenzeLocali.filter(p =>
-        p.dettaglio && pNum(p.dettaglio[nome]) > 0 && !(p.pagati && p.pagati[nome])
-    );
+// `periodo` {mese, anno}: solo le giornate di quel mese ("Paga mese"); senza, tutto l'arretrato.
+async function segnaPagatoDipendente(nome, periodo = null) {
+    const daSaldare = presenzeLocali.filter(p => {
+        if (!p.dettaglio || !(pNum(p.dettaglio[nome]) > 0) || (p.pagati && p.pagati[nome])) return false;
+        if (!periodo) return true;
+        const d = p.dataISO ? new Date(p.dataISO) : null;
+        return d && d.getMonth() === periodo.mese && d.getFullYear() === periodo.anno;
+    });
     if (!daSaldare.length) return;
     const totale = daSaldare.reduce((s, p) => s + pNum(p.dettaglio[nome]), 0);
     const prima = daSaldare.map(p => p.dataISO).sort()[0].split('-').reverse().join('/');
-    const acconto = accontiLocali[nome] || 0;
+    const accontoDisp = accontiLocali[nome] || 0;
+    // Con più mesi aperti l'acconto si può dividere (es. Rocky: €250 su agosto e €250 su settembre)
+    let acconto = Math.min(accontoDisp, totale);
+    if (accontoDisp > 0) {
+        const r = prompt(`Acconto disponibile per ${nome}: ${fEur(accontoDisp)}.\nQuanto ne scalo da questo pagamento (${fEur(totale)})?`, String(acconto));
+        if (r === null) return;
+        acconto = Math.min(accontoDisp, totale, Math.max(0, parseFloat(String(r).replace(',', '.')) || 0));
+    }
     const daVersare = Math.max(0, totale - acconto);
-    const rigaAcconto = acconto > 0
-        ? `\nAcconto scalato: ${fEur(Math.min(acconto, totale))} → da versare ${fEur(daVersare)}`
-        : '';
-    if (!confirm(`Segnare PAGATO ${nome}?\n${daSaldare.length} giornate dal ${prima} — totale ${fEur(totale)}${rigaAcconto}`)) return;
+    const rigaAcconto = acconto > 0 ? `\nAcconto scalato: ${fEur(acconto)} → da versare ${fEur(daVersare)}` : '';
+    if (!confirm(`Segnare PAGATO ${nome}${periodo ? ' — solo ' + ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'][periodo.mese] + ' ' + periodo.anno : ''}?\n${daSaldare.length} giornate dal ${prima} — totale ${fEur(totale)}${rigaAcconto}`)) return;
 
     const oggi = new Date().toLocaleDateString('it-IT');
     for (const p of daSaldare) {
@@ -432,9 +454,9 @@ async function segnaPagatoDipendente(nome) {
         } catch (e) { console.warn('segna pagato fallito', p.dataISO, e?.message); }
     }
 
-    // Consuma l'acconto sulle giornate appena saldate
+    // Consuma la quota di acconto scelta
     if (acconto > 0) {
-        const residuo = Math.max(0, acconto - totale);
+        const residuo = Math.max(0, accontoDisp - acconto);
         try {
             await fsSetDoc(fsDoc(db, 'acconti', `${state.sedeAttiva}_${nome}`), {
                 nome,
