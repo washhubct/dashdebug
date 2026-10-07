@@ -6,6 +6,7 @@ import { pNum, fEur, esc, fmtDI, d2s, dBetween, pDate } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { showThankYouToast } from './clienti.js';
+import { mostraSuDisplay } from './display-cassa.js';
 import { richiediPagamento, avviaPagamento, healthBridge } from './cassa-automatica.js';
 import { apriConto, creaContoDaAbbonamento, saldoConto } from './conti.js';
 import { isAdmin } from './auth.js';
@@ -413,6 +414,7 @@ async function saveAbb() {
     if(pagamento === 'SI' && !giaRegistratoPagato) {
         // Ringraziamento WhatsApp al salvataggio abbonamento pagato
         showThankYouToast(nome, importoIncassato);
+        mostraSuDisplay({ telefono: rec['NUMERO CELL.'], nome, importo: importoIncassato });
         try {
             const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
             const dataISO = dataPag || fmtDI(new Date());
@@ -556,6 +558,7 @@ async function renewAbb(id) {
 
     if(scelta.pagare && prezzoFinale > 0) {
         showThankYouToast(r['NOME E COGNOME'] || '', prezzoFinale);
+        mostraSuDisplay({ telefono: r['NUMERO CELL.'], nome: r['NOME E COGNOME'], importo: prezzoFinale });
         try {
             const nome = r['NOME E COGNOME'] || '';
             const targa = r.TARGA || '';
@@ -616,6 +619,7 @@ async function pagaAbb(id) {
     } catch(e) { console.error("Errore pagamento abbonamento:", e); return; }
 
     showThankYouToast(r['NOME E COGNOME'] || '', pag.prezzoFinale);
+    mostraSuDisplay({ telefono: r['NUMERO CELL.'], nome: r['NOME E COGNOME'], importo: pag.prezzoFinale });
     try {
         const nome = r['NOME E COGNOME'] || '';
         const targa = r.TARGA || '';

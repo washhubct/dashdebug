@@ -11,6 +11,7 @@ import { loadServiziAttivi } from './servizi-aggiuntivi.js';
 import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato } from './referral-confirm.js';
 import { marcaVoucherUtilizzato, getVoucher } from './vouchers.js';
 import { avvisaSospesiCliente, sospesiClienteDaSaldare } from './sospesi.js';
+import { mostraSuDisplay } from './display-cassa.js';
 
 const PREN_SLOTS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00'];
 
@@ -682,6 +683,7 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
 
         renderPren();
         showThankYouToast(entry.cliente, pNum(prezzoFinaleStr));
+        if (mod !== 'SOSPESO') mostraSuDisplay({ telefono: entry.telefono, nome: entry.cliente, importo: pNum(prezzoFinaleStr) });
 
         // Anagrafica CRM: le prenotazioni dal sito arrivano senza cliente in
         // anagrafica (il sito non può scrivere in `clienti`). Al pagamento il
@@ -1115,6 +1117,7 @@ async function markPaidTap(id, modDefault) {
         if (modUp !== 'SOSPESO') {
             showThankYouToast(t.cliente, parseFloat(prezzoFinaleStr) || 0);
             const imp = parseFloat(prezzoFinaleStr) || 0;
+            if (modUp !== 'FATTURATO') mostraSuDisplay({ telefono: t.telefono, nome: t.cliente, importo: imp });
             await fsAddDoc(fsCollection(db, "primaNota"), {
                 DATA: dataOut, dataISO,
                 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO',

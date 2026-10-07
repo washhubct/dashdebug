@@ -4,6 +4,7 @@ import { renderCassa } from './cassa.js';
 import { nascondiContante } from './contanti-passati.js';
 import { fsUpdateDoc, fsDoc, fsAddDoc, fsCollection, db, ficCall } from '../firebase-config.js';
 import { mostraEsitoFattura, segnaPagataFIC } from './fic-ui.js';
+import { mostraSuDisplay } from './display-cassa.js';
 import { richiediPagamento } from './cassa-automatica.js';
 
 /* global XLSX */
@@ -800,6 +801,7 @@ async function incassaSospesi(items, label, refId, meseRif) {
     // Solo parcheggi a ore (sospesi da giornalieri) → Prima Nota PARCHEGGIO, non LAVAGGIO
     const soloParcheggio = items.every(s => s.servizio === 'Parcheggio a ore');
     await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, { ...(pag.meta || {}), ...(soloParcheggio ? { categoria: 'PARCHEGGIO' } : {}) });
+    mostraSuDisplay({ nome: items[0].cliente, importo: pag.prezzoFinale });
     renderSospPage();
     updateSospBadge();
     renderCassa();

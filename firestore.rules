@@ -318,6 +318,15 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     // CODA CAMPAGNE WHATSAPP WEB — la dash accoda (create), il worker sul Mac Mini
     // (service account, bypassa le rules) manda e aggiorna lo stato
+    // SCHERMO CASSA (tablet) — un doc per sede con l'ultimo pagamento da mostrare al cliente
+    // (grazie + QR card fedeltà). Lo scrive la dashboard all'incasso, lo legge il tablet loggato.
+    // Ok di Guido 07/10/2026.
+    match /cassaDisplay/{sede} {
+      allow read:  if isSignedIn() && hasSedeAccess(sede);
+      allow write: if isSignedIn() && hasSedeAccess(sede) && sedeValida(sede)
+                   && request.resource.data.sedeId == sede;
+    }
+
     match /whatsappCoda/{doc} {
       allow read:   if isSignedIn();
       allow create: if isSignedIn() && writeOk() && request.resource.data.stato == 'in_coda';
