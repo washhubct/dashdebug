@@ -867,6 +867,42 @@
   </div>
 
 </div>
+
+<!-- Programma fedeltà: punti, premi, invito WhatsApp dopo il pagamento (js/moduli/fidelity-programma.js) -->
+<div id="fpBox" style="margin-top:22px">
+  <div class="kpis" id="fpKpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:16px"></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px">
+    <div style="background:var(--bg3);border-radius:var(--r);padding:22px">
+      <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">⭐ Punti e premi</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <label style="font:600 13px var(--f)">Punti per ogni €1 speso</label>
+        <input id="fpPpe" type="number" min="0" step="0.5" style="width:90px;padding:8px 10px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:700 15px var(--mono);color:var(--tx)">
+      </div>
+      <div id="fpEsempio" style="font:400 11px var(--f);color:var(--tx3);margin-bottom:14px"></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Premio</th><th style="width:90px">Punti</th><th style="width:70px">Attivo</th><th style="width:40px"></th></tr></thead><tbody id="fpPremiTb"></tbody></table></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" id="fpAddPremio">+ Aggiungi premio</button>
+        <button class="btn btn-primary" id="fpSalvaProgramma" style="margin-left:auto">Salva punti e premi</button>
+      </div>
+      <div id="fpMsgProgramma" style="font:500 12px var(--f);margin-top:8px"></div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--r);padding:22px">
+      <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📲 Invito card dopo il pagamento</div>
+      <p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:12px">Quando un lavaggio viene pagato e il cliente non ha ancora la card, gli arriva <b>un solo</b> WhatsApp con il link. I punti di quel lavaggio restano da parte e si caricano appena attiva la card (entro <span id="fpPendDays">30</span> giorni).</p>
+      <label style="display:flex;align-items:center;gap:8px;font:600 13px var(--f);margin-bottom:8px;cursor:pointer"><input type="checkbox" id="fpAttivo"> Invito attivo</label>
+      <label style="display:flex;align-items:center;gap:8px;font:500 12px var(--f);margin-bottom:6px;cursor:pointer"><input type="checkbox" id="fpSoloTest"> Solo numeri di test (per provare)</label>
+      <input id="fpNumeriTest" placeholder="Numeri di test, separati da virgola" style="width:100%;padding:8px 10px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:500 12px var(--mono);color:var(--tx);margin-bottom:10px">
+      <label style="font:600 12px var(--f);display:block;margin-bottom:4px">Testo del messaggio <span style="color:var(--tx3);font-weight:400">({nome} e {link} si compilano da soli)</span></label>
+      <textarea id="fpTesto" rows="7" style="width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:400 13px var(--f);color:var(--tx);resize:vertical"></textarea>
+      <pre id="fpAnteprima" style="white-space:pre-wrap;font:400 12px var(--f);background:var(--bg2);padding:10px;border-radius:var(--r2);margin-top:8px;color:var(--tx2)"></pre>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn" id="fpProva">📱 Invia una prova…</button>
+        <button class="btn btn-primary" id="fpSalvaInvito" style="margin-left:auto">Salva invito</button>
+      </div>
+      <div id="fpMsgInvito" style="font:500 12px var(--f);margin-top:8px"></div>
+    </div>
+  </div>
+</div>
 </div>
 </div>
 
@@ -874,7 +910,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261007b"></script>
+<script type="module" src="js/main.js?v=20261007c"></script>
 
 </body>
 </html>

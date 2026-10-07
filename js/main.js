@@ -28,6 +28,7 @@ import { initCampagna } from './moduli/campagna.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 import { initMessaggi } from './moduli/messaggi.js';
 import { initFidelai } from './moduli/fidelai.js';
+import { initFidelityProgramma } from './moduli/fidelity-programma.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCampagna();
     initMessaggi();
     initFidelai();
+    initFidelityProgramma();
     initDashDates();
 });
 

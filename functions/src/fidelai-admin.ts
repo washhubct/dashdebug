@@ -8,6 +8,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineString, defineSecret } from 'firebase-functions/params'
+import { getFirestore } from 'firebase-admin/firestore'
 
 const FIDELAI_API_BASE = defineString('FIDELAI_API_BASE', {
   default: 'https://europe-west1-fideliai-app.cloudfunctions.net',
@@ -60,4 +61,21 @@ export const fidelaiRedeem = onCall(baseOpts, async (req) => {
     merchant: FIDELAI_MERCHANT.value(),
     code,
   })
+})
+
+// Programma fedeltà (punti per euro + premi) modificabile dalla pagina FidelAI del gestionale.
+// Solo admin (stessa lista di firestore.rules / auth.js).
+const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com']
+
+export const fidelaiLoyalty = onCall(baseOpts, async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Devi essere autenticato.')
+  const d = (req.data || {}) as any
+  if (d.action === 'set') {
+    const email = String(req.auth.token?.email || '').toLowerCase()
+    if (!ADMIN_EMAILS.includes(email)) throw new HttpsError('permission-denied', 'Solo amministratore')
+    return callFidelai('externalSetLoyalty', { merchant: FIDELAI_MERCHANT.value(), pointsPerEuro: d.pointsPerEuro, rewards: d.rewards })
+  }
+  const r = await callFidelai('externalGetLoyalty', { merchant: FIDELAI_MERCHANT.value() })
+  const inviti = await getFirestore().collection('fidelityInviti').count().get()
+  return { ...r, invitiInviati: inviti.data().count }
 })

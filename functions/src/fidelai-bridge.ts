@@ -17,6 +17,7 @@
 
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { defineString, defineSecret } from 'firebase-functions/params'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 const FIDELAI_API_BASE = defineString('FIDELAI_API_BASE', {
   default: 'https://europe-west1-fideliai-app.cloudfunctions.net',
@@ -35,7 +36,7 @@ function normalizePhone(raw: unknown): string | null {
   return digits.startsWith('39') && digits.length > 10 ? digits.slice(2) : digits
 }
 
-async function callFidelai(path: string, body: Record<string, unknown>): Promise<void> {
+async function callFidelai(path: string, body: Record<string, unknown>): Promise<any> {
   const url = `${FIDELAI_API_BASE.value()}/${path}`
   const res = await fetch(url, {
     method: 'POST',
@@ -49,6 +50,34 @@ async function callFidelai(path: string, body: Record<string, unknown>): Promise
     const txt = await res.text().catch(() => '')
     throw new Error(`FidelAI ${path} HTTP ${res.status}: ${txt}`)
   }
+  return res.json().catch(() => ({}))
+}
+
+// Invito card dopo il pagamento (dal 07/10/2026, spento finché config/fidelity.invitoAttivo != true).
+// Una sola volta per numero (fidelityInviti/{tel}); il messaggio parte dal worker WhatsApp Web del
+// Mac Mini (whatsappCoda, priorità alta). La card la attiva il cliente: qui si manda solo il link,
+// e i punti di questo lavaggio restano in sospeso su FidelAI finché non la attiva.
+const TESTO_INVITO_DEFAULT = 'Ciao {nome} 👋 grazie per essere passato al Wash Hub!\n\nCon la card fedeltà accumuli punti a ogni lavaggio e li trasformi in premi. I punti del lavaggio di oggi te li abbiamo già messi da parte: attiva la card qui e li trovi caricati 👇\n{link}\n\nA presto,\nStaff Wash Hub'
+
+async function invitaCard(collection: string, docId: string, data: AnyDoc, phone: string): Promise<void> {
+  const db = getFirestore()
+  const cfg = (await db.doc('config/fidelity').get()).data() || {}
+  if (cfg.invitoAttivo !== true) return
+  const test: string[] = Array.isArray(cfg.numeriTest) ? cfg.numeriTest.map((t: string) => String(t).replace(/\D/g, '').slice(-10)) : []
+  if (cfg.soloTest === true && !test.includes(phone.slice(-10))) return
+  const invRef = db.doc(`fidelityInviti/${phone}`)
+  if ((await invRef.get()).exists && cfg.soloTest !== true) return
+  const nomeRaw = String(data.cliente || data['NOME E COGNOME'] || '').trim()
+  const primo = nomeRaw.split(/\s+/)[0] || ''
+  const nome = primo ? primo[0].toUpperCase() + primo.slice(1).toLowerCase() : ''
+  const link = `https://card.washhub.it/?c=${phone}`
+  const testo = String(cfg.testoInvito || TESTO_INVITO_DEFAULT).replace(/\{nome\}/g, nome).replace(/\{link\}/g, link).replace(/Ciao\s+👋/, 'Ciao 👋')
+  await db.collection('whatsappCoda').add({
+    telefono: phone, clienteId: null, nome: nomeRaw, testo, stato: 'in_coda', priorita: 10,
+    tipo: 'fidelity', campagnaId: 'fidelity-invito', segmento: 'fidelity', template: 'invito-card',
+    operatore: 'sistema', refId: `${collection}:${docId}`, creato: Date.now(), sedeId: data.sedeId || 'lungomare',
+  })
+  await invRef.set({ telefono: phone, nome: nomeRaw, refId: `${collection}:${docId}`, invitatoAt: FieldValue.serverTimestamp(), test: cfg.soloTest === true })
 }
 
 function getAmount(data: AnyDoc): number {
@@ -79,7 +108,7 @@ async function recordEarn(collection: string, docId: string, data: AnyDoc): Prom
   const amount = getAmount(data)
   if (amount <= 0) return
 
-  await callFidelai('externalRecordTransaction', {
+  const r = await callFidelai('externalRecordTransaction', {
     merchant: FIDELAI_MERCHANT.value(),
     customerId: phone,
     amount,
@@ -88,6 +117,10 @@ async function recordEarn(collection: string, docId: string, data: AnyDoc): Prom
     refId: `${collection}:${docId}`,
     notes: collection,
   })
+  // Senza card attiva: punti messi da parte su FidelAI → invito a attivarla (se acceso)
+  if (r?.skipped && collection !== 'abbonamenti') {
+    try { await invitaCard(collection, docId, data, phone) } catch (e) { console.error('[fidelai] invito card', docId, e) }
+  }
 }
 
 function paymentUpdatedTrigger(collection: string) {

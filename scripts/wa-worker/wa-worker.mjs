@@ -116,8 +116,10 @@ async function loop() {
       const h = now.getHours();
       const puoInviare = pronto && cfg.enabled !== false && Date.now() > pausaFinoA && h >= lim.oraInizio && h < lim.oraFine && inviatiOggi < lim.maxGiorno;
       if (puoInviare) {
-        const snap = await db.collection('whatsappCoda').where('stato', '==', 'in_coda').limit(30).get();
-        const prossimo = snap.docs.sort((a, b) => (a.data().creato || 0) - (b.data().creato || 0))[0];
+        let snap = await db.collection('whatsappCoda').where('stato', '==', 'in_coda').where('priorita', '==', 10).limit(5).get();
+        if (snap.empty) snap = await db.collection('whatsappCoda').where('stato', '==', 'in_coda').limit(30).get();
+        // Priorità prima (inviti card dopo il pagamento = 10), poi in ordine di arrivo
+        const prossimo = snap.docs.sort((a, b) => (b.data().priorita || 0) - (a.data().priorita || 0) || (a.data().creato || 0) - (b.data().creato || 0))[0];
         if (prossimo) {
           await inviaUno(prossimo);
           if (erroriConsecutivi >= 3) { pausaFinoA = Date.now() + 30 * 60e3; erroriConsecutivi = 0; log('3 errori di fila: pausa 30 min'); await statoWorker({ errore: 'pausa 30 min dopo 3 errori' }); }
