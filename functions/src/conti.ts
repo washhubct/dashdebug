@@ -70,12 +70,45 @@ async function addebitaConto(contoId: string, c: FirebaseFirestore.DocumentData,
 
   const prevSnap = await letture.doc(`${mesePrec}-01`).get()
   if (!prevSnap.exists) { log.push(`${c.nome}: prima lettura ${kwhOra} kWh salvata, luce ${mesePrec} da inserire a mano`); return }
-  const delta = Math.round((kwhOra - Number(prevSnap.data()!.kwh)) * 100) / 100
+  const prev = prevSnap.data()!
+  const delta = Math.round((kwhOra - Number(prev.kwh)) * 100) / 100
   const prezzo = Number(c.luce?.prezzoKwh) || 0
   if (delta <= 0 || !prezzo) { log.push(`${c.nome}: delta ${delta} kWh / prezzo ${prezzo} → nessun addebito`); return }
-  const importo = Math.round(delta * prezzo * 100) / 100
-  await movs.doc(luceId).set({ ...base, tipo: 'ADDEBITO_LUCE', importo, meseRif: mesePrec, kwh: delta, prezzoKwh: prezzo, note: `Shelly: ${prevSnap.data()!.kwh} → ${kwhOra} kWh` })
-  log.push(`${c.nome}: luce ${mesePrec} ${delta} kWh = €${importo}`)
+
+  // Mese misurato solo in parte (Shelly installato a metà mese): i giorni non misurati si stimano con
+  // la media giornaliera dei giorni misurati (decisione Guido 07/10/2026: 1-6 ottobre = media 7-31 × 6)
+  const DAY = 864e5
+  const inizioMese = new Date(prec.getFullYear(), prec.getMonth(), 1).getTime()
+  const fineMese = new Date(oggi.getFullYear(), oggi.getMonth(), 1).getTime()
+  const tsBase = Number(prev.timestamp) || inizioMese
+  const giorniMisurati = Math.max(0.5, (fineMese - Math.max(tsBase, inizioMese)) / DAY)
+  const giorniStimati = Math.max(0, (Math.max(tsBase, inizioMese) - inizioMese) / DAY)
+  const mediaGiorno = delta / giorniMisurati
+  const kwhStima = giorniStimati >= 0.5 ? Math.round(mediaGiorno * giorniStimati * 100) / 100 : 0
+  const kwhTot = Math.round((delta + kwhStima) * 100) / 100
+  const importo = Math.round(kwhTot * prezzo * 100) / 100
+  const notaStima = kwhStima ? ` + stima ${kwhStima} kWh per ${giorniStimati.toFixed(1)} gg non misurati (media ${mediaGiorno.toFixed(2)} kWh/g)` : ''
+  await movs.doc(luceId).set({ ...base, tipo: 'ADDEBITO_LUCE', importo, meseRif: mesePrec, kwh: kwhTot, kwhMisurati: delta, kwhStimati: kwhStima, prezzoKwh: prezzo,
+    note: `Shelly: ${prev.kwh} → ${kwhOra} kWh misurati${notaStima}` })
+  log.push(`${c.nome}: luce ${mesePrec} ${kwhTot} kWh = €${importo}`)
+
+  // Mesi arretrati senza misura (luce.stimaMesi, es. ['2026-09']): stessa media × giorni del mese
+  const arretrati: string[] = Array.isArray(c.luce?.stimaMesi) ? c.luce.stimaMesi : []
+  const fatti: string[] = []
+  for (const m of arretrati) {
+    const id = `luce_${m}`
+    if ((await movs.doc(id).get()).exists) { fatti.push(m); continue }
+    const [y, mm] = m.split('-').map(Number)
+    const gg = new Date(y, mm, 0).getDate()
+    const kwh = Math.round(mediaGiorno * gg * 100) / 100
+    const imp = Math.round(kwh * prezzo * 100) / 100
+    const ultimo = `${m}-${String(gg).padStart(2, '0')}`
+    await movs.doc(id).set({ ...base, dataISO: ultimo, data: ultimo.split('-').reverse().join('/'), tipo: 'ADDEBITO_LUCE', importo: imp, meseRif: m, kwh, kwhStimati: kwh, prezzoKwh: prezzo,
+      note: `Stima: media ${mediaGiorno.toFixed(2)} kWh/g (Shelly ${mesePrec}) × ${gg} gg` })
+    fatti.push(m)
+    log.push(`${c.nome}: luce ${m} stimata ${kwh} kWh = €${imp}`)
+  }
+  if (fatti.length) await db.doc(`contiClienti/${contoId}`).set({ luce: { stimaMesi: arretrati.filter(m => !fatti.includes(m)) } }, { merge: true })
 }
 
 export const contiAddebitoMensile = onSchedule({ schedule: '10 0 1 * *', timeZone: TZ, region: REGION }, async () => {
