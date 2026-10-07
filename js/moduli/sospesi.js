@@ -414,9 +414,9 @@ async function scriviPrimaNota(cliente, totale, mod, meseRif, meta = {}) {
             descrizione: `Incasso sospesi ${cliente} — ${meseRif}`,
             importo: totale,
             tipo: 'ENTRATA',
-            categoria: 'LAVAGGIO',
+            categoria: meta.categoria || 'LAVAGGIO',
             modalita: mod,
-            centro: 'Lavaggio',
+            centro: meta.categoria === 'PARCHEGGIO' ? 'Parcheggio' : 'Lavaggio',
             timestamp: Date.now(),
             sedeId: state.sedeAttiva,
             ...(meta.pagamentoVia ? { pagamentoVia: meta.pagamentoVia, idVNE: meta.idVNE || '' } : {})
@@ -797,7 +797,9 @@ async function incassaSospesi(items, label, refId, meseRif) {
     }
     // Fattura FIC collegata → segnala il saldo anche lì (richiesta 28/08)
     for (const id of new Set(items.map(s => s._ficDocId).filter(Boolean))) await segnaPagataFIC(id, pag.mod);
-    await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, pag.meta);
+    // Solo parcheggi a ore (sospesi da giornalieri) → Prima Nota PARCHEGGIO, non LAVAGGIO
+    const soloParcheggio = items.every(s => s.servizio === 'Parcheggio a ore');
+    await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, { ...(pag.meta || {}), ...(soloParcheggio ? { categoria: 'PARCHEGGIO' } : {}) });
     renderSospPage();
     updateSospBadge();
     renderCassa();

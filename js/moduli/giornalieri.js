@@ -5,6 +5,8 @@ import { pNum, fEur, esc, fmtDI } from '../utils.js';
 import { logDelete } from './log.js';
 import { renderCassa } from './cassa.js';
 import { richiediPagamento } from './cassa-automatica.js';
+import { checkClienteDuplicato } from './clienti.js';
+import { buildSospesiArray, updateSospBadge } from './sospesi.js';
 
 export function initGiornalieri() {
     // Gestione input data e bottone "Oggi"
@@ -110,7 +112,9 @@ export function renderGiornalieri() {
             costoHtml = `<span style="color:var(--tx3)">Previsto: €${currCosto}</span>`;
         }
         
-        const badge = isOut ? `<span class="badge ${g.pagamento === 'POS' ? 'b' : 'g'}">${g.pagamento}</span>` : `<span class="badge a">IN SOSTA ⏳</span>`;
+        const badge = !isOut ? `<span class="badge a">IN SOSTA ⏳</span>`
+            : g.pagamento === 'SOSPESO' ? `<span class="badge a" title="Nei sospesi di ${esc(g.clienteSospeso || '')}">SOSPESO · ${esc(g.clienteSospeso || '')}</span>`
+            : `<span class="badge ${g.pagamento === 'POS' ? 'b' : 'g'}">${g.pagamento}</span>`;
         const tdOut = isOut ? `<span style="font:500 11px var(--mono)">${g.orarioOut}</span>` : '<span style="color:var(--tx3)">—</span>';
         
         html += `<tr ${isOut ? 'style="opacity:0.6"' : ''}>
@@ -186,6 +190,8 @@ async function checkoutGiornaliero(id) {
     const step1 = await _mostraModalCheckout(g, nowTime, dataUscita);
     if (!step1) return;
 
+    if (step1.sospeso) return parcheggioInSospeso(g, step1, dataUscita);
+
     // Step 2: modal pagamento
     const pag = await richiediPagamento(step1.prezzo, g.vettura + ' ' + g.targa, id);
     if (!pag) return;
@@ -218,6 +224,7 @@ function _mostraModalCheckout(g, nowTime, dataUscita) {
                 </div>
                 <div style="display:flex;gap:8px">
                     <button id="_coAnn" class="btn" style="flex:1;color:var(--tx3)">Annulla</button>
+                    <button id="_coSosp" class="btn" style="flex:1;border-color:var(--amb);color:var(--amb)" title="Il cliente non paga ora: il parcheggio va tra i sospesi del cliente (es. auto lasciata dopo il lavaggio)">⏳ Sospeso</button>
                     <button id="_coOk" class="btn btn-primary" style="flex:2">Avanti →</button>
                 </div>
             </div>`;
@@ -230,6 +237,12 @@ function _mostraModalCheckout(g, nowTime, dataUscita) {
         });
 
         overlay.querySelector('#_coAnn').addEventListener('click', () => { overlay.remove(); resolve(null); });
+        overlay.querySelector('#_coSosp').addEventListener('click', () => {
+            const orarioOut = overlay.querySelector('#_coOra').value;
+            const prezzo = parseFloat(overlay.querySelector('#_coPrezzo').value) || 0;
+            overlay.remove();
+            resolve({ orarioOut, prezzo, sospeso: true });
+        });
         overlay.querySelector('#_coOk').addEventListener('click', () => {
             const orarioOut = overlay.querySelector('#_coOra').value;
             const prezzo = parseFloat(overlay.querySelector('#_coPrezzo').value) || 0;
@@ -237,6 +250,37 @@ function _mostraModalCheckout(g, nowTime, dataUscita) {
             resolve({ orarioOut, prezzo });
         });
     });
+}
+
+// Parcheggio non pagato all'uscita (es. cliente che lascia l'auto oltre il lavaggio): diventa un
+// sospeso nativo associato al cliente CRM e si incassa dalla pagina Sospesi insieme al resto (07/10/2026)
+async function parcheggioInSospeso(g, step1, dataUscita) {
+    const input = prompt(`⏳ Parcheggio ${g.vettura} ${g.targa} — €${step1.prezzo}\nA quale cliente lo associo? (nome come nel CRM)`, '');
+    if (!input || !input.trim()) return;
+    const cliente = await checkClienteDuplicato(input);
+    if (!cliente) return;
+    const dIta = dataUscita.split('-').reverse().join('/');
+    const inIta = g.dataIn.split('-').reverse().join('/');
+    const sosp = {
+        cliente, data: dIta,
+        vettura: 'PARCHEGGIO ' + (g.vettura || ''), targa: g.targa || '',
+        importo: step1.prezzo,
+        note: `Parcheggio a ore: ${inIta} ${g.orarioIn} → ${dIta} ${step1.orarioOut}`,
+        servizio: 'Parcheggio a ore',
+        origineSid: 'GIO-' + g._id,
+        pagato: false, fatturato: false, dataFattura: '', dataPagamento: '', modPagamento: '',
+        timestamp: Date.now(), sedeId: g.sedeId || state.sedeAttiva
+    };
+    try {
+        const ref = await fsAddDoc(fsCollection(db, 'sospesi'), sosp);
+        const upd = { status: 'OUT', pagamento: 'SOSPESO', dataOut: dataUscita, orarioOut: step1.orarioOut, prezzoFinale: step1.prezzo, clienteSospeso: cliente, sospesoId: ref.id };
+        await fsUpdateDoc(fsDoc(db, 'giornalieri', g._id), upd);
+        Object.assign(g, upd);
+        state.localSosp.push({ ...sosp, _sid: ref.id });
+        try { buildSospesiArray(); updateSospBadge(); } catch (e) { /* pagina sospesi non ancora inizializzata */ }
+        renderGiornalieri();
+        alert(`⏳ Parcheggio €${step1.prezzo} messo nei sospesi di ${cliente}.`);
+    } catch (e) { alert('Errore salvataggio sospeso.'); }
 }
 
 async function delGiornaliero(id) {
