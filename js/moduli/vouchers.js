@@ -9,7 +9,7 @@
 //   prenotazioneOrigine : pid della prenotazione che lo ha generato
 //   sedeId            : sede della prenotazione di origine
 //   dataEmissione     : serverTimestamp
-//   dataScadenza      : timestamp millis (6 mesi)
+//   dataScadenza      : timestamp millis (1 mese, decisione Guido 08/10/2026)
 //   dataUso           : timestamp | null
 //   prenotazioneUso   : pid | null
 //
@@ -22,7 +22,7 @@ import { setDoc, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gs
 import { state } from '../state.js';
 
 export const VOUCHER_VALORE_DEFAULT = 5;
-export const VOUCHER_DURATA_MESI = 6;
+export const VOUCHER_DURATA_MESI = 1;
 
 // Base32 senza caratteri ambigui (no 0,1,O,I)
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
