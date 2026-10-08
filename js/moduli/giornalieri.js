@@ -61,11 +61,12 @@ export function calcPrezzoGiornaliero(oraIn, dataIn, oraOut, dataOut) {
         return Math.min(8 + Math.ceil(diffOre - 6) * 2, 15);
     }
 
-    // Oltre 24h: €15 primo giorno + €12 per ogni giorno intero + €2/h per le ore residue
+    // Oltre 24h: €15 primo giorno + €12 per ogni giorno intero + €2/h per le ore residue,
+    // ma il giorno in corso non supera mai €12 (prima no: 46h = €61, Poste Italiane 08/10/2026)
     const oreExtra    = diffOre - 24;
     const giorniInteri = Math.floor(oreExtra / 24);
     const oreResidue   = oreExtra % 24;
-    return 15 + giorniInteri * 12 + Math.ceil(oreResidue) * 2;
+    return 15 + giorniInteri * 12 + Math.min(Math.ceil(oreResidue) * 2, 12);
 }
 
 export function renderGiornalieri() {
