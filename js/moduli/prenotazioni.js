@@ -150,6 +150,7 @@ export function renderPren() {
 
                 // Badge referral: presente sulla prenotazione (dal sito) ma non ancora scontato
                 let refBadge = '';
+                if (e.avvisoMaltempo) refBadge += ` <span class="badge b" title="Avviso maltempo mandato su WhatsApp" style="font-size:9px">⛈️ avvisato</span>`;
                 if (e.referral) {
                     if (e.scontoReferralApplicato === true) {
                         refBadge = ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;

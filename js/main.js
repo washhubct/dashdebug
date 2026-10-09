@@ -25,6 +25,7 @@ import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js'
 import { initIncassiManuali } from './moduli/incassi-manuali.js';
 import { initConti, caricaConti } from './moduli/conti.js';
 import { initCampagna } from './moduli/campagna.js';
+import { initAvvisoMaltempo } from './moduli/avviso-maltempo.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 import { initMessaggi } from './moduli/messaggi.js';
 import { initFidelai } from './moduli/fidelai.js';
@@ -50,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initIncassiManuali();
     initConti();
     initCampagna();
+    initAvvisoMaltempo();
     initMessaggi();
     initFidelai();
     initFidelityProgramma();
