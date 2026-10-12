@@ -75,7 +75,8 @@
   <form id="fLogin">
     <img src="img/display/logo.png" alt="" style="width:180px;margin:0 auto 10px">
     <input id="lEmail" type="email" placeholder="Email schermo" autocomplete="username" value="display@washhub.it">
-    <input id="lPwd" type="password" placeholder="Password" autocomplete="current-password">
+    <input id="lPwd" type="password" placeholder="Password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label style="display:flex;align-items:center;gap:10px;color:#ccc;font:500 15px Inter;padding:4px 2px"><input type="checkbox" id="lShow" style="width:22px;height:22px;padding:0"> Mostra password</label>
     <button>Collega schermo</button>
     <div class="err" id="lErr"></div>
   </form>
@@ -163,6 +164,7 @@ onAuthStateChanged(auth, u => {
   if (u) { $('login').style.display = 'none'; riposo(); ascolta(); }
   else { $('login').style.display = 'flex'; }
 });
+$('lShow').addEventListener('change', e => { $('lPwd').type = e.target.checked ? 'text' : 'password'; });
 $('fLogin').addEventListener('submit', async e => {
   e.preventDefault(); $('lErr').textContent = '';
   try { await signInWithEmailAndPassword(auth, $('lEmail').value.trim(), $('lPwd').value); }
