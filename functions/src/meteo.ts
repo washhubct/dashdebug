@@ -6,7 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 // ═══════════════════════════════════════════════════════════════════
 // METEO → SEMAFORO GIORNATA (Guido, 27/09/2026)
 //
-// Un autolavaggio con la pioggia chiude o lavora ridotto. Ogni sera alle 22:30 la
+// Un autolavaggio con la pioggia chiude o lavora ridotto. Ogni sera alle 22:00 la
 // previsione Open-Meteo del giorno dopo (fascia di apertura) diventa un semaforo per
 // sede, salvato in `meteoGiornata/{sede}_{data}` e mandato su Telegram al gruppo
 // "Wash Hub Meteo" (Guido + Skippa). Alle 06:00 ricontrollo: avviso solo se il livello
@@ -318,7 +318,7 @@ async function previsione(tipo: 'sera' | 'mattina') {
   }
 }
 
-export const meteoSera = onSchedule({ schedule: '30 22 * * *', timeZone: TZ, region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }, () => previsione('sera'))
+export const meteoSera = onSchedule({ schedule: '0 22 * * *', timeZone: TZ, region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }, () => previsione('sera'))
 export const meteoMattina = onSchedule({ schedule: '0 6 * * *', timeZone: TZ, region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }, () => previsione('mattina'))
 
 // Incasso del giorno da Prima Nota, spaccato per categoria (stessa logica di scripts/backfill-meteo-storico.mjs)

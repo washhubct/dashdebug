@@ -24,7 +24,7 @@ export async function renderMeteo() {
     catch (e) { el.innerHTML = `<div style="font-size:11px;color:var(--tx3)">🌦️ Meteo non disponibile (${esc(e.message || '')})</div>`; return; }
     const oggi = oggiISO();
     const prossimo = giorni.find(g => g.data > oggi) || giorni.find(g => g.data === oggi);
-    if (!prossimo && !giorni.length) { el.innerHTML = '<div style="font-size:11px;color:var(--tx3)">🌦️ Semaforo meteo: prima previsione stasera alle 22:30</div>'; return; }
+    if (!prossimo && !giorni.length) { el.innerHTML = '<div style="font-size:11px;color:var(--tx3)">🌦️ Semaforo meteo: prima previsione stasera alle 22:00</div>'; return; }
     const head = prossimo ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:22px">${EMOJI[prossimo.livello] || '⚪'}</span>
         <div><div style="font:700 13px var(--f)">${prossimo.data > oggi ? 'Domani' : 'Oggi'} ${fmtD(prossimo.data)} · ${LABEL[prossimo.livello] || prossimo.livello}</div>
