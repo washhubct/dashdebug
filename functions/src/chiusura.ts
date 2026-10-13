@@ -84,10 +84,17 @@ export const chiusuraGiornaliera = onSchedule({
         const d = doc.data()
         if (perSede(d) && d.stato === 'pagato') lavPos += Number(d.supplemento) || 0
       })
-      snapCap.forEach(doc => {
+      // 💳 Caparra: se il cliente è venuto è un anticipo sul lavaggio (con IVA, LAVAGGIO POS);
+      // se è stata trattenuta (non presentato) è una penale fuori campo IVA (art. 15 DPR 633/72) → riga separata.
+      let penali = 0
+      for (const doc of snapCap.docs) {
         const d = doc.data()
-        if (perSede(d) && d.stato === 'pagata') lavPos += Number(d.importo) || 0
-      })
+        if (!perSede(d) || d.stato !== 'pagata') continue
+        const imp = Number(d.importo) || 0
+        const pren = d.prenotazioneId ? (await db.collection('prenotazioni').doc(d.prenotazioneId).get()).data() : null
+        if (pren?.stato === 'NO_SHOW') penali += imp
+        else lavPos += imp
+      }
       // 🛡️ Addebiti no-show con carta a garanzia (Stripe): contano nel giorno in cui si chiude dopo l'addebito
       // (possono arrivare anche giorni dopo la prenotazione) → solo nella chiusura di oggi, poi marcati contabilizzati.
       const garDaContare: FirebaseFirestore.DocumentReference[] = []
@@ -96,7 +103,7 @@ export const chiusuraGiornaliera = onSchedule({
         snapGar.forEach(doc => {
           const d = doc.data()
           if (!perSede(d) || d.contabilizzatoData) return
-          lavPos += Number(d.importo) || 0
+          penali += Number(d.importo) || 0   // penale no-show: fuori campo IVA
           garDaContare.push(doc.ref)
         })
       }
@@ -129,7 +136,7 @@ export const chiusuraGiornaliera = onSchedule({
         else if (d.metodo === 'POS') uscPos += imp
       })
 
-      const totLav = lavContanti + lavPos + tapContanti + tapPos
+      const totLav = lavContanti + lavPos + tapContanti + tapPos + penali
       const totPar = parContanti + parPos
       const totUsc = uscContanti + uscPos
 
@@ -145,6 +152,7 @@ export const chiusuraGiornaliera = onSchedule({
       const righe: Record<string, unknown>[] = []
       if (lavContanti > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO CASH', Descrizione: 'INCASSO CASH', ENTRATA: lavContanti, Entrata: lavContanti, "MODALITA'": 'CONTANTI' })
       if (lavPos > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'INCASSO POS', Descrizione: 'INCASSO POS', ENTRATA: lavPos, Entrata: lavPos, "MODALITA'": 'POS' })
+      if (penali > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'PENALI NO-SHOW', Descrizione: 'PENALI NO-SHOW (fuori campo IVA art. 15 DPR 633/72)', ENTRATA: penali, Entrata: penali, "MODALITA'": 'POS', fuoriCampoIVA: true })
       if (tapContanti > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA CASH', Descrizione: 'TAPPEZZERIA CASH', ENTRATA: tapContanti, Entrata: tapContanti, "MODALITA'": 'CONTANTI' })
       if (tapPos > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'LAVAGGIO', Categoria: 'LAVAGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'TAPPEZZERIA POS', Descrizione: 'TAPPEZZERIA POS', ENTRATA: tapPos, Entrata: tapPos, "MODALITA'": 'POS' })
       if (parContanti > 0) righe.push({ ...base, 'CENTRO DI COSTO': 'PARCHEGGIO', Categoria: 'PARCHEGGIO', 'PRIMANOTA CLIENTI/FORNITORI': 'AD ORE', Descrizione: 'PARCHEGGIO AD ORE CASH', ENTRATA: parContanti, Entrata: parContanti, "MODALITA'": 'CONTANTI' })
@@ -163,7 +171,7 @@ export const chiusuraGiornaliera = onSchedule({
 
       await markerRef.set({
         data: dStr, sedeId: sede, timestamp: Date.now(),
-        lavContanti, lavPos, tapContanti, tapPos,
+        lavContanti, lavPos, tapContanti, tapPos, penali,
         parContanti, parPos, uscContanti, uscPos,
         totaleEntrate: totLav + totPar, totaleUscite: totUsc,
       })
