@@ -265,6 +265,8 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
         disdette.push(v.orario)
         if (v.caparraOrdineId) rimborsi.push(await rimborsaOrdine('caparraOrdini', v.caparraOrdineId))
         if (v.priorityOrdineId) rimborsi.push(await rimborsaOrdine('priorityOrdini', v.priorityOrdineId))
+        const mieiRimborsi = rimborsi.slice(-((v.caparraOrdineId ? 1 : 0) + (v.priorityOrdineId ? 1 : 0)) || rimborsi.length)
+        if (v.caparraOrdineId || v.priorityOrdineId) await d.ref.update({ rimborsoEsito: mieiRimborsi.every(x => x.ok) ? 'ok' : 'da_fare' })
         if (v.referral && v.referralConfermato !== true) {
           await db.collection('referral').doc(String(v.referral)).set({ totale: FieldValue.increment(-1), inAttesa: FieldValue.increment(-1) }, { merge: true }).catch(() => {})
         }

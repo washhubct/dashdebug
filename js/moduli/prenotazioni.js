@@ -197,7 +197,7 @@ export function renderPren() {
 
     // Disdette online del giorno (sito): già fuori dal calendario, qui solo per sapere chi non viene
     const disd = (state.disdetteDB?.[date] || []).sort((a, b) => String(a.orario).localeCompare(String(b.orario)));
-    if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette online:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.caparraImporto || d.priority ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
+    if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette online:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.rimborsoEsito === 'da_fare' ? ' <strong style="color:var(--red)">⚠️ RIMBORSO DA FARE a mano da SumUp</strong>' : d.rimborsoEsito === 'ok' ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
     tb.innerHTML = html;
     document.getElementById('prenTotCount').textContent = totCount;
     document.getElementById('prenIncContanti').textContent = fEur(incContanti);
