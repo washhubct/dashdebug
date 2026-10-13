@@ -801,7 +801,9 @@ async function incassaSospesi(items, label, refId, meseRif) {
     // Solo parcheggi a ore (sospesi da giornalieri) → Prima Nota PARCHEGGIO, non LAVAGGIO
     const soloParcheggio = items.every(s => s.servizio === 'Parcheggio a ore');
     await scriviPrimaNota(items[0].cliente, pag.prezzoFinale, pag.mod, meseRif, { ...(pag.meta || {}), ...(soloParcheggio ? { categoria: 'PARCHEGGIO' } : {}) });
-    mostraSuDisplay({ nome: items[0].cliente, importo: pag.prezzoFinale });
+    // Fidelity solo sui lavaggi (Guido 13/10): niente schermo cassa per i parcheggi
+    const impLavaggi = items.filter(s => s.servizio !== 'Parcheggio a ore').reduce((t, s) => t + s.importo, 0);
+    if (impLavaggi > 0) mostraSuDisplay({ nome: items[0].cliente, importo: Math.min(impLavaggi, pag.prezzoFinale) });
     renderSospPage();
     updateSospBadge();
     renderCassa();
