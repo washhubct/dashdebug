@@ -88,6 +88,18 @@ export const chiusuraGiornaliera = onSchedule({
         const d = doc.data()
         if (perSede(d) && d.stato === 'pagata') lavPos += Number(d.importo) || 0
       })
+      // 🛡️ Addebiti no-show con carta a garanzia (Stripe): contano nel giorno in cui si chiude dopo l'addebito
+      // (possono arrivare anche giorni dopo la prenotazione) → solo nella chiusura di oggi, poi marcati contabilizzati.
+      const garDaContare: FirebaseFirestore.DocumentReference[] = []
+      if (i === 0) {
+        const snapGar = await db.collection('garanzieOrdini').where('stato', '==', 'addebitata').get()
+        snapGar.forEach(doc => {
+          const d = doc.data()
+          if (!perSede(d) || d.contabilizzatoData) return
+          lavPos += Number(d.importo) || 0
+          garDaContare.push(doc.ref)
+        })
+      }
 
       let tapContanti = 0, tapPos = 0
       snapTap.forEach(doc => {
@@ -146,6 +158,8 @@ export const chiusuraGiornaliera = onSchedule({
         riga.timestamp = Date.now()
         await db.collection('primaNota').doc(`${sede}_${dStr}_${slugTipo(riga.Descrizione as string)}`).set(riga)
       }
+
+      for (const r of garDaContare) await r.update({ contabilizzatoData: dStr })
 
       await markerRef.set({
         data: dStr, sedeId: sede, timestamp: Date.now(),

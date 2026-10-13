@@ -1,4 +1,4 @@
-import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, ficCall, garanziaAddebitaCall } from '../firebase-config.js';
 import { nascondiContante, toISO } from './contanti-passati.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, normalizeName, nameSimilarity, pivaValida } from '../utils.js';
@@ -128,7 +128,7 @@ export function renderPren() {
                         <td><strong style="text-decoration:line-through">${esc(e.cliente || '')}</strong>${noShowBadge(e)}</td>
                         <td style="text-decoration:line-through">${esc(e.vettura || '')}</td>
                         <td style="font:500 12px var(--mono);text-decoration:line-through">${prezzo ? '€' + prezzo : '—'}</td>
-                        <td colspan="2"><span class="badge r" title="Segnato il ${esc(e.noShowData || '')}">👻 NON PRESENTATO</span></td>
+                        <td colspan="2"><span class="badge r" title="Segnato il ${esc(e.noShowData || '')}">👻 NON PRESENTATO</span>${e.stripePaymentMethodId ? (e.garanziaAddebitata ? ` <span class="badge g">🛡️ penale €${e.garanziaAddebitoImporto || 10} ✓</span>` : ` <button class="btn penale-btn" data-id="${e._pid}" title="Addebita la penale sulla carta a garanzia">🛡️ Penale €${e.garanziaImporto || 10}</button>`) : ''}</td>
                         <td style="font-size:11px;color:var(--tx2)">${esc(e.note || '')}</td>
                         <td>
                             <button class="act-btn edit-pren" data-id="${e._pid}">✎</button>
@@ -170,6 +170,7 @@ export function renderPren() {
 
                 // ⚡ Priority: supplemento già pagato online (SumUp), ha la precedenza in coda.
                 // Il lavaggio si incassa come sempre; i €5 li conta la chiusura delle 21:00.
+                if (e.stripePaymentMethodId) refBadge = ` <span class="badge" title="Carta salvata a garanzia (Stripe). Se non si presenta: segna 👻 e la dashboard chiede se addebitare la penale di €${e.garanziaImporto || 10}." style="font-size:9px;background:#635bff;color:#fff">🛡️ CARTA${e.garanziaAddebitata ? ` · penale €${e.garanziaAddebitoImporto || e.garanziaImporto || 10} addebitata` : ''}</span>` + refBadge;
                 if (e.caparraImporto) refBadge = ` <span class="badge" title="Caparra €${e.caparraImporto} pagata online (cliente con un no-show). Si scala da sola dal prezzo all'incasso. Se non si presenta: segna 👻, la caparra resta incassata." style="font-size:9px;background:#1a6b9a;color:#fff">💳 CAPARRA €${e.caparraImporto}${e.caparraScalata ? ' scalata ✓' : ' pagata'}</span>` + refBadge;
                 if (e.priority) refBadge = ` <span class="badge" title="Priority: supplemento €${e.prioritySupplemento || 5} già pagato online. Precedenza in coda: entra entro 10 min dall'arrivo, altrimenti si rimborsa il supplemento da SumUp." style="font-size:9px;background:#0F0F0F;color:#F5C518">⚡ PRIORITY +€${e.prioritySupplemento || 5} pagato</span>` + refBadge;
 
@@ -231,6 +232,10 @@ async function handlePrenActions(e) {
     } else if (btn.classList.contains('noshow-btn')) {
         btn.disabled = true;
         try { await markNoShow(date, id); } finally { btn.disabled = false; }
+    } else if (btn.classList.contains('penale-btn')) {
+        const entry = state.prenDB[date]?.find(x => x._pid === id);
+        btn.disabled = true;
+        try { if (entry) await addebitaPenale(entry); } finally { btn.disabled = false; }
     } else if (btn.classList.contains('undo-noshow')) {
         btn.disabled = true;
         try { await unmarkNoShow(date, id); } finally { btn.disabled = false; }
@@ -755,7 +760,20 @@ async function markNoShow(date, pid) {
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), upd);
         Object.assign(entry, upd);
         renderPren();
-    } catch(e) { alert("Errore Cloud"); }
+    } catch(e) { alert("Errore Cloud"); return; }
+    // 🛡️ Carta a garanzia (Stripe): penale solo se l'operatore conferma
+    if (entry.stripePaymentMethodId && !entry.garanziaAddebitata) await addebitaPenale(entry);
+}
+
+async function addebitaPenale(entry) {
+    const imp = pNum(entry.garanziaImporto) || 10;
+    if (!confirm(`${entry.cliente} aveva lasciato la carta a garanzia.\n\nAddebito la penale di €${imp} per la mancata presentazione?\n(Se ha avvisato o c'è un motivo valido, premi Annulla.)`)) return;
+    try {
+        const r = await garanziaAddebitaCall(entry._pid);
+        Object.assign(entry, { garanziaAddebitata: true, garanziaAddebitoImporto: r.importo });
+        alert(r.giaFatto ? `Penale già addebitata in precedenza (€${r.importo}).` : `✅ Penale di €${r.importo} addebitata sulla carta del cliente.`);
+        renderPren();
+    } catch (e) { alert('⚠️ ' + (e?.message || 'Addebito non riuscito')); }
 }
 
 async function unmarkNoShow(date, pid) {

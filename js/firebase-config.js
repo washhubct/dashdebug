@@ -24,6 +24,8 @@ export const ficCall = (action, payload = {}) =>
 
 // Meteo → semaforo giornata (functions/src/meteo.ts)
 export const meteoCall = (data = {}) => httpsCallable(functions, 'meteoApi')(data).then(r => r.data);
+// 🛡️ Penale no-show sulla carta a garanzia (Stripe), solo su conferma dell'operatore
+export const garanziaAddebitaCall = (pid) => httpsCallable(functions, 'garanziaAddebita')({ pid }).then(r => r.data);
 
 // Esportiamo usando i "soprannomi" (aliases) esatti richiesti dai moduli!
 export { 

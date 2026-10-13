@@ -4,6 +4,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 import { romeToEpoch } from './parcheggio-smart'
+import { getConfigGaranzia } from './garanzia-stripe'
 
 // ═══════════════════════════════════════════════════════════════════
 // PRENOTAZIONI ONLINE — caparra anti no-show + disdetta (13/10/2026)
@@ -175,7 +176,10 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
     if (req.method === 'POST' && path === '/verifica') {
       const telefono = String((req.body as any)?.telefono || '')
       const cfg = await getConfig()
-      res.json({ caparra: await caparraDovuta(telefono), oreDisdetta: cfg.oreDisdetta, perTutti: cfg.perTutti })
+      // Carta a garanzia Stripe attiva → vale per tutti e sostituisce la caparra SumUp
+      const g = await getConfigGaranzia()
+      if (g.attivo) { res.json({ caparra: 0, garanzia: g.importo, oreDisdetta: g.oreDisdetta, perTutti: true }); return }
+      res.json({ caparra: await caparraDovuta(telefono), garanzia: 0, oreDisdetta: cfg.oreDisdetta, perTutti: cfg.perTutti })
       return
     }
 
