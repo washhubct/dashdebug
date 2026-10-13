@@ -74,7 +74,7 @@ async function calcola(data: string) {
   const carico: Record<string, number> = {}
   pren.forEach(d => {
     const v = d.data()
-    if ((v.sedeId || SEDE) !== SEDE || v.stato === 'NO_SHOW' || !v.orario) return
+    if ((v.sedeId || SEDE) !== SEDE || v.stato === 'NO_SHOW' || v.stato === 'DISDETTA' || !v.orario) return
     carico[ora(v.orario)] = (carico[ora(v.orario)] || 0) + 1
   })
   const venduti: Record<string, number> = {}

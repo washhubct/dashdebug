@@ -253,11 +253,14 @@ async function loadPrenotazioniFast(cutoff) {
         fsGetDocs(query(fsCollection(db, "prenotazioni"), where("sedeId", "==", sede), where("saldo", "==", "FATTURATO"))),
     ]);
     state.prenDB = {};
+    state.disdetteDB = {};
     const seen = new Set();
     const addDoc = docSnap => {
         if (seen.has(docSnap.id)) return;
         seen.add(docSnap.id);
         const d = docSnap.data(); d._pid = docSnap.id;
+        // Disdette online (sito, 13/10/2026): fuori da calendario/conteggi, mostrate a parte in Prenotazioni
+        if (d.stato === 'DISDETTA') { (state.disdetteDB[d.dataPren] ||= []).push(d); return; }
         if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
         state.prenDB[d.dataPren].push(d);
     };
@@ -295,6 +298,7 @@ export async function loadHistoricalData() {
         snapPren.forEach(docSnap => {
             if (seen.has(docSnap.id)) return;
             const d = docSnap.data(); d._pid = docSnap.id;
+            if (d.stato === 'DISDETTA') return;   // disdette: solo vista del giorno, non nello storico
             if (!state.prenDB[d.dataPren]) state.prenDB[d.dataPren] = [];
             state.prenDB[d.dataPren].push(d);
         });

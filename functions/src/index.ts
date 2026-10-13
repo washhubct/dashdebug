@@ -15,6 +15,7 @@ export * from './parcheggio-smart'
 export * from './meteo'
 export * from './conti'
 export * from './priority'
+export * from './prenota-online'
 // WhatsApp Cloud API in coming-soon: secrets Meta non ancora settati.
 // Riabilitare quando META_WHATSAPP_TOKEN/META_APP_SECRET/META_WEBHOOK_VERIFY_TOKEN/META_PHONE_NUMBER_ID sono configurati.
 // export * from './whatsapp'

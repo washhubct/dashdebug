@@ -372,8 +372,8 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
       ])
       const prenTutte = prenSnap.docs.map(d => d.data()).filter(p => (p.sedeId || 'lungomare') === sedeId)
       // Non presentati (stato NO_SHOW dal 01/10/2026): non sono auto lavate, ma li salviamo per misurare il tasso di buca
-      const prenSede = prenTutte.filter(p => p.stato !== 'NO_SHOW')
-      const noShow = prenTutte.length - prenSede.length
+      const prenSede = prenTutte.filter(p => p.stato !== 'NO_SHOW' && p.stato !== 'DISDETTA')
+      const noShow = prenTutte.filter(p => p.stato === 'NO_SHOW').length
       const auto = prenSede.length
       const oreAuto = [...new Set(prenSede.map(p => Number(String(p.orario || '').slice(0, 2))).filter(h => h >= 0))].sort((a, b) => a - b)
       const oreVuote = oreAuto.length ? Array.from({ length: cfg.oraChiusura - cfg.oraApertura }, (_, i) => cfg.oraApertura + i).filter(h => !oreAuto.includes(h) && h !== 13) : []

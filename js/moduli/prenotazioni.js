@@ -170,6 +170,7 @@ export function renderPren() {
 
                 // ⚡ Priority: supplemento già pagato online (SumUp), ha la precedenza in coda.
                 // Il lavaggio si incassa come sempre; i €5 li conta la chiusura delle 21:00.
+                if (e.caparraImporto) refBadge = ` <span class="badge" title="Caparra €${e.caparraImporto} pagata online (cliente con un no-show). Si scala da sola dal prezzo all'incasso. Se non si presenta: segna 👻, la caparra resta incassata." style="font-size:9px;background:#1a6b9a;color:#fff">💳 CAPARRA €${e.caparraImporto}${e.caparraScalata ? ' scalata ✓' : ' pagata'}</span>` + refBadge;
                 if (e.priority) refBadge = ` <span class="badge" title="Priority: supplemento €${e.prioritySupplemento || 5} già pagato online. Precedenza in coda: entra entro 10 min dall'arrivo, altrimenti si rimborsa il supplemento da SumUp." style="font-size:9px;background:#0F0F0F;color:#F5C518">⚡ PRIORITY +€${e.prioritySupplemento || 5} pagato</span>` + refBadge;
 
                 // Cella prezzo: se sconto applicato, mostra prezzo originale barrato sotto
@@ -194,6 +195,9 @@ export function renderPren() {
         }
     });
 
+    // Disdette online del giorno (sito): già fuori dal calendario, qui solo per sapere chi non viene
+    const disd = (state.disdetteDB?.[date] || []).sort((a, b) => String(a.orario).localeCompare(String(b.orario)));
+    if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette online:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.caparraImporto || d.priority ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
     tb.innerHTML = html;
     document.getElementById('prenTotCount').textContent = totCount;
     document.getElementById('prenIncContanti').textContent = fEur(incContanti);
@@ -512,6 +516,8 @@ async function mostraModalServizi(date, pid, mod = '') {
         const base = pNum(entry.prezzo);
         // Sconto referral: applicato se la prenotazione ha codice amico e non lo abbiamo già scontato.
         const scontoRefAttivo = !!entry.referral && entry.scontoReferralApplicato !== true && base > 0;
+        // Caparra pagata online: si scala dal prezzo (l'incasso dei €10 lo conta la chiusura da caparraOrdini)
+        const caparraAttiva = pNum(entry.caparraImporto) > 0 && entry.caparraScalata !== true && base > 0;
         const calcola = (extraSum) => {
             const lordo = base + extraSum;
             let netto = lordo;
@@ -519,7 +525,9 @@ async function mostraModalServizi(date, pid, mod = '') {
             netto = Math.max(0, netto - scontoRef);
             const scontoVoucher = voucherInfo ? Math.min(voucherInfo.valore, netto) : 0;
             netto = Math.max(0, netto - scontoVoucher);
-            return { lordo, scontoRef, scontoVoucher, netto };
+            const caparra = caparraAttiva ? Math.min(pNum(entry.caparraImporto), netto) : 0;
+            netto = Math.max(0, netto - caparra);
+            return { lordo, scontoRef, scontoVoucher, caparra, netto };
         };
         const iniziale = calcola(0);
 
@@ -530,6 +538,12 @@ async function mostraModalServizi(date, pid, mod = '') {
             ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:var(--amb);font:500 12px var(--f)">
                    <span>🎁 Sconto referral (${esc(entry.referral)})</span>
                    <span id="saScontoRef">−€${iniziale.scontoRef.toFixed(2)}</span>
+               </div>`
+            : '';
+        const caparraRowHtml = caparraAttiva
+            ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:#1a6b9a;font:500 12px var(--f)">
+                   <span>💳 Caparra già pagata online</span>
+                   <span>−€${iniziale.caparra.toFixed(2)}</span>
                </div>`
             : '';
         const scontoVoucherRowHtml = voucherInfo
@@ -556,6 +570,7 @@ async function mostraModalServizi(date, pid, mod = '') {
                 </div>
                 ${scontoRefRowHtml}
                 ${scontoVoucherRowHtml}
+                ${caparraRowHtml}
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg4);border-radius:var(--r2);margin-bottom:14px">
                     <span style="font:500 13px var(--f);color:var(--tx2)">${isSosp ? 'Totale in sospeso' : 'Totale da incassare'}</span>
                     <span id="saTot" style="font:700 20px var(--f);color:${isSosp ? 'var(--amb)' : 'var(--grn)'}">€${iniziale.netto.toFixed(2)}</span>
@@ -630,6 +645,13 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
     if (sv.meta) {
         prezzoFinaleStr = String(sv.prezzoFinale);
         Object.assign(extraMeta, sv.meta);
+    }
+    // 💳 Caparra pagata online: in sede si incassa solo il resto (i €10 li conta la chiusura)
+    if (pNum(entry.caparraImporto) > 0 && entry.caparraScalata !== true) {
+        const base = pNum(prezzoFinaleStr);
+        const cap = Math.min(pNum(entry.caparraImporto), base);
+        prezzoFinaleStr = String(Math.max(0, base - cap));
+        Object.assign(extraMeta, { caparraScalata: true, caparraScalataImporto: cap });
     }
 
     // Il cliente può chiedere la fattura anche al momento del pagamento:
