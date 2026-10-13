@@ -107,7 +107,8 @@ export function renderPren() {
     PREN_SLOTS.forEach(slot => {
         const isPausa = slot === '13:30';
         // Contanti dei giorni conclusi: nascosti (vedi contanti-passati.js)
-        const entries = dayData.filter(e => e.orario === slot && !(e.saldato === 'SI' && nascondiContante(e.saldo, date)));
+        const entries = dayData.filter(e => e.orario === slot && !(e.saldato === 'SI' && nascondiContante(e.saldo, date)))
+            .sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0));   // ⚡ Priority in cima allo slot
 
         if (isPausa && entries.length === 0) {
             html += `<tr style="background:rgba(240,165,0,.05)"><td style="font:600 11px var(--mono);color:var(--amb)">${slot}</td><td colspan="7" style="color:var(--amb);font-size:12px;font-style:italic">🍽️ Pausa pranzo (13:30 - 14:30)</td></tr>`;
@@ -153,9 +154,9 @@ export function renderPren() {
                 if (e.avvisoMaltempo) refBadge += ` <span class="badge b" title="Avviso maltempo mandato su WhatsApp" style="font-size:9px">⛈️ avvisato</span>`;
                 if (e.referral) {
                     if (e.scontoReferralApplicato === true) {
-                        refBadge = ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;
+                        refBadge += ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;
                     } else {
-                        refBadge = ` <span class="badge a" title="Codice amico ${esc(e.referral)} — sconto €5 verrà applicato all'inserimento prezzo" style="font-size:9px">REF ${esc(e.referral)} −€5</span>`;
+                        refBadge += ` <span class="badge a" title="Codice amico ${esc(e.referral)} — sconto €5 verrà applicato all'inserimento prezzo" style="font-size:9px">REF ${esc(e.referral)} −€5</span>`;
                     }
                 }
                 // Badge voucher
@@ -167,13 +168,17 @@ export function renderPren() {
                     }
                 }
 
+                // ⚡ Priority: supplemento già pagato online (SumUp), ha la precedenza in coda.
+                // Il lavaggio si incassa come sempre; i €5 li conta la chiusura delle 21:00.
+                if (e.priority) refBadge = ` <span class="badge" title="Priority: supplemento €${e.prioritySupplemento || 5} già pagato online. Precedenza in coda: entra entro 10 min dall'arrivo, altrimenti si rimborsa il supplemento da SumUp." style="font-size:9px;background:#0F0F0F;color:#F5C518">⚡ PRIORITY +€${e.prioritySupplemento || 5} pagato</span>` + refBadge;
+
                 // Cella prezzo: se sconto applicato, mostra prezzo originale barrato sotto
                 let prezzoCellHtml = prezzo ? '€' + prezzo : '—';
                 if (e.scontoReferralApplicato === true && e.prezzoOrigine) {
                     prezzoCellHtml = `€${prezzo}<br><span style="font:400 9px var(--mono);color:var(--tx3);text-decoration:line-through">€${pNum(e.prezzoOrigine)}</span>`;
                 }
 
-                html += `<tr ${isPaid ? 'style="opacity:.7"' : ''}>
+                html += `<tr style="${isPaid ? 'opacity:.7;' : ''}${e.priority ? 'box-shadow:inset 4px 0 0 #F5C518;background:rgba(245,197,24,.08)' : ''}">
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
                     <td><strong>${esc(e.cliente || '')}</strong>${refBadge}${sospBadge(e)}${isPaid ? '' : noShowBadge(e)}${e.richiedeFattura ? (e.ficNumero ? ` <span title="Fattura n. ${esc(String(e.ficNumero))} creata su FIC">🧾✅</span>` : ' <span title="Richiesta fattura — verrà creata al pagamento">🧾</span>') : ''}</td>
                     <td>${esc(e.vettura || '')}</td>

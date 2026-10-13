@@ -61,11 +61,13 @@ export const chiusuraGiornaliera = onSchedule({
       // trattando i doc senza sedeId come 'lungomare' (dati pre-multisede)
       const perSede = (d: FirebaseFirestore.DocumentData) => (d.sedeId || 'lungomare') === sede
 
-      const [snapPren, snapTap, snapGiorn, snapUsc] = await Promise.all([
+      const [snapPren, snapTap, snapGiorn, snapUsc, snapPrio] = await Promise.all([
         db.collection('prenotazioni').where('dataPren', '==', dStr).where('saldato', '==', 'SI').get(),
         db.collection('tappezzeria').where('status', '==', 'OUT').where('dataOut', '==', dIta).get(),
         db.collection('giornalieri').where('status', '==', 'OUT').where('dataOut', '==', dStr).get(),
         db.collection('uscite').where('data', '==', dStr).get(),
+        // ⚡ Priority: supplemento pagato online (SumUp) → incasso del giorno del lavaggio
+        db.collection('priorityOrdini').where('dataPren', '==', dStr).get(),
       ])
 
       let lavContanti = 0, lavPos = 0
@@ -75,6 +77,10 @@ export const chiusuraGiornaliera = onSchedule({
         const imp = parseFloat(d.prezzo) || 0
         if (d.saldo === 'CONTANTI') lavContanti += imp
         else if (d.saldo === 'POS') lavPos += imp
+      })
+      snapPrio.forEach(doc => {
+        const d = doc.data()
+        if (perSede(d) && d.stato === 'pagato') lavPos += Number(d.supplemento) || 0
       })
 
       let tapContanti = 0, tapPos = 0
