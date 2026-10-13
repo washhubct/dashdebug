@@ -49,6 +49,8 @@ async function getConfig() {
     importo: Math.max(1, Number(c.importo) || 10),
     mesi: Math.max(1, Number(c.mesi) || 12),
     oreDisdetta: Math.max(0, Number.isFinite(Number(c.oreDisdetta)) ? Number(c.oreDisdetta) : 2),
+    // Guido 13/10/2026: caparra per TUTTE le prenotazioni online (non solo chi ha un no-show)
+    perTutti: c.perTutti === true,
   }
 }
 
@@ -59,6 +61,7 @@ async function caparraDovuta(telefono: string): Promise<number> {
   const cfg = await getConfig()
   const t = tel9(telefono)
   if (!cfg.attivo || t.length < 9) return 0
+  if (cfg.perTutti) return cfg.importo
   const limite = new Date(Date.now() - cfg.mesi * 30 * 864e5).toISOString().slice(0, 10)
   const ns = await getFirestore().collection('prenotazioni').where('stato', '==', 'NO_SHOW').get()
   const trovato = ns.docs.some(d => { const v = d.data(); return tel9(v.telefono) === t && String(v.dataPren || '') >= limite })
@@ -172,7 +175,7 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
     if (req.method === 'POST' && path === '/verifica') {
       const telefono = String((req.body as any)?.telefono || '')
       const cfg = await getConfig()
-      res.json({ caparra: await caparraDovuta(telefono), oreDisdetta: cfg.oreDisdetta })
+      res.json({ caparra: await caparraDovuta(telefono), oreDisdetta: cfg.oreDisdetta, perTutti: cfg.perTutti })
       return
     }
 
