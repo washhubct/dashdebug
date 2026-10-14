@@ -65,10 +65,10 @@ service cloud.firestore {
     // PRENOTAZIONI — accesso pubblico per form prenota.html
     // ═══════════════════════════════════════════════════════════
     match /prenotazioni/{doc} {
-      // Lettura: admin tutto, operator solo propria sede, pubblico per slot calendario
+      // Lettura: admin tutto, operator solo propria sede. NIENTE lettura pubblica (14/10/2026, privacy:
+      // esponeva nomi/telefoni/targhe). Il sito prende gli orari occupati dalla function priority/occupati.
       allow read: if isAdmin()
-               || (isOperator() && resource.data.sedeId == 'lungomare')
-               || !isSignedIn();
+               || (isOperator() && resource.data.sedeId == 'lungomare');
 
       // Create: gestionale (autenticato + writeOk) o form pubblico (sedeId lungomare)
       allow create: if (isSignedIn() && writeOk())
@@ -265,7 +265,10 @@ service cloud.firestore {
     // agli operatori autenticati del gestionale.
     // ═══════════════════════════════════════════════════════════
     match /referral/{code} {
-      allow read:   if true;
+      // get pubblico (il sito valida UN codice alla volta); list solo gestionale: l'elenco con i telefoni
+      // dei titolari non deve essere scaricabile da fuori (14/10/2026, privacy)
+      allow get:    if true;
+      allow list:   if isSignedIn();
       allow create: if isSignedIn()
         || (request.resource.data.keys().hasOnly(['telefono', 'codice', 'primoLookup'])
             && request.resource.data.codice == code);

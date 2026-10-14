@@ -191,6 +191,19 @@ export const priority = onRequest({ region: REGION, secrets: [SUMUP_API_KEY], co
       return
     }
 
+    // ── GET /occupati?data= ── solo gli orari già presi (niente nomi/telefoni): sostituisce la lettura
+    // pubblica di `prenotazioni` dal sito, chiusa nelle rules il 14/10/2026 (privacy)
+    if (req.method === 'GET' && path === '/occupati') {
+      const data = String(req.query.data || '')
+      if (!DATA_RE.test(data)) { res.status(400).json({ error: 'data non valida' }); return }
+      const snap = await db.collection('prenotazioni').where('dataPren', '==', data).get()
+      const occ = new Set<string>()
+      snap.forEach(d => { const v = d.data(); if (v.orario && v.stato !== 'DISDETTA' && (v.sedeId || SEDE) === SEDE) occ.add(v.orario) })
+      res.set('Cache-Control', 'no-store')
+      res.json({ occupati: [...occ].sort() })
+      return
+    }
+
     // ── POST /checkout ──
     if (req.method === 'POST' && path === '/checkout') {
       const b = (req.body || {}) as Record<string, unknown>
