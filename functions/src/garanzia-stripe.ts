@@ -155,7 +155,7 @@ export const prenotaGaranzia = onRequest({ region: REGION, secrets: [STRIPE_SECR
       const giorno = dataPren.split('-').reverse().join('/')
       const session = await stripe('checkout/sessions', {
         mode: 'setup', currency: 'eur', customer: customer.id, locale: 'it',
-        payment_method_types: ['card'],
+        // metodi di pagamento: dalle impostazioni Stripe (payment_method_types non più accettato da Stripe, 13/10/2026)
         success_url: `${SITE_URL}/prenota/garanzia/?id=${ref.id}`,
         cancel_url: `${SITE_URL}/prenota/`,
         client_reference_id: ref.id,

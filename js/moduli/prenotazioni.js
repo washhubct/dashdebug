@@ -179,6 +179,8 @@ export function renderPren() {
                 if (e.scontoReferralApplicato === true && e.prezzoOrigine) {
                     prezzoCellHtml = `€${prezzo}<br><span style="font:400 9px var(--mono);color:var(--tx3);text-decoration:line-through">€${pNum(e.prezzoOrigine)}</span>`;
                 }
+                // ⚡ Priority: il supplemento è pagato a parte online (non è nel prezzo del lavaggio)
+                if (e.priority) prezzoCellHtml += `<br><span style="font:600 10px var(--mono);color:#b8900a" title="Supplemento Priority pagato online con SumUp: entra nella chiusura delle 21 come POS">+€${e.prioritySupplemento || 5} ⚡ online</span>`;
 
                 html += `<tr style="${isPaid ? 'opacity:.7;' : ''}${e.priority ? 'box-shadow:inset 4px 0 0 #F5C518;background:rgba(245,197,24,.08)' : ''}">
                     <td style="font:500 11px var(--mono)">${i === 0 ? slot : ''}</td>
@@ -198,6 +200,12 @@ export function renderPren() {
 
     // Disdette online del giorno (sito): già fuori dal calendario, qui solo per sapere chi non viene
     const disd = (state.disdetteDB?.[date] || []).sort((a, b) => String(a.orario).localeCompare(String(b.orario)));
+    // ⚡ Priority del giorno: supplementi pagati online (SumUp), fuori dal prezzo dei lavaggi
+    const prioOggi = dayData.filter(e => e.priority).sort((a, b) => String(a.orario).localeCompare(String(b.orario)));
+    if (prioOggi.length) {
+        const totPrio = prioOggi.reduce((t, e) => t + (pNum(e.prioritySupplemento) || 5), 0);
+        html = `<tr style="background:rgba(245,197,24,.10)"><td colspan="8" style="font-size:12px;color:var(--tx2)">⚡ <strong>Priority oggi: ${prioOggi.length} · €${totPrio} pagati online</strong> — ${prioOggi.map(e => `${esc(e.orario || '')} ${esc(e.cliente || '')}${isNoShow(e) ? ' (non presentato)' : ''}`).join(' · ')} <span style="color:var(--tx3)">· già incassati su SumUp, entrano nella chiusura delle 21 come POS (non nei totali sotto)</span></td></tr>` + html;
+    }
     if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette online:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.rimborsoEsito === 'da_fare' ? ' <strong style="color:var(--red)">⚠️ RIMBORSO DA FARE a mano da SumUp</strong>' : d.rimborsoEsito === 'ok' ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
     tb.innerHTML = html;
     document.getElementById('prenTotCount').textContent = totCount;
