@@ -206,7 +206,7 @@ export function renderPren() {
         const totPrio = prioOggi.reduce((t, e) => t + (pNum(e.prioritySupplemento) || 5), 0);
         html = `<tr style="background:rgba(245,197,24,.10)"><td colspan="8" style="font-size:12px;color:var(--tx2)">⚡ <strong>Priority oggi: ${prioOggi.length} · €${totPrio} pagati online</strong> — ${prioOggi.map(e => `${esc(e.orario || '')} ${esc(e.cliente || '')}${isNoShow(e) ? ' (non presentato)' : ''}`).join(' · ')} <span style="color:var(--tx3)">· già incassati su SumUp, entrano nella chiusura delle 21 come POS (non nei totali sotto)</span></td></tr>` + html;
     }
-    if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette online:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.rimborsoEsito === 'da_fare' ? ' <strong style="color:var(--red)">⚠️ RIMBORSO DA FARE a mano da SumUp</strong>' : d.rimborsoEsito === 'ok' ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
+    if (disd.length) html = `<tr style="background:rgba(230,57,70,.06)"><td colspan="8" style="font-size:12px;color:var(--tx2)">❌ <strong>Disdette:</strong> ${disd.map(d => `${esc(d.orario || '')} ${esc(d.cliente || '')}${d.disdettaVia === 'chiusura-maltempo' ? ' (chiuso maltempo)' : d.disdettaVia === 'sito' ? ' (online)' : ''}${d.rimborsoEsito === 'da_fare' ? ' <strong style="color:var(--red)">⚠️ RIMBORSO DA FARE a mano da SumUp</strong>' : d.rimborsoEsito === 'ok' ? ' (rimborsato)' : ''}`).join(' · ')}</td></tr>` + html;
     tb.innerHTML = html;
     document.getElementById('prenTotCount').textContent = totCount;
     document.getElementById('prenIncContanti').textContent = fEur(incContanti);
