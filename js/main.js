@@ -27,6 +27,7 @@ import { initConti, caricaConti } from './moduli/conti.js';
 import { initCampagna } from './moduli/campagna.js';
 import { initAvvisoMaltempo } from './moduli/avviso-maltempo.js';
 import { initPriorityConfig } from './moduli/priority-config.js';
+import { avviaChiamate } from './moduli/chiamate.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
 import { initMessaggi } from './moduli/messaggi.js';
 import { initFidelai } from './moduli/fidelai.js';
@@ -424,6 +425,7 @@ async function initFirebaseData() {
     renderGiornalieri();
     initSospesi();
     renderCassa();
+    try { avviaChiamate(); } catch (e) { console.warn('chiamate:', e?.message); }   // 📞 FRITZ!Box → dashboard
     if (document.getElementById('page-dashboard')?.classList.contains('show')) renderDash();
     
     if(!document.querySelector('.page.show') || document.querySelector('.page.show').id === 'page-dashboard') {

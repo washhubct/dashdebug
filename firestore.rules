@@ -330,6 +330,20 @@ service cloud.firestore {
                    && request.resource.data.sedeId == sede;
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 📞 CHIAMATE (FRITZ!Box → Pi del lavaggio → dashboard, 19/10/2026)
+    // Scrive l'utente del Pi (stesso del cancello); leggono gli operatori della sede.
+    // Update consentito per segnare "richiamato" dalla dashboard.
+    // ═══════════════════════════════════════════════════════════
+    match /chiamate/{doc} {
+      allow read:   if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow create: if isSignedIn() && writeOk();
+      allow update: if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+    }
+    match /chiamataLive/{sede} {
+      allow read, write: if isSignedIn() && sedeValida(sede) && hasSedeAccess(sede);
+    }
+
     match /whatsappCoda/{doc} {
       allow read:   if isSignedIn();
       allow create: if isSignedIn() && writeOk() && request.resource.data.stato == 'in_coda';

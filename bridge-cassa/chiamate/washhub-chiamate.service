@@ -1,0 +1,19 @@
+[Unit]
+Description=Wash Hub monitor chiamate (FRITZ!Box Call Monitor → Firestore)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/chiamate
+Environment=CANCELLO_ENV=/home/pi/cancello.env
+Environment=FRITZ_HOST=fritz.box
+ExecStart=/usr/bin/python3 /home/pi/chiamate/chiamate_monitor.py
+Restart=always
+RestartSec=15
+StandardOutput=append:/home/pi/chiamate/chiamate.log
+StandardError=append:/home/pi/chiamate/chiamate.log
+
+[Install]
+WantedBy=multi-user.target
