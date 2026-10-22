@@ -1,6 +1,7 @@
 // Reset pagamenti dipendenti Lungomare — richiesta Guido 22/10/2026.
 //  • XXX, CUMAR, MENTA: giornate fino al 11/10/2026 → pagate
-//  • HAPPY: giornate fino al 11/11/2026 → pagate (anticipato)
+//  • HAPPY: giornate fino al 11/10/2026 → pagate (prima run con 11/11 per errore, corretta subito)
+//  • SONY: giornate lug-ago 2026 (a giornata, pre-fisso) → pagate
 //  • acconti dei 4 azzerati (erano il "pagato" tenuto a mano): nota con il vecchio importo
 //  • SONY (fisso): stipendio settembre 2026 pagato → acconti/lungomare_SONY.stipendiPagati
 // Uso: GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud-keys/dashboard-washhub-claude-cli.json node scripts/reset-pagamenti-20261022.mjs [--apply]
@@ -9,7 +10,7 @@ admin.initializeApp({ credential: admin.credential.applicationDefault(), project
 const db = admin.firestore();
 const APPLY = process.argv.includes('--apply');
 const OGGI = '22/10/2026';
-const FINO = { XXX: '2026-10-11', CUMAR: '2026-10-11', MENTA: '2026-10-11', HAPPY: '2026-11-11' };
+const FINO = { XXX: '2026-10-11', CUMAR: '2026-10-11', MENTA: '2026-10-11', HAPPY: '2026-10-11', SONY: '2026-12-31' };
 
 const snap = await db.collection('presenzeDipendenti').where('sedeId', '==', 'lungomare').get();
 let batch = db.batch(), n = 0, ops = 0;
