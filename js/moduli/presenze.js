@@ -48,6 +48,7 @@ let riepMese = new Date().getMonth();
 let riepAnno = new Date().getFullYear();
 let presenzeLocali = []; // cache locale delle presenze caricate
 let accontiLocali = {}; // nome → importo residuo (anticipi su stipendio, collection `acconti`)
+let stipendiLocali = {}; // nome → { 'YYYY-MM': {importo, data} } stipendi fissi pagati (campo stipendiPagati in `acconti`)
 
 // ─── INIT ───
 export function initPresenze() {
@@ -144,9 +145,11 @@ async function caricaPresenze() {
     try {
         const snapA = await fsGetDocs(query(fsCollection(db, 'acconti'), where('sedeId', '==', state.sedeAttiva)));
         accontiLocali = {};
+        stipendiLocali = {};
         snapA.forEach(docSnap => {
             const a = docSnap.data();
             if (pNum(a.importo) > 0) accontiLocali[a.nome] = pNum(a.importo);
+            if (a.stipendiPagati) stipendiLocali[a.nome] = a.stipendiPagati;
         });
     } catch (e) {
         console.warn('Errore caricamento acconti:', e);
@@ -379,6 +382,31 @@ function renderRiepilogoMensile(mese, anno) {
         </tr>`;
     }).join('');
 
+    // Dipendenti a stipendio fisso (es. SONY dal 01/09/2026): una riga per mese con lo
+    // stipendio del mese (pro-rata nel mese di ingresso), pagato sì/no e gli stipendi
+    // arretrati dei mesi precedenti. Stato in acconti/{sede}_{nome}.stipendiPagati['YYYY-MM'].
+    const meseKey = `${anno}-${String(mese + 1).padStart(2, '0')}`;
+    (DIPENDENTI_FISSI[state.sedeAttiva] || []).forEach(f => {
+        if (meseKey < f.dal.slice(0, 7)) return;              // non ancora a stipendio fisso
+        if (righe.some(r => r.nome === f.nome)) return;       // già in tabella (storico a giornata)
+        const pagatiMap = stipendiLocali[f.nome] || {};
+        const importo = stipendioMese(f, anno, mese);
+        const pag = pagatiMap[meseKey];
+        const arretrati = Object.entries(stipendiArretrati(f, pagatiMap, meseKey));
+        const arrTot = arretrati.reduce((s, [, v]) => s + v, 0);
+        totGenerale += importo;
+        tb.innerHTML += `<tr>
+            <td><strong>${f.nome}</strong></td>
+            <td><span class="badge b" title="Stipendio fisso dal ${f.dal.split('-').reverse().join('/')}">📅 Fisso ${fEur(f.mensile)}/mese</span></td>
+            <td style="text-align:center">—</td>
+            <td style="font:700 13px var(--f);color:var(--red)">${fEur(importo)}</td>
+            <td style="font:600 12px var(--f);color:var(--grn)" title="${pag ? 'pagato il ' + pag.data : ''}">${pag ? fEur(pNum(pag.importo)) : '—'}</td>
+            <td style="font:700 13px var(--f)">${pag ? '<span style="color:var(--grn)">✓ saldato</span>' : `<span style="color:var(--amb)">${fEur(importo)}</span>`}</td>
+            <td style="font:600 12px var(--f)" title="${arretrati.map(([k, v]) => k + ' ' + fEur(v)).join(', ')}">${arrTot > 0 ? `<span style="color:var(--red)">${fEur(arrTot)}</span>` : '—'}</td>
+            <td style="white-space:nowrap">${!pag && importo > 0 ? `<button class="btn btn-paga-stip" data-nome="${f.nome}" data-mese="${meseKey}" data-importo="${importo}" title="Segna pagato lo stipendio di questo mese" style="font-size:10px;padding:3px 10px;background:var(--grn1);border-color:var(--grn);color:var(--grn)">💰 Paga stipendio</button>` : ''}${arretrati.map(([k, v]) => ` <button class="btn btn-paga-stip" data-nome="${f.nome}" data-mese="${k}" data-importo="${v}" title="Segna pagato lo stipendio arretrato di ${k}" style="font-size:10px;padding:3px 8px">${k.slice(5)}/${k.slice(2, 4)}</button>`).join('')}</td>
+        </tr>`;
+    });
+
     tb.innerHTML += `<tr style="background:var(--bg4)">
         <td colspan="2"><strong>TOTALE ${mesi[mese].toUpperCase()} ${anno}</strong></td>
         <td></td>
@@ -395,6 +423,53 @@ function renderRiepilogoMensile(mese, anno) {
     tb.querySelectorAll('.btn-acconto-dip').forEach(btn => {
         btn.addEventListener('click', () => impostaAcconto(btn.dataset.nome));
     });
+    tb.querySelectorAll('.btn-paga-stip').forEach(btn => {
+        btn.addEventListener('click', () => pagaStipendio(btn.dataset.nome, btn.dataset.mese, pNum(btn.dataset.importo)));
+    });
+}
+
+// Stipendio dovuto nel mese a un dipendente fisso: intero, oppure pro-rata sui giorni
+// dal giorno `dal` se è il mese di ingresso (stessa regola di report.js costiFissi).
+function stipendioMese(f, anno, mese) {
+    const giorniMese = new Date(anno, mese + 1, 0).getDate();
+    const dal = new Date(f.dal + 'T00:00:00');
+    if (dal.getFullYear() !== anno || dal.getMonth() !== mese) return f.mensile;
+    return Math.round(f.mensile * (giorniMese - dal.getDate() + 1) / giorniMese);
+}
+
+// Stipendi dei mesi PRECEDENTI a `meseKey` (da `dal` in poi) non ancora segnati pagati.
+function stipendiArretrati(f, pagatiMap, meseKey) {
+    const out = {};
+    let [a, m] = f.dal.slice(0, 7).split('-').map(Number);
+    m -= 1;
+    for (;;) {
+        const k = `${a}-${String(m + 1).padStart(2, '0')}`;
+        if (k >= meseKey) break;
+        if (!pagatiMap[k]) out[k] = stipendioMese(f, a, m);
+        m++; if (m > 11) { m = 0; a++; }
+    }
+    return out;
+}
+
+// Segna pagato lo stipendio fisso di un mese → acconti/{sede}_{nome}.stipendiPagati[YYYY-MM]
+async function pagaStipendio(nome, meseKey, importo) {
+    const [a, m] = meseKey.split('-');
+    const mesiL = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+    const r = prompt(`Stipendio ${nome} — ${mesiL[+m - 1]} ${a}.\nImporto pagato (netto):`, String(importo));
+    if (r === null) return;
+    const val = parseFloat(String(r).replace(',', '.'));
+    if (isNaN(val) || val <= 0) { alert('Importo non valido'); return; }
+    const oggi = new Date().toLocaleDateString('it-IT');
+    try {
+        await fsSetDoc(fsDoc(db, 'acconti', `${state.sedeAttiva}_${nome}`), {
+            nome, sedeId: state.sedeAttiva, aggiornato: oggi,
+            stipendiPagati: { [meseKey]: { importo: val, data: oggi } }
+        }, { merge: true });
+        stipendiLocali[nome] = { ...(stipendiLocali[nome] || {}), [meseKey]: { importo: val, data: oggi } };
+        renderRiepilogoMensile(riepMese, riepAnno);
+    } catch (e) {
+        alert('Errore salvataggio stipendio: ' + (e?.message || e));
+    }
 }
 
 // Registra/modifica un acconto (anticipo su giornate future non ancora inserite).
