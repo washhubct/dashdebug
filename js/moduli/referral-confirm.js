@@ -6,9 +6,40 @@
 // Il referrer (chi possiede il codice) maturare lo sconto è una decisione
 // di prodotto separata: qui registriamo solo lo stato del conteggio.
 
-import { db, fsDoc } from '../firebase-config.js';
-import { setDoc, increment, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+import { db, fsDoc, fsCollection, fsGetDocs } from '../firebase-config.js';
+import { setDoc, increment, serverTimestamp, query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
+import { state } from '../state.js';
 import { creaVoucherReferral } from './vouchers.js';
+
+const tel9 = t => String(t || '').replace(/\D/g, '').slice(-9);
+
+// Regola (Guido 22/10/2026): il codice amico vale SOLO se chi lo usa è un cliente NUOVO.
+// Caso: Giuseppe Russo (cliente storico) ha prenotato col codice di Francesco Russo e ha
+// avuto sconto + conferma referral. Qui controlliamo CRM (ultime 9 cifre) e prenotazioni/
+// tappezzeria precedenti con lo stesso numero. Il sito fa lo stesso controllo via function,
+// questo è la rete di sicurezza al saldo (prenotazioni vecchie o inserite a mano).
+export async function amicoGiaCliente(entry) {
+    const t = tel9(entry?.telefono);
+    if (t.length < 9) return false;
+    if ((state.clientiDB || []).some(c => tel9(c.telefono) === t)) return true;
+    const t10 = '3' + t;
+    const varianti = [...new Set([t10, t, '+39' + t10, '+39 ' + t10, '0039' + t10, '39' + t10,
+        `+39 ${t10.slice(0, 3)} ${t10.slice(3)}`, `${t10.slice(0, 3)} ${t10.slice(3)}`])];
+    try {
+        const [pr, tp] = await Promise.all([
+            fsGetDocs(query(fsCollection(db, 'prenotazioni'), where('telefono', 'in', varianti))),
+            fsGetDocs(query(fsCollection(db, 'tappezzeria'), where('telefono', 'in', varianti))),
+        ]);
+        const rif = String(entry.dataPren || '');
+        let prima = false;
+        pr.forEach(d => { if (d.id !== entry._pid && String(d.data().dataPren || '') < rif) prima = true; });
+        if (prima) return true;
+        return tp.size > 0;
+    } catch (e) {
+        console.warn('[referral] controllo già cliente fallito, considero valido', e?.message);
+        return false;
+    }
+}
 
 function getCode(entry) {
     const raw = entry?.referral;

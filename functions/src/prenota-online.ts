@@ -5,6 +5,7 @@ import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 import { romeToEpoch } from './parcheggio-smart'
 import { getConfigGaranzia } from './garanzia-stripe'
+import { referralSeValido, validaReferral } from './referral-check'
 
 // ═══════════════════════════════════════════════════════════════════
 // PRENOTAZIONI ONLINE — caparra anti no-show + disdetta (13/10/2026)
@@ -23,6 +24,7 @@ import { getConfigGaranzia } from './garanzia-stripe'
 //   POST /caparra/webhook  (return_url SumUp)
 //   GET  /caparra/stato?id=
 //   POST /disdici          { telefono, nome, dataPren } → { disdette, troppoTardi, rimborsi }
+//   POST /referral/valida  { codice, telefono }          → { esito: ok | self | non-trovato | gia-cliente }
 // Config: config/caparra { attivo, importo, mesi, oreDisdetta }
 // ═══════════════════════════════════════════════════════════════════
 
@@ -95,13 +97,8 @@ function cors(req: Request, res: Response) {
   res.set('Access-Control-Max-Age', '3600')
 }
 
-async function referralValido(codice: string, telefono: string): Promise<string> {
-  const c = codice.trim().toUpperCase()
-  if (c.length < 4) return ''
-  const snap = await getFirestore().collection('referral').doc(c).get()
-  const t = String(snap.data()?.telefono || '')
-  return !t || t === tel9(telefono) ? '' : c
-}
+// Codice amico: valido solo per clienti nuovi (vedi referral-check.ts)
+const referralValido = referralSeValido
 
 // Caparra pagata → crea la prenotazione (non saldata) con i campi caparra
 async function finalizza(docId: string, info: Record<string, unknown>) {
@@ -180,6 +177,14 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
       const g = await getConfigGaranzia()
       if (g.attivo) { res.json({ caparra: 0, garanzia: g.importo, oreDisdetta: g.oreDisdetta, perTutti: true }); return }
       res.json({ caparra: await caparraDovuta(telefono), garanzia: 0, oreDisdetta: cfg.oreDisdetta, perTutti: cfg.perTutti })
+      return
+    }
+
+    // ── POST /referral/valida ── il codice amico vale solo per chi non ha mai lavato da noi
+    if (req.method === 'POST' && path === '/referral/valida') {
+      const b = (req.body || {}) as Record<string, unknown>
+      const esito = await validaReferral(String(b.codice || ''), String(b.telefono || ''))
+      res.json({ esito })
       return
     }
 

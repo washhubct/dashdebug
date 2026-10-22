@@ -1,6 +1,7 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { referralSeValido } from './referral-check'
 import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 
@@ -76,13 +77,8 @@ function cors(req: Request, res: Response) {
 }
 
 const tel9 = (t: unknown) => String(t || '').replace(/\D/g, '').slice(-9)
-async function referralValido(codice: string, telefono: string): Promise<string> {
-  const c = codice.trim().toUpperCase()
-  if (c.length < 4) return ''
-  const snap = await getFirestore().collection('referral').doc(c).get()
-  const t = String(snap.data()?.telefono || '')
-  return !t || t === tel9(telefono) ? '' : c
-}
+// Codice amico: valido solo per clienti nuovi (vedi referral-check.ts)
+const referralValido = referralSeValido
 
 // Sessione completata → carta salvata → crea la prenotazione gar_{id}
 async function finalizza(id: string) {

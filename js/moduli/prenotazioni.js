@@ -8,7 +8,7 @@ import { renderCassa } from './cassa.js';
 import { autoSalvaCliente, checkClienteDuplicato, showThankYouToast, showConfirmPrenToast, showWelcomePrenToast, showWelcomeToast } from './clienti.js';
 import { avviaPagamento, healthBridge, richiediPagamento } from './cassa-automatica.js';
 import { loadServiziAttivi } from './servizi-aggiuntivi.js';
-import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato } from './referral-confirm.js';
+import { confermaReferral, rollbackReferral, rollbackReferralNonConfermato, amicoGiaCliente } from './referral-confirm.js';
 import { marcaVoucherUtilizzato, getVoucher } from './vouchers.js';
 import { avvisaSospesiCliente, sospesiClienteDaSaldare } from './sospesi.js';
 import { mostraSuDisplay } from './display-cassa.js';
@@ -152,7 +152,9 @@ export function renderPren() {
                 // Badge referral: presente sulla prenotazione (dal sito) ma non ancora scontato
                 let refBadge = '';
                 if (e.avvisoMaltempo) refBadge += ` <span class="badge b" title="Avviso maltempo mandato su WhatsApp" style="font-size:9px">⛈️ avvisato</span>`;
-                if (e.referral) {
+                if (e.referral && e.referralNonValido) {
+                    refBadge += ` <span class="badge" title="Codice amico ${esc(e.referral)} NON valido: il cliente aveva già lavato da noi. Niente sconto, niente voucher all'amico." style="font-size:9px;color:var(--tx3)">REF ✗ già cliente</span>`;
+                } else if (e.referral) {
                     if (e.scontoReferralApplicato === true) {
                         refBadge += ` <span class="badge g" title="Sconto referral di €${e.scontoReferral || 5} già applicato" style="font-size:9px">REF −€${e.scontoReferral || 5} ✓</span>`;
                     } else {
@@ -525,10 +527,16 @@ async function mostraModalServizi(date, pid, mod = '') {
         }
     }
 
+    // Codice amico valido solo per clienti nuovi: se il cliente era già nostro, niente sconto
+    // (il flag resta sull'entry e viene salvato al saldo insieme al rollback dei contatori).
+    if (entry.referral && entry.scontoReferralApplicato !== true && !entry.referralNonValido && entry.referralConfermato !== true) {
+        if (await amicoGiaCliente(entry)) entry.referralNonValido = 'gia-cliente';
+    }
+
     return new Promise(resolve => {
         const base = pNum(entry.prezzo);
         // Sconto referral: applicato se la prenotazione ha codice amico e non lo abbiamo già scontato.
-        const scontoRefAttivo = !!entry.referral && entry.scontoReferralApplicato !== true && base > 0;
+        const scontoRefAttivo = !!entry.referral && !entry.referralNonValido && entry.scontoReferralApplicato !== true && base > 0;
         // Caparra pagata online: si scala dal prezzo (l'incasso dei €10 lo conta la chiusura da caparraOrdini)
         const caparraAttiva = pNum(entry.caparraImporto) > 0 && entry.caparraScalata !== true && base > 0;
         const calcola = (extraSum) => {
@@ -552,7 +560,9 @@ async function mostraModalServizi(date, pid, mod = '') {
                    <span>🎁 Sconto referral (${esc(entry.referral)})</span>
                    <span id="saScontoRef">−€${iniziale.scontoRef.toFixed(2)}</span>
                </div>`
-            : '';
+            : (entry.referral && entry.referralNonValido
+                ? `<div style="padding:6px 14px;color:var(--tx3);font:500 11px var(--f)">Codice amico ${esc(entry.referral)} non valido: il cliente aveva già lavato da noi → nessuno sconto</div>`
+                : '');
         const caparraRowHtml = caparraAttiva
             ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;color:#1a6b9a;font:500 12px var(--f)">
                    <span>💳 Caparra già pagata online</span>
@@ -698,8 +708,17 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), upd);
         Object.assign(entry, upd);
 
-        // Conferma referral (no-op se assente o già confermato)
-        if (entry.referral && entry.referralConfermato !== true) {
+        // Codice amico non valido (cliente già nostro): niente conferma né voucher,
+        // i contatori del referrer tornano come prima della prenotazione.
+        if (entry.referral && entry.referralNonValido && entry.referralNonValidoSalvato !== true) {
+            await rollbackReferralNonConfermato(entry);
+            try {
+                await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { referralNonValido: entry.referralNonValido, referralNonValidoSalvato: true });
+                entry.referralNonValidoSalvato = true;
+            } catch (e) { console.warn('referralNonValido flag fail:', e?.message); }
+        }
+        // Conferma referral (no-op se assente, non valido o già confermato)
+        if (entry.referral && !entry.referralNonValido && entry.referralConfermato !== true) {
             await confermaReferral(entry);
             try {
                 await fsUpdateDoc(fsDoc(db, "prenotazioni", pid), { referralConfermato: true });
@@ -897,7 +916,7 @@ function _parseIta(s) {
 // salvare insieme alla prenotazione.
 function applicaScontoReferral(entry, prezzoBase) {
     const base = pNum(prezzoBase);
-    if (!entry?.referral) return { prezzoFinale: base, meta: null };
+    if (!entry?.referral || entry.referralNonValido) return { prezzoFinale: base, meta: null };
     if (entry.scontoReferralApplicato === true) return { prezzoFinale: base, meta: null };
     if (base <= 0) return { prezzoFinale: base, meta: null };
 
