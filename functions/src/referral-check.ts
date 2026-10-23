@@ -12,8 +12,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 export type EsitoReferral = 'ok' | 'self' | 'non-trovato' | 'gia-cliente' | 'esaurito'
 
-// Ogni codice vale per al massimo 3 amici nuovi (Guido 23/10/2026)
-export const MAX_AMICI_PER_CODICE = 3
+// Nessun limite di amici per codice (Guido 23/10/2026): conta solo che ogni amico sia nuovo.
 
 // Nome normalizzato per il confronto: maiuscolo, senza accenti/punteggiatura, parole ordinate
 // ("Russo Giuseppe" = "GIUSEPPE RUSSO"). Serve almeno nome + cognome (2 parole).
@@ -45,14 +44,23 @@ function varianti(t9: string): string[] {
 
 // Il numero è già di un nostro cliente o ha già prenotato? CRM (ultime 9 cifre, ~1.300 doc)
 // + prenotazioni (qualsiasi data, non disdette) e tappezzeria con le varianti del numero.
-export async function amicoGiaCliente(telefono: string, nome = ''): Promise<boolean> {
+export const normEmail = (e: unknown) => String(e || '').trim().toLowerCase()
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+export async function amicoGiaCliente(telefono: string, nome = '', email = ''): Promise<boolean> {
   const t = tel9(telefono)
   const db = getFirestore()
   // Anagrafica: stesso telefono OPPURE stesso nome e cognome (Guido 23/10: un cliente
   // già in anagrafica non prende lo sconto anche se prenota con un altro numero)
   const kn = chiaveNome(nome)
-  const crm = await db.collection('clienti').select('telefono', 'nome').get()
-  if (crm.docs.some(d => (t.length >= 9 && tel9(d.data().telefono) === t) || (kn && chiaveNome(d.data().nome) === kn))) return true
+  const em = EMAIL_RE.test(normEmail(email)) ? normEmail(email) : ''
+  const crm = await db.collection('clienti').select('telefono', 'nome', 'email').get()
+  if (crm.docs.some(d => (t.length >= 9 && tel9(d.data().telefono) === t) || (kn && chiaveNome(d.data().nome) === kn)
+    || (em && normEmail(d.data().email) === em))) return true
+  if (em) {
+    const pe = await db.collection('prenotazioni').where('email', '==', em).limit(1).get()
+    if (pe.docs.some(d => d.data().stato !== 'DISDETTA')) return true
+  }
   if (t.length < 9) return false
   // Qualsiasi prenotazione col numero, passata, di oggi o futura (escluse le disdette):
   // il codice amico vale solo sulla PRIMA prenotazione. Prima contavano solo i giorni
@@ -67,7 +75,7 @@ export async function amicoGiaCliente(telefono: string, nome = ''): Promise<bool
 }
 
 // Esito completo per il sito e per i checkout (caparra SumUp / carta Stripe).
-export async function validaReferral(codice: string, telefono: string, nome = ''): Promise<EsitoReferral> {
+export async function validaReferral(codice: string, telefono: string, nome = '', email = ''): Promise<EsitoReferral> {
   const c = String(codice || '').trim().toUpperCase()
   if (c.length < 4) return 'non-trovato'
   if (codiceDaTelefono(telefono) === c) return 'self'
@@ -76,13 +84,19 @@ export async function validaReferral(codice: string, telefono: string, nome = ''
   const t = String(r.telefono || '')
   if (!t) return 'non-trovato'
   if (t === tel9(telefono)) return 'self'
-  if (await amicoGiaCliente(telefono, nome)) return 'gia-cliente'
-  // Usi già fatti = prenotazioni in attesa + confermate (i contatori del doc referral)
-  if ((Number(r.inAttesa) || 0) + (Number(r.confermati) || 0) >= MAX_AMICI_PER_CODICE) return 'esaurito'
+  if (await amicoGiaCliente(telefono, nome, email)) return 'gia-cliente'
   return 'ok'
 }
 
 // Codice da salvare sulla prenotazione: solo se valido, altrimenti stringa vuota.
-export async function referralSeValido(codice: string, telefono: string, nome = ''): Promise<string> {
-  return (await validaReferral(codice, telefono, nome)) === 'ok' ? codice.trim().toUpperCase() : ''
+export async function referralSeValido(codice: string, telefono: string, nome = '', email = ''): Promise<string> {
+  return (await validaReferral(codice, telefono, nome, email)) === 'ok' ? codice.trim().toUpperCase() : ''
+}
+
+// Email + consenso marketing dal modulo del sito (solo con codice amico, Guido 23/10/2026).
+// L'email serve all'amico per il codice; il marketing solo con spunta esplicita e separata.
+export function datiAmico(b: Record<string, unknown>): Record<string, unknown> {
+  const email = normEmail(b.email)
+  if (!EMAIL_RE.test(email)) return {}
+  return { email, consensoMarketing: b.consensoMarketing === true, ...(b.consensoMarketing === true ? { consensoMarketingTs: Date.now() } : {}) }
 }

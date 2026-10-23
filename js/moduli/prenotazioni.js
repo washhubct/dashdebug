@@ -752,6 +752,16 @@ async function markPaid(date, pid, mod, serviziExtra = []) {
         try {
             const isNew = await autoSalvaCliente(entry.cliente, entry.vettura, entry.targa || '', entry.telefono || '');
             if (isNew) showWelcomeToast(entry.cliente);
+            // Email + consenso marketing presi dal sito con il codice amico (23/10/2026)
+            if (entry.email) {
+                const crm = (state.clientiDB || []).find(c => (c.nome || '').toUpperCase() === String(entry.cliente || '').toUpperCase());
+                if (crm?._id && (!crm.email || (entry.consensoMarketing === true && crm.consensoMarketing !== true))) {
+                    const upd = { email: crm.email || entry.email };
+                    if (entry.consensoMarketing === true) Object.assign(upd, { consensoMarketing: true, consensoMarketingTs: entry.consensoMarketingTs || Date.now(), consensoMarketingFonte: 'sito-codice-amico' });
+                    await fsUpdateDoc(fsDoc(db, 'clienti', crm._id), upd);
+                    Object.assign(crm, upd);
+                }
+            }
         } catch (e) { console.warn('CRM da pagamento:', e?.message); }
     } catch(e) { alert("Errore Cloud"); }
 }

@@ -5,7 +5,7 @@ import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 import { romeToEpoch } from './parcheggio-smart'
 import { getConfigGaranzia } from './garanzia-stripe'
-import { referralSeValido, validaReferral } from './referral-check'
+import { referralSeValido, validaReferral, datiAmico } from './referral-check'
 
 // ═══════════════════════════════════════════════════════════════════
 // PRENOTAZIONI ONLINE — caparra anti no-show + disdetta (13/10/2026)
@@ -122,6 +122,7 @@ async function finalizza(docId: string, info: Record<string, unknown>) {
     saldo: '', saldato: '', sedeId: SEDE,
     caparraImporto: d.importo, caparraOrdineId: docId, caparraPagataVia: 'SUMUP_ONLINE',
     ...(d.referral ? { referral: d.referral } : {}),
+    ...(d.email ? { email: d.email, consensoMarketing: d.consensoMarketing === true, ...(d.consensoMarketingTs ? { consensoMarketingTs: d.consensoMarketingTs } : {}) } : {}),
     ...(d.voucher ? { voucherCodice: d.voucher } : {}),
   }).catch((e: any) => { if (e?.code !== 6) throw e })
   await ref.update({ prenotazioneId: pref.id })
@@ -183,7 +184,7 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
     // ── POST /referral/valida ── il codice amico vale solo per chi non ha mai lavato da noi
     if (req.method === 'POST' && path === '/referral/valida') {
       const b = (req.body || {}) as Record<string, unknown>
-      const esito = await validaReferral(String(b.codice || ''), String(b.telefono || ''), String(b.nome || ''))
+      const esito = await validaReferral(String(b.codice || ''), String(b.telefono || ''), String(b.nome || ''), String(b.email || ''))
       res.json({ esito })
       return
     }
@@ -207,10 +208,11 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
       // Orario ancora libero? (stessa regola del sito: un orario con una prenotazione è occupato)
       const occ = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
       if (occ.docs.some(d => d.data().orario === orario && d.data().stato !== 'DISDETTA')) { res.status(409).json({ error: 'Questo orario è appena stato preso. Scegline un altro.' }); return }
-      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente).catch(() => '') : ''
+      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente, String(b.email || '')).catch(() => '') : ''
       const ref = db.collection('caparraOrdini').doc()
       await ref.set({
         dataPren, orario, cliente, telefono, vettura, servizio, targa, prezzo, referral, voucher,
+        ...(referral ? datiAmico(b) : {}),
         importo, stato: 'in_pagamento', creatoTs: Date.now(), sedeId: SEDE, sumupCheckoutId: null,
         consenso: { testo: TESTO_CONSENSO_CAPARRA(importo, cfg.oreDisdetta), ts: Date.now(), ua: String(req.headers['user-agent'] || '').slice(0, 200) },
       })

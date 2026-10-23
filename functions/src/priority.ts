@@ -1,7 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https'
 import { defineSecret, defineString } from 'firebase-functions/params'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { referralSeValido } from './referral-check'
+import { referralSeValido, datiAmico } from './referral-check'
 import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 
@@ -146,6 +146,7 @@ async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) 
     saldo: '', saldato: '', sedeId: SEDE,
     priority: true, prioritySupplemento: d.supplemento, priorityOrdineId: docId, priorityPagatoVia: 'SUMUP_ONLINE',
     ...(d.referral ? { referral: d.referral } : {}),
+    ...(d.email ? { email: d.email, consensoMarketing: d.consensoMarketing === true, ...(d.consensoMarketingTs ? { consensoMarketingTs: d.consensoMarketingTs } : {}) } : {}),
     ...(d.voucher ? { voucherCodice: d.voucher } : {}),
   }).catch((e: any) => { if (e?.code !== 6) throw e })    // 6 = ALREADY_EXISTS
   await ref.update({ prenotazioneId: pref.id })
@@ -215,12 +216,13 @@ export const priority = onRequest({ region: REGION, secrets: [SUMUP_API_KEY], co
       if (!TEL_RE.test(telefono)) { res.status(400).json({ error: 'Telefono non valido' }); return }
       const disp = await calcola(dataPren)
       if (!disp.priority.includes(orario)) { res.status(409).json({ error: 'Il posto Priority per questo orario non è più disponibile. Scegli un altro orario.' }); return }
-      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente).catch(() => '') : ''
+      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente, String(b.email || '')).catch(() => '') : ''
 
       const ref = db.collection('priorityOrdini').doc()
       const now = Date.now()
       await ref.set({
         dataPren, orario, cliente, telefono, vettura, servizio, targa, prezzo, referral, voucher,
+        ...(referral ? datiAmico(b) : {}),
         supplemento: disp.supplemento, stato: 'in_pagamento', creatoTs: now, sedeId: SEDE, sumupCheckoutId: null,
         ua: String(req.headers['user-agent'] || '').slice(0, 200),
       })

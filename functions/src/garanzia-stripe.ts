@@ -1,7 +1,7 @@
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { referralSeValido } from './referral-check'
+import { referralSeValido, datiAmico } from './referral-check'
 import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 
@@ -107,6 +107,7 @@ async function finalizza(id: string) {
     saldo: '', saldato: '', sedeId: SEDE,
     garanziaImporto: o.importo, garanziaOrdineId: id, stripeCustomerId: o.stripeCustomerId, stripePaymentMethodId: pm,
     ...(o.referral ? { referral: o.referral } : {}),
+    ...(o.email ? { email: o.email, consensoMarketing: o.consensoMarketing === true, ...(o.consensoMarketingTs ? { consensoMarketingTs: o.consensoMarketingTs } : {}) } : {}),
     ...(o.voucher ? { voucherCodice: o.voucher } : {}),
   }).catch((e: any) => { if (e?.code !== 6) throw e })
   await ref.update({ prenotazioneId: pref.id })
@@ -141,7 +142,7 @@ export const prenotaGaranzia = onRequest({ region: REGION, secrets: [STRIPE_SECR
       if (b.consenso !== true) { res.status(400).json({ error: 'Per prenotare devi accettare la carta a garanzia' }); return }
       const occ = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
       if (occ.docs.some(d => d.data().orario === orario && d.data().stato !== 'DISDETTA')) { res.status(409).json({ error: 'Questo orario è appena stato preso. Scegline un altro.' }); return }
-      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente).catch(() => '') : ''
+      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente, String(b.email || '')).catch(() => '') : ''
 
       const ref = db.collection('garanzieOrdini').doc()
       const customer = await stripe('customers', {
@@ -161,6 +162,7 @@ export const prenotaGaranzia = onRequest({ region: REGION, secrets: [STRIPE_SECR
       }, `ses_${ref.id}`)
       await ref.set({
         dataPren, orario, cliente, telefono, vettura, servizio, targa, prezzo, referral, voucher,
+        ...(referral ? datiAmico(b) : {}),
         importo: cfg.importo, stato: 'in_attesa', creatoTs: Date.now(), sedeId: SEDE,
         stripeCustomerId: customer.id, stripeSessionId: session.id,
         consenso: { testo: TESTO_CONSENSO_GARANZIA(cfg.importo, cfg.oreDisdetta), ts: Date.now(), ua: String(req.headers['user-agent'] || '').slice(0, 200) },
