@@ -32,21 +32,23 @@ function varianti(t9: string): string[] {
     `+39 ${t10.slice(0, 3)} ${t10.slice(3)}`, `${t10.slice(0, 3)} ${t10.slice(3)}`, `+39 ${t10.slice(0, 3)} ${t10.slice(3, 6)} ${t10.slice(6)}`]))
 }
 
-// Il numero è già di un nostro cliente? CRM (confronto sulle ultime 9 cifre, ~1.300 doc)
-// + prenotazioni e tappezzeria passate con le varianti più comuni del numero.
+// Il numero è già di un nostro cliente o ha già prenotato? CRM (ultime 9 cifre, ~1.300 doc)
+// + prenotazioni (qualsiasi data, non disdette) e tappezzeria con le varianti del numero.
 export async function amicoGiaCliente(telefono: string): Promise<boolean> {
   const t = tel9(telefono)
   if (t.length < 9) return false
   const db = getFirestore()
   const crm = await db.collection('clienti').select('telefono').get()
   if (crm.docs.some(d => tel9(d.data().telefono) === t)) return true
-  const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+  // Qualsiasi prenotazione col numero, passata, di oggi o futura (escluse le disdette):
+  // il codice amico vale solo sulla PRIMA prenotazione. Prima contavano solo i giorni
+  // passati e Francesco Nicotra ha usato WH7LED 3 volte, 2 nello stesso giorno (23/10).
   const v = varianti(t)
   const [pr, tp] = await Promise.all([
-    db.collection('prenotazioni').where('telefono', 'in', v.slice(0, 10)).select('dataPren').get(),
+    db.collection('prenotazioni').where('telefono', 'in', v.slice(0, 10)).select('stato').get(),
     db.collection('tappezzeria').where('telefono', 'in', v.slice(0, 10)).select('dataPren').get(),
   ])
-  if (pr.docs.some(d => String(d.data().dataPren || '') < oggi)) return true
+  if (pr.docs.some(d => d.data().stato !== 'DISDETTA')) return true
   return tp.size > 0
 }
 

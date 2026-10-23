@@ -30,9 +30,16 @@ export async function amicoGiaCliente(entry) {
             fsGetDocs(query(fsCollection(db, 'prenotazioni'), where('telefono', 'in', varianti))),
             fsGetDocs(query(fsCollection(db, 'tappezzeria'), where('telefono', 'in', varianti))),
         ]);
-        const rif = String(entry.dataPren || '');
+        // Vale solo la PRIMA prenotazione del numero: conta ogni altra prenotazione non
+        // disdetta precedente (data + ora), anche dello stesso giorno (caso Nicotra 23/10).
+        const rif = `${entry.dataPren || ''} ${entry.orario || ''}`;
         let prima = false;
-        pr.forEach(d => { if (d.id !== entry._pid && String(d.data().dataPren || '') < rif) prima = true; });
+        pr.forEach(d => {
+            if (d.id === entry._pid) return;
+            const x = d.data();
+            if (x.stato === 'DISDETTA') return;
+            if (`${x.dataPren || ''} ${x.orario || ''}` < rif || (x.referral && x.referralConfermato === true)) prima = true;
+        });
         if (prima) return true;
         return tp.size > 0;
     } catch (e) {
