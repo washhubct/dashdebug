@@ -24,7 +24,7 @@ import { referralSeValido, validaReferral } from './referral-check'
 //   POST /caparra/webhook  (return_url SumUp)
 //   GET  /caparra/stato?id=
 //   POST /disdici          { telefono, nome, dataPren } → { disdette, troppoTardi, rimborsi }
-//   POST /referral/valida  { codice, telefono }          → { esito: ok | self | non-trovato | gia-cliente }
+//   POST /referral/valida  { codice, telefono, nome }    → { esito: ok | self | non-trovato | gia-cliente | esaurito }
 // Config: config/caparra { attivo, importo, mesi, oreDisdetta }
 // ═══════════════════════════════════════════════════════════════════
 
@@ -183,7 +183,7 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
     // ── POST /referral/valida ── il codice amico vale solo per chi non ha mai lavato da noi
     if (req.method === 'POST' && path === '/referral/valida') {
       const b = (req.body || {}) as Record<string, unknown>
-      const esito = await validaReferral(String(b.codice || ''), String(b.telefono || ''))
+      const esito = await validaReferral(String(b.codice || ''), String(b.telefono || ''), String(b.nome || ''))
       res.json({ esito })
       return
     }
@@ -207,7 +207,7 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
       // Orario ancora libero? (stessa regola del sito: un orario con una prenotazione è occupato)
       const occ = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
       if (occ.docs.some(d => d.data().orario === orario && d.data().stato !== 'DISDETTA')) { res.status(409).json({ error: 'Questo orario è appena stato preso. Scegline un altro.' }); return }
-      const referral = b.referral ? await referralValido(String(b.referral), telefono).catch(() => '') : ''
+      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente).catch(() => '') : ''
       const ref = db.collection('caparraOrdini').doc()
       await ref.set({
         dataPren, orario, cliente, telefono, vettura, servizio, targa, prezzo, referral, voucher,

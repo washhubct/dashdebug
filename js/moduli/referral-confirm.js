@@ -12,6 +12,12 @@ import { state } from '../state.js';
 import { creaVoucherReferral } from './vouchers.js';
 
 const tel9 = t => String(t || '').replace(/\D/g, '').slice(-9);
+// Nome normalizzato come nella function (referral-check.ts chiaveNome): parole ordinate, senza accenti
+const chiaveNome = n => {
+    const p = String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+        .replace(/[^A-Z ]/g, ' ').split(/\s+/).filter(w => w.length >= 2);
+    return p.length >= 2 ? p.sort().join(' ') : '';
+};
 
 // Regola (Guido 22/10/2026): il codice amico vale SOLO se chi lo usa è un cliente NUOVO.
 // Caso: Giuseppe Russo (cliente storico) ha prenotato col codice di Francesco Russo e ha
@@ -20,8 +26,10 @@ const tel9 = t => String(t || '').replace(/\D/g, '').slice(-9);
 // questo è la rete di sicurezza al saldo (prenotazioni vecchie o inserite a mano).
 export async function amicoGiaCliente(entry) {
     const t = tel9(entry?.telefono);
+    // Anagrafica: stesso telefono o stesso nome e cognome (Guido 23/10/2026)
+    const kn = chiaveNome(entry?.cliente);
+    if ((state.clientiDB || []).some(c => (t.length >= 9 && tel9(c.telefono) === t) || (kn && chiaveNome(c.nome) === kn))) return true;
     if (t.length < 9) return false;
-    if ((state.clientiDB || []).some(c => tel9(c.telefono) === t)) return true;
     const t10 = '3' + t;
     const varianti = [...new Set([t10, t, '+39' + t10, '+39 ' + t10, '0039' + t10, '39' + t10,
         `+39 ${t10.slice(0, 3)} ${t10.slice(3)}`, `${t10.slice(0, 3)} ${t10.slice(3)}`])];

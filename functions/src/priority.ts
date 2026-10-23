@@ -1,6 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https'
 import { defineSecret, defineString } from 'firebase-functions/params'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { referralSeValido } from './referral-check'
 import type { Request } from 'firebase-functions/v2/https'
 import type { Response } from 'express'
 
@@ -120,15 +121,8 @@ function cors(req: Request, res: Response) {
   res.set('Access-Control-Max-Age', '3600')
 }
 
-// Codice amico valido = esiste, ha il telefono del titolare, non è il proprio (come validaCodiceAmico del sito)
-async function referralValido(codice: string, telefono: string): Promise<string> {
-  const c = codice.trim().toUpperCase()
-  if (c.length < 4) return ''
-  const snap = await getFirestore().collection('referral').doc(c).get()
-  const tel = String(snap.data()?.telefono || '')
-  if (!tel || tel === telefono.replace(/\D/g, '').slice(-9)) return ''
-  return c
-}
+// Codice amico: stessa regola di tutto il sito (referral-check.ts) — solo clienti nuovi, max 3 per codice
+const referralValido = referralSeValido
 
 // Pagato → crea la prenotazione (non saldata: il lavaggio si paga in sede) con i campi Priority
 async function finalizza(docId: string, pagamentoInfo: Record<string, unknown>) {
@@ -221,7 +215,7 @@ export const priority = onRequest({ region: REGION, secrets: [SUMUP_API_KEY], co
       if (!TEL_RE.test(telefono)) { res.status(400).json({ error: 'Telefono non valido' }); return }
       const disp = await calcola(dataPren)
       if (!disp.priority.includes(orario)) { res.status(409).json({ error: 'Il posto Priority per questo orario non è più disponibile. Scegli un altro orario.' }); return }
-      const referral = b.referral ? await referralValido(String(b.referral), telefono).catch(() => '') : ''
+      const referral = b.referral ? await referralValido(String(b.referral), telefono, cliente).catch(() => '') : ''
 
       const ref = db.collection('priorityOrdini').doc()
       const now = Date.now()
