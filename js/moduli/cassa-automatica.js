@@ -16,7 +16,7 @@ const VNE_MESS_MAP = {
     100: 'Transazione non trovata, riprova',
     101: 'Importo non valido',
     102: 'Operatore non riconosciuto',
-    105: 'Importo fuori limiti cassa',
+    105: 'Cassa occupata da un pagamento rimasto aperto (o importo fuori limiti)',
     106: 'Taglio non disponibile in cassa, rifornire',
     110: 'Cassa occupata da altra operazione',
     111: 'Operazione non rimborsabile',
@@ -124,7 +124,20 @@ export async function avviaPagamento(importoCent, idPrenotazione, cb) {
 
     try {
         console.log(LOG, 'POST /paga', { importoCent, idPrenotazione });
-        const res = await bridge('/paga', { method: 'POST', body: { importo: importoCent } });
+        let res;
+        try {
+            res = await bridge('/paga', { method: 'POST', body: { importo: importoCent } });
+        } catch (e) {
+            // 105 = cassa impegnata da un pagamento rimasto aperto (23/10/2026: annullo andato
+            // in timeout). Il bridge sa quale: si annulla con restituzione e si riprova una volta.
+            const ap = e.payload?.aperta;
+            if (e.payload?.vne_mess !== 105 || !ap) throw e;
+            const ok = confirm(`La cassa ha ancora aperto un pagamento di ${fEur((ap.importo || 0) / 100)} (avviato ${String(ap.ts || '').slice(11, 16)}).\n\nLo annullo (restituendo eventuali soldi inseriti) e avvio questo da ${fEur(importoCent / 100)}?`);
+            if (!ok) throw e;
+            modal.update({ inserito: 0, resto: 0, status: 'Chiudo il pagamento rimasto aperto…' });
+            await bridge('/annulla-aperta', { method: 'POST', body: {} });
+            res = await bridge('/paga', { method: 'POST', body: { importo: importoCent } });
+        }
         idVNE = res.id;
         modal.setIdVNE(idVNE);
 
@@ -343,7 +356,17 @@ function openCassaModal(importoCent, idPrenotazione) {
         if (!ctrl.idVNE) { ctrl.close(); return; }
         annBtn.disabled = true;
         annBtn.textContent = 'Annullamento…';
-        try { await annullaPagamento(ctrl.idVNE, 2); } catch (e) { console.warn(LOG, 'annulla fallito', e); }
+        // Il bridge riprova e verifica; se la cassa resta muta il pulsante torna attivo:
+        // mai chiudere la finestra finché la cassa non conferma (23/10/2026).
+        try {
+            const r = await annullaPagamento(ctrl.idVNE, 2);
+            if (!r?.verificato) throw new Error('la cassa non ha confermato');
+        } catch (e) {
+            console.warn(LOG, 'annulla fallito', e);
+            ctrl.showError('Annullo non confermato dalla cassa: riprova');
+            annBtn.disabled = false;
+            annBtn.textContent = 'Riprova annullo';
+        }
     });
     parzBtn.addEventListener('click', async () => {
         if (!ctrl.idVNE) return;

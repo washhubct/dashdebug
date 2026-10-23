@@ -30,3 +30,4 @@ scripts/wa-worker/.wwebjs_cache/
 scripts/wa-worker/qr.png
 scripts/wa-worker/*.log
 scripts/wa-worker/pairing.txt
+bridge-cassa/transazione-aperta.json

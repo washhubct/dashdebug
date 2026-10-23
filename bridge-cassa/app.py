@@ -36,6 +36,33 @@ VNE_TIMEOUT: float = 7.0  # protocollo 5s + 2s margine
 VERSION: str = "1.0.0"
 
 VNE_URL = f"{VNE_PROTOCOL}://{VNE_HOST}/selfcashapi/"
+
+# Transazione aperta (23/10/2026): se la cassa non risponde mentre si annulla, il
+# pagamento resta "in attesa" e blocca ogni nuovo incasso (mess 105). Il bridge
+# ricorda l'ultima transazione avviata e non chiusa, così si può annullarla anche
+# dopo un reload della pagina (POST /annulla-aperta) e l'ID finisce nel log.
+APERTA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "transazione-aperta.json")
+STATI_FINALI = ("completed", "partial", "deleted", "returned")
+
+
+def aperta_get() -> dict | None:
+    try:
+        with open(APERTA_FILE, encoding="utf-8") as f:
+            return json.load(f) or None
+    except (OSError, ValueError):
+        return None
+
+
+def aperta_set(rec: dict | None) -> None:
+    try:
+        if rec is None:
+            if os.path.exists(APERTA_FILE):
+                os.remove(APERTA_FILE)
+            return
+        with open(APERTA_FILE, "w", encoding="utf-8") as f:
+            json.dump(rec, f)
+    except OSError as e:
+        jlog("aperta_write_error", err=str(e))
 ALLOWED_ORIGIN = "https://dashboard.washhub.it"
 
 # Logger JSON-strutturato
@@ -176,6 +203,12 @@ def paga():
     }
     data, status, _ = vne_call(payload)
     out, code = map_vne_response(data, status)
+    if code == 200 and isinstance(out, dict) and out.get("id"):
+        aperta_set({"id": str(out["id"]), "importo": importo, "ts": time.strftime("%Y-%m-%dT%H:%M:%S")})
+        jlog("paga_avviato", id=str(out["id"]), importo=importo)
+    elif code == 400 and out.get("vne_mess") == 105:
+        out["aperta"] = aperta_get()
+        jlog("paga_cassa_occupata", importo=importo, aperta=out["aperta"])
     return jsonify(out), code
 
 
@@ -184,22 +217,67 @@ def polling(id_op: str):
     payload = {"tipo": 2, "id": id_op}
     data, status, _ = vne_call(payload)
     out, code = map_vne_response(data, status)
+    det = (out.get("payment_details") or out) if isinstance(out, dict) else {}
+    if code == 200 and det.get("status") in STATI_FINALI:
+        ap = aperta_get()
+        if ap and ap.get("id") == id_op:
+            aperta_set(None)
+            jlog("transazione_chiusa", id=id_op, status=det.get("status"))
     return jsonify(out), code
+
+
+def annulla_con_retry(id_op: str, tipo_ann: int, nome_op: str) -> tuple[dict, int]:
+    """Annulla (tipo=3) riprovando se la cassa non risponde, poi verifica lo stato.
+    11:39 del 23/10: un solo tentativo andato in timeout ha lasciato la cassa bloccata."""
+    payload = {"tipo": 3, "id": id_op, "tipo_annullamento": tipo_ann, "opName": nome_op}
+    out, code = {"error": "vne_timeout"}, 504
+    for tentativo in range(1, 5):
+        data, status, _ = vne_call(payload)
+        out, code = map_vne_response(data, status)
+        jlog("annulla", id=id_op, tentativo=tentativo, esito=code)
+        if code != 504 and code != 502:
+            break
+        time.sleep(2)
+    # Verifica: la transazione deve risultare chiusa
+    for _ in range(3):
+        data, status, _ = vne_call({"tipo": 2, "id": id_op})
+        p, c = map_vne_response(data, status)
+        det = (p.get("payment_details") or p) if isinstance(p, dict) else {}
+        if c == 200 and det.get("status") in STATI_FINALI:
+            ap = aperta_get()
+            if ap and ap.get("id") == id_op:
+                aperta_set(None)
+            jlog("transazione_chiusa", id=id_op, status=det.get("status"))
+            out = {**(out if isinstance(out, dict) else {}), "id": id_op, "verificato": det.get("status"),
+                   "payment_details": det}
+            return out, 200
+        time.sleep(1.5)
+    if code == 200:
+        out = {**out, "verificato": None}
+    return out, code
 
 
 @app.post("/annulla/<id_op>")
 def annulla(id_op: str):
     body = request.get_json(silent=True) or {}
-    tipo_ann = body.get("tipo_annullamento", 2)
-    payload = {
-        "tipo": 3,
-        "id": id_op,
-        "tipo_annullamento": tipo_ann,
-        "opName": op_name(),
-    }
-    data, status, _ = vne_call(payload)
-    out, code = map_vne_response(data, status)
+    out, code = annulla_con_retry(id_op, body.get("tipo_annullamento", 2), op_name())
     return jsonify(out), code
+
+
+@app.get("/aperta")
+def aperta():
+    """Ultima transazione avviata e non ancora chiusa (o null)."""
+    return jsonify({"aperta": aperta_get()})
+
+
+@app.post("/annulla-aperta")
+def annulla_aperta():
+    """Annulla con restituzione la transazione rimasta appesa (es. pagina ricaricata)."""
+    ap = aperta_get()
+    if not ap:
+        return jsonify({"error": "nessuna_aperta"}), 404
+    out, code = annulla_con_retry(ap["id"], 2, op_name())
+    return jsonify({**out, "aperta": ap}), code
 
 
 @app.get("/stato")
