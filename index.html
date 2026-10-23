@@ -27,7 +27,9 @@
 // Se l'app viene aggiornata, forza il reload al primo caricamento successivo
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
-    var APP_VERSION = '20260928a';
+    // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
+    var APP_VERSION = '20261023e';
+    window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
         var last = localStorage.getItem(KEY);
@@ -45,6 +47,33 @@
         }
         localStorage.setItem(KEY, APP_VERSION);
     } catch(e) { /* localStorage non disponibile, skip silenziosamente */ }
+})();
+</script>
+<script>
+// ═══ AGGIORNAMENTO A PAGINA APERTA (23/10/2026) ═══
+// Il controllo sopra scatta solo a pagina ricaricata: chi tiene il gestionale aperto
+// tutto il giorno restava sulla versione vecchia. Ogni 5 min (e al ritorno sulla
+// scheda) legge version.json senza cache; se è cambiata ricarica, ma MAI durante un
+// pagamento in cassa, con una finestra aperta o mentre si scrive in un campo.
+(function(){
+    function occupato(){
+        if (document.getElementById('cassaAutoBox')) return true;               // pagamento cassa in corso
+        if (document.querySelector('div[style*="position:fixed"][style*="inset:0"]')) return true; // modale aperta
+        var a = document.activeElement;
+        return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value);
+    }
+    var inAttesa = false;
+    function controlla(){
+        fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(j){
+                if (!j || !j.v || j.v === window.WH_APP_VERSION) return;
+                inAttesa = true;
+                if (!occupato()) location.reload();
+            }).catch(function(){});
+    }
+    setInterval(function(){ if (inAttesa) { if (!occupato()) location.reload(); } else controlla(); }, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') controlla(); });
 })();
 </script>
 </head>
@@ -912,7 +941,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261023d"></script>
+<script type="module" src="js/main.js?v=20261023e"></script>
 
 </body>
 </html>
