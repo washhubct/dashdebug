@@ -11,7 +11,7 @@ export const DIPENDENTI_PER_SEDE = {
         { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
         { nome: 'XXX', modalita: 'BONIFICO', importoDefault: 50 },
         { nome: 'HAPPY', modalita: 'CONTANTI', importoDefault: 45 },
-        { nome: 'SHENTER', modalita: 'CONTANTI', importoDefault: 45 },
+        // SHENTER: uscito dall'organico il 26/10/2026 (storico e "da pagare" restano visibili come ex)
         { nome: 'MENTA', modalita: 'BONIFICO', importoDefault: 0 }
     ],
     'paesi-etnei': [
