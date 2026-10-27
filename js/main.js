@@ -29,7 +29,6 @@ import { initAvvisoMaltempo } from './moduli/avviso-maltempo.js';
 import { initPriorityConfig } from './moduli/priority-config.js';
 import { avviaChiamate } from './moduli/chiamate.js';
 import { initVouchers, renderVouchers } from './moduli/vouchers.js';
-import { initMessaggi } from './moduli/messaggi.js';
 import { initFidelai } from './moduli/fidelai.js';
 import { initFidelityProgramma } from './moduli/fidelity-programma.js';
 
@@ -55,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initCampagna();
     initAvvisoMaltempo();
     initPriorityConfig();
-    initMessaggi();
     initFidelai();
     initFidelityProgramma();
     initDashDates();

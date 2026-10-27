@@ -75,8 +75,8 @@ function renderPremi() {
     const admin = isAdmin();
     const vis = premi.map((p, i) => ({ p, i })).filter(x => !x.p.delete);
     $('fpPremiTb').innerHTML = vis.length ? vis.map(({ p, i }) => `<tr data-i="${i}">
-        <td><input data-f="name" value="${esc(p.name)}" placeholder="Nome premio" ${admin ? '' : 'disabled'} style="width:100%;padding:6px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font:600 13px var(--f);color:var(--tx)">
-            <input data-f="description" value="${esc(p.description || '')}" placeholder="Descrizione (la vede il cliente)" ${admin ? '' : 'disabled'} style="width:100%;margin-top:4px;padding:5px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font:400 11px var(--f);color:var(--tx2)"></td>
+        <td style="white-space:normal;min-width:260px"><input data-f="name" value="${esc(p.name)}" placeholder="Nome premio" ${admin ? '' : 'disabled'} style="display:block;width:100%;padding:6px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font:600 13px var(--f);color:var(--tx)">
+            <input data-f="description" value="${esc(p.description || '')}" placeholder="Descrizione (la vede il cliente)" ${admin ? '' : 'disabled'} style="display:block;width:100%;margin-top:4px;padding:5px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font:400 11px var(--f);color:var(--tx2)"></td>
         <td><input data-f="pointsCost" type="number" min="1" value="${p.pointsCost}" ${admin ? '' : 'disabled'} style="width:80px;padding:6px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;font:700 13px var(--mono);color:var(--tx)"></td>
         <td style="text-align:center"><input data-f="active" type="checkbox" ${p.active ? 'checked' : ''} ${admin ? '' : 'disabled'}></td>
         <td>${admin ? `<button class="act-btn del fp-del" data-i="${i}" title="Elimina">✕</button>` : ''}</td></tr>`).join('')
