@@ -76,6 +76,6 @@ export const fidelaiLoyalty = onCall(baseOpts, async (req) => {
     return callFidelai('externalSetLoyalty', { merchant: FIDELAI_MERCHANT.value(), pointsPerEuro: d.pointsPerEuro, rewards: d.rewards })
   }
   const r = await callFidelai('externalGetLoyalty', { merchant: FIDELAI_MERCHANT.value() })
-  const inviti = await getFirestore().collection('fidelityInviti').count().get()
+  const inviti = await getFirestore().collection('postPagamentoInviati').count().get()
   return { ...r, invitiInviati: inviti.data().count }
 })

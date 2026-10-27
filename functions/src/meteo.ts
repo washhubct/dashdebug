@@ -1,6 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { defineSecret } from 'firebase-functions/params'
+import { telegram, TELEGRAM_BOT_TOKEN } from './telegram'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 // ═══════════════════════════════════════════════════════════════════
@@ -22,7 +22,6 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 const REGION = 'europe-west1'
 const TZ = 'Europe/Rome'
-const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN')
 
 type Livello = 'VERDE' | 'GIALLO' | 'ARANCIO' | 'ROSSO'
 const EMOJI: Record<Livello, string> = { VERDE: '🟢', GIALLO: '🟡', ARANCIO: '🟠', ROSSO: '🔴' }
@@ -263,19 +262,6 @@ function messaggioUnico(data: string, tipo: 'sera' | 'mattina', cfg: Cfg, blocch
 ${blocchi.join('\n\n')}
 
 <i>Mediana di ${nFonti} modelli. Previsione automatica in taratura, non è una decisione.</i>`
-}
-
-// chatId: uno o più id separati da virgola (chat private di Guido e Skippa, o un gruppo)
-async function telegram(chatId: string, text: string) {
-  const token = TELEGRAM_BOT_TOKEN.value()
-  const ids = String(chatId || '').split(',').map(x => x.trim()).filter(Boolean)
-  if (!token || token.length < 20 || !ids.length) { console.warn('Telegram non configurato: messaggio non inviato'); return false }
-  let ok = false
-  for (const id of ids) {
-    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: id, text, parse_mode: 'HTML', disable_web_page_preview: true }) })
-    if (!r.ok) console.error('Telegram', id, r.status, (await r.text()).slice(0, 200)); else ok = true
-  }
-  return ok
 }
 
 async function previsione(tipo: 'sera' | 'mattina') {

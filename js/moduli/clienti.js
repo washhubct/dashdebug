@@ -1,4 +1,4 @@
-import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsGetDocs, fsGetDoc, fsUpdateDoc, fsDeleteDoc, fsDoc } from '../firebase-config.js';
 import { state } from '../state.js';
 import { pNum, fEur, esc, fmtDI, pDate, normalizeName, nameSimilarity, formatPhoneForWA, pivaValida } from '../utils.js';
 
@@ -17,8 +17,8 @@ const WA_IG_URL = 'https://www.instagram.com/washhubcatania/';
 const WA_GOOGLE_REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
 
 export const WA_TEMPLATES = [
-    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google + card)',
-      text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\n🎁 La tua Fidelity Card Wash Hub:\nhttps://card.washhub.it/?c={telefono}\n\nA presto,\nStaff" },
+    { id: 'grazie', label: '🙏 Ringraziamento post-pagamento (con review Google)',
+      text: "Ciao {nomeShort},\n\ngrazie per essere passato al Wash Hub Lungomare. Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere.\n" + WA_GOOGLE_REVIEW_URL + "\n\nA presto,\nStaff" },
     { id: 'benvenuto-pren', label: '👋 Benvenuto + conferma prenotazione',
       text: "Ciao {nomeShort},\n\ngrazie per aver scelto il Wash Hub Lungomare Catania. È un piacere averti tra i nostri clienti.\n\nTi confermiamo la tua prenotazione:\nData: {dataPren}\nOra: {orario}\n\nIntanto, seguici su Instagram per tutte le nostre novità:\n" + WA_IG_URL + "\n\nA presto,\nStaff" },
     { id: 'benvenuto', label: '👋 Benvenuto nuovo cliente (senza prenotazione)',
@@ -908,8 +908,20 @@ function showWAPromptToast(opts) {
     });
 }
 
-// Wrapper: ringraziamento post-pagamento
-export function showThankYouToast(nomeCliente, importoOptional) {
+// Il messaggio grazie+recensione parte DA SOLO dal server (config/postPagamento.attivo, una volta per
+// numero, ritardo 60 min) → niente toast all'operatore, o il cliente lo riceve due volte. Letto ogni 5 min.
+let ppCache = { t: 0, auto: false };
+async function postPagamentoAutomatico() {
+    if (Date.now() - ppCache.t < 5 * 60e3) return ppCache.auto;
+    try { const c = (await fsGetDoc(fsDoc(db, 'config', 'postPagamento'))).data() || {}; ppCache = { t: Date.now(), auto: c.attivo === true && c.soloTest !== true }; }
+    catch (e) { ppCache = { t: Date.now(), auto: false }; }
+    return ppCache.auto;
+}
+
+// Wrapper: ringraziamento post-pagamento. Per lavaggi/tappezzeria sparisce se l'automatico è acceso;
+// gli abbonamenti (che il server non copre) passano { manuale: true } e lo vedono sempre.
+export async function showThankYouToast(nomeCliente, importoOptional, opts) {
+    if (!opts?.manuale && await postPagamentoAutomatico()) return;
     const subtitle = importoOptional ? `€${Number(importoOptional).toFixed(2).replace('.',',')}` : '';
     showWAPromptToast({
         nomeCliente, templateId: 'grazie',

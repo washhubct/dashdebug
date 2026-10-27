@@ -412,7 +412,7 @@ async function saveAbb() {
     // evita il doppio incasso quando si ri-salva un abbonamento già pagato.
     if(pagamento === 'SI' && !giaRegistratoPagato) {
         // Ringraziamento WhatsApp al salvataggio abbonamento pagato
-        showThankYouToast(nome, importoIncassato);
+        showThankYouToast(nome, importoIncassato, { manuale: true });
         try {
             const dataPN = dataPag ? d2s(dataPag) : new Date().toLocaleDateString('it-IT');
             const dataISO = dataPag || fmtDI(new Date());
@@ -555,7 +555,7 @@ async function renewAbb(id) {
     } catch(e) { console.error("Errore rinnovo Firebase:", e); }
 
     if(scelta.pagare && prezzoFinale > 0) {
-        showThankYouToast(r['NOME E COGNOME'] || '', prezzoFinale);
+        showThankYouToast(r['NOME E COGNOME'] || '', prezzoFinale, { manuale: true });
         try {
             const nome = r['NOME E COGNOME'] || '';
             const targa = r.TARGA || '';
@@ -615,7 +615,7 @@ async function pagaAbb(id) {
         await setDoc(fsDoc(db, "abbonamenti", id), updateData, { merge: true });
     } catch(e) { console.error("Errore pagamento abbonamento:", e); return; }
 
-    showThankYouToast(r['NOME E COGNOME'] || '', pag.prezzoFinale);
+    showThankYouToast(r['NOME E COGNOME'] || '', pag.prezzoFinale, { manuale: true });
     try {
         const nome = r['NOME E COGNOME'] || '';
         const targa = r.TARGA || '';

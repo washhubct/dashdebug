@@ -1,14 +1,16 @@
 // ─── PROGRAMMA FEDELTÀ (07/10/2026) ───
 // Pannello nella pagina FidelAI: punti per €, premi (su FidelAI, via callable fidelaiLoyalty, solo admin)
-// e invito WhatsApp dopo il pagamento (config/fidelity, letto da functions/src/fidelai-bridge.ts).
-// L'invito resta SPENTO finché Guido non lo attiva dopo il test.
+// e messaggio WhatsApp "grazie + recensione Google" dopo il pagamento (config/postPagamento, letto da
+// functions/src/fidelai-bridge.ts, una volta per numero, ritardo configurabile). Dal 27/10/2026 niente
+// link card nel messaggio (altro canale). Resta SPENTO finché Guido non lo attiva dopo il test.
 import { db, fsDoc, fsGetDoc, fsSetDoc, fsCollection, fsAddDoc } from '../firebase-config.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-functions.js';
 import { state } from '../state.js';
 import { esc } from '../utils.js';
 import { isAdmin } from './auth.js';
 
-const TESTO_DEFAULT = 'Ciao {nome} 👋 grazie per essere passato al Wash Hub!\n\nCon la card fedeltà accumuli punti a ogni lavaggio e li trasformi in premi. I punti del lavaggio di oggi te li abbiamo già messi da parte: attiva la card qui e li trovi caricati 👇\n{link}\n\nA presto,\nStaff Wash Hub';
+const REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6';
+const TESTO_DEFAULT = 'Ciao {nome} 👋 grazie per essere passato al Wash Hub Lungomare! Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere 🙏\n{link}\n\nA presto,\nStaff Wash Hub';
 
 let premi = [];        // [{id?, name, description, pointsCost, active, delete?}]
 let caricato = false;
@@ -51,21 +53,22 @@ async function carica() {
         $('fpKpis').innerHTML = `
             <div class="kpi" style="border-color:var(--gold,#C8A84E)"><div class="kpi-label">💎 Card attive</div><div class="kpi-val">${r.carteAttive}</div></div>
             <div class="kpi b"><div class="kpi-label">⏳ Lavaggi in attesa di card</div><div class="kpi-val">${r.lavaggiInSospeso}</div><div class="kpi-sub">punti messi da parte, si caricano all'attivazione</div></div>
-            <div class="kpi g"><div class="kpi-label">📲 Inviti inviati</div><div class="kpi-val">${r.invitiInviati ?? 0}</div></div>`;
+            <div class="kpi g"><div class="kpi-label">📲 Grazie+recensione inviati</div><div class="kpi-val">${r.invitiInviati ?? 0}</div></div>`;
         renderPremi(); esempio();
         caricato = true;
     } catch (e) {
         $('fpKpis').innerHTML = `<div class="empty">Programma fedeltà non raggiungibile: ${esc(e.message || '')}</div>`;
     }
     try {
-        const c = (await fsGetDoc(fsDoc(db, 'config', 'fidelity'))).data() || {};
-        $('fpAttivo').checked = c.invitoAttivo === true;
+        const c = (await fsGetDoc(fsDoc(db, 'config', 'postPagamento'))).data() || {};
+        $('fpAttivo').checked = c.attivo === true;
         $('fpSoloTest').checked = c.soloTest !== false; // default: test
         $('fpNumeriTest').value = (c.numeriTest || []).join(', ');
-        $('fpTesto').value = c.testoInvito || TESTO_DEFAULT;
+        $('fpRitardo').value = Number.isFinite(Number(c.ritardoMin)) ? c.ritardoMin : 60;
+        $('fpTesto').value = c.testo || TESTO_DEFAULT;
         anteprima();
         statoInvito(c);
-    } catch (e) { console.warn('config/fidelity', e.message); }
+    } catch (e) { console.warn('config/postPagamento', e.message); }
 }
 
 function renderPremi() {
@@ -103,26 +106,27 @@ async function salvaProgramma() {
 }
 
 function anteprima() {
-    const t = ($('fpTesto').value || TESTO_DEFAULT).replace(/\{nome\}/g, 'Mario').replace(/\{link\}/g, 'https://card.washhub.it/?c=3331234567');
+    const t = ($('fpTesto').value || TESTO_DEFAULT).replace(/\{nome\}/g, 'Mario').replace(/\{link\}/g, REVIEW_URL);
     $('fpAnteprima').textContent = 'Anteprima:\n\n' + t;
 }
 
 function statoInvito(c) {
     const el = $('fpMsgInvito');
-    if (c.invitoAttivo !== true) { el.style.color = 'var(--tx3)'; el.textContent = '⏸ Spento: nessun messaggio parte dopo i pagamenti.'; }
+    if (c.attivo !== true) { el.style.color = 'var(--tx3)'; el.textContent = '⏸ Spento: nessun messaggio parte dopo i pagamenti (resta il pulsante manuale in cassa).'; }
     else if (c.soloTest) { el.style.color = 'var(--amb)'; el.textContent = `🧪 In prova: parte solo verso ${(c.numeriTest || []).join(', ') || '(nessun numero)'}.`; }
-    else { el.style.color = 'var(--grn)'; el.textContent = '🟢 Attivo per tutti i clienti senza card.'; }
+    else { el.style.color = 'var(--grn)'; el.textContent = `🟢 Attivo: a ogni lavaggio pagato, una volta per numero, ${c.ritardoMin ?? 60} min dopo.`; }
 }
 
 async function salvaInvito() {
     if (!isAdmin()) return;
     const numeri = $('fpNumeriTest').value.split(',').map(s => s.replace(/\D/g, '')).filter(s => s.length >= 9);
     const cfg = {
-        invitoAttivo: $('fpAttivo').checked, soloTest: $('fpSoloTest').checked, numeriTest: numeri,
-        testoInvito: $('fpTesto').value.trim() || TESTO_DEFAULT, aggiornato: Date.now(), aggiornatoDa: state.currentUser?.email || '',
+        attivo: $('fpAttivo').checked, soloTest: $('fpSoloTest').checked, numeriTest: numeri,
+        ritardoMin: Math.max(0, parseInt($('fpRitardo').value, 10) || 0),
+        testo: $('fpTesto').value.trim() || TESTO_DEFAULT, aggiornato: Date.now(), aggiornatoDa: state.currentUser?.email || '',
     };
-    if (cfg.invitoAttivo && !cfg.soloTest && !confirm('Attivare l\'invito per TUTTI i clienti senza card?\nDa ora ogni lavaggio pagato da un cliente senza card fa partire un WhatsApp (una volta per cliente).')) return;
-    try { await fsSetDoc(fsDoc(db, 'config', 'fidelity'), cfg, { merge: true }); statoInvito(cfg); }
+    if (cfg.attivo && !cfg.soloTest && !confirm('Attivare il messaggio per TUTTI i clienti?\nDa ora ogni lavaggio pagato fa partire un WhatsApp grazie + recensione (una volta per numero). Il pulsante manuale in cassa sparisce.')) return;
+    try { await fsSetDoc(fsDoc(db, 'config', 'postPagamento'), cfg, { merge: true }); statoInvito(cfg); }
     catch (e) { $('fpMsgInvito').style.color = 'var(--red)'; $('fpMsgInvito').textContent = '❌ ' + (e.message || 'errore'); }
 }
 
@@ -132,8 +136,8 @@ async function inviaProva() {
     if (!tel) return;
     const d = tel.replace(/\D/g, '').replace(/^39(?=3\d{8,9}$)/, '');
     if (d.length < 9) { alert('Numero non valido'); return; }
-    const testo = ($('fpTesto').value || TESTO_DEFAULT).replace(/\{nome\}/g, 'Guido').replace(/\{link\}/g, `https://card.washhub.it/?c=${d}`);
-    await fsAddDoc(fsCollection(db, 'whatsappCoda'), { telefono: d, clienteId: null, nome: 'PROVA INVITO CARD', testo, stato: 'in_coda', priorita: 10,
-        tipo: 'fidelity', campagnaId: 'fidelity-prova', segmento: 'fidelity', template: 'invito-card', operatore: state.currentUser?.user || 'Staff', creato: Date.now(), sedeId: state.sedeAttiva });
+    const testo = ($('fpTesto').value || TESTO_DEFAULT).replace(/\{nome\}/g, 'Guido').replace(/\{link\}/g, REVIEW_URL);
+    await fsAddDoc(fsCollection(db, 'whatsappCoda'), { telefono: d, clienteId: null, nome: 'PROVA GRAZIE+RECENSIONE', testo, stato: 'in_coda', priorita: 10,
+        tipo: 'postPagamento', campagnaId: 'post-pagamento-prova', segmento: 'recensione', template: 'grazie-recensione', operatore: state.currentUser?.user || 'Staff', creato: Date.now(), sedeId: state.sedeAttiva });
     $('fpMsgInvito').style.color = 'var(--grn)'; $('fpMsgInvito').textContent = `📤 Prova in coda verso ${d}: il Mac Mini la manda entro un minuto (orario 9-20).`;
 }

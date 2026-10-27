@@ -53,31 +53,37 @@ async function callFidelai(path: string, body: Record<string, unknown>): Promise
   return res.json().catch(() => ({}))
 }
 
-// Invito card dopo il pagamento (dal 07/10/2026, spento finché config/fidelity.invitoAttivo != true).
-// Una sola volta per numero (fidelityInviti/{tel}); il messaggio parte dal worker WhatsApp Web del
-// Mac Mini (whatsappCoda, priorità alta). La card la attiva il cliente: qui si manda solo il link,
-// e i punti di questo lavaggio restano in sospeso su FidelAI finché non la attiva.
-const TESTO_INVITO_DEFAULT = 'Ciao {nome} 👋 grazie per essere passato al Wash Hub!\n\nCon la card fedeltà accumuli punti a ogni lavaggio e li trasformi in premi. I punti del lavaggio di oggi te li abbiamo già messi da parte: attiva la card qui e li trovi caricati 👇\n{link}\n\nA presto,\nStaff Wash Hub'
+// Messaggio "grazie + recensione Google" dopo il pagamento (dal 27/10/2026, Guido).
+// Una sola volta per numero (postPagamentoInviati/{tel}); spento finché config/postPagamento.attivo != true.
+// Il messaggio parte dal worker WhatsApp Web del Mac Mini (whatsappCoda, priorità 10) non prima di
+// `ritardoMin` minuti dal pagamento, così arriva quando il cliente ha già visto l'auto. Niente link
+// card: la fidelity ha un altro canale (Guido 27/10/2026). Solo cellulari veri (3xxxxxxxxx): i numeri
+// finti tipo 000000000 vengono saltati, come fa la cassa.
+const REVIEW_URL = 'https://share.google/6JJwY1MiU2QgfyKO6'
+const TESTO_POST_PAGAMENTO_DEFAULT = 'Ciao {nome} 👋 grazie per essere passato al Wash Hub Lungomare! Speriamo sia stato tutto di tuo gradimento.\n\nSe ti va, lasciaci una recensione su Google: per noi vale davvero tantissimo e ci aiuta a crescere 🙏\n{link}\n\nA presto,\nStaff Wash Hub'
 
-async function invitaCard(collection: string, docId: string, data: AnyDoc, phone: string): Promise<void> {
+async function messaggioPostPagamento(collection: string, docId: string, data: AnyDoc): Promise<void> {
+  const phone = normalizePhone(data.telefono)
+  if (!phone || !/^3\d{8,9}$/.test(phone)) return
   const db = getFirestore()
-  const cfg = (await db.doc('config/fidelity').get()).data() || {}
-  if (cfg.invitoAttivo !== true) return
+  const cfg = (await db.doc('config/postPagamento').get()).data() || {}
+  if (cfg.attivo !== true) return
   const test: string[] = Array.isArray(cfg.numeriTest) ? cfg.numeriTest.map((t: string) => String(t).replace(/\D/g, '').slice(-10)) : []
   if (cfg.soloTest === true && !test.includes(phone.slice(-10))) return
-  const invRef = db.doc(`fidelityInviti/${phone}`)
+  const invRef = db.doc(`postPagamentoInviati/${phone}`)
   if ((await invRef.get()).exists && cfg.soloTest !== true) return
   const nomeRaw = String(data.cliente || data['NOME E COGNOME'] || '').trim()
   const primo = nomeRaw.split(/\s+/)[0] || ''
   const nome = primo ? primo[0].toUpperCase() + primo.slice(1).toLowerCase() : ''
-  const link = `https://card.washhub.it/?c=${phone}`
-  const testo = String(cfg.testoInvito || TESTO_INVITO_DEFAULT).replace(/\{nome\}/g, nome).replace(/\{link\}/g, link).replace(/Ciao\s+👋/, 'Ciao 👋')
+  const testo = String(cfg.testo || TESTO_POST_PAGAMENTO_DEFAULT).replace(/\{nome\}/g, nome).replace(/\{link\}/g, REVIEW_URL).replace(/Ciao\s+👋/, 'Ciao 👋')
+  const ritardoMin = Number.isFinite(Number(cfg.ritardoMin)) ? Math.max(0, Number(cfg.ritardoMin)) : 60
   await db.collection('whatsappCoda').add({
     telefono: phone, clienteId: null, nome: nomeRaw, testo, stato: 'in_coda', priorita: 10,
-    tipo: 'fidelity', campagnaId: 'fidelity-invito', segmento: 'fidelity', template: 'invito-card',
-    operatore: 'sistema', refId: `${collection}:${docId}`, creato: Date.now(), sedeId: data.sedeId || 'lungomare',
+    tipo: 'postPagamento', campagnaId: 'post-pagamento', segmento: 'recensione', template: 'grazie-recensione',
+    operatore: 'sistema', refId: `${collection}:${docId}`, creato: Date.now(), nonPrima: Date.now() + ritardoMin * 60_000,
+    sedeId: data.sedeId || 'lungomare',
   })
-  await invRef.set({ telefono: phone, nome: nomeRaw, refId: `${collection}:${docId}`, invitatoAt: FieldValue.serverTimestamp(), test: cfg.soloTest === true })
+  await invRef.set({ telefono: phone, nome: nomeRaw, refId: `${collection}:${docId}`, inviatoAt: FieldValue.serverTimestamp(), test: cfg.soloTest === true })
 }
 
 function getAmount(data: AnyDoc): number {
@@ -117,10 +123,7 @@ async function recordEarn(collection: string, docId: string, data: AnyDoc): Prom
     refId: `${collection}:${docId}`,
     notes: collection,
   })
-  // Senza card attiva: punti messi da parte su FidelAI → invito a attivarla (se acceso)
-  if (r?.skipped && collection !== 'abbonamenti') {
-    try { await invitaCard(collection, docId, data, phone) } catch (e) { console.error('[fidelai] invito card', docId, e) }
-  }
+  if (r?.skipped) console.log(`[fidelai] ${collection}/${docId}: nessuna card attiva, punti in sospeso`)
 }
 
 function paymentUpdatedTrigger(collection: string) {
@@ -137,6 +140,7 @@ function paymentUpdatedTrigger(collection: string) {
       } catch (err) {
         console.error(`[fidelai] ${collection} payment trigger failed`, event.params.id, err)
       }
+      try { await messaggioPostPagamento(collection, event.params.id, after) } catch (err) { console.error('[postPagamento]', collection, event.params.id, err) }
     }
   )
 }
@@ -153,6 +157,7 @@ function paymentCreatedTrigger(collection: string) {
       } catch (err) {
         console.error(`[fidelai] ${collection} create trigger failed`, event.params.id, err)
       }
+      try { await messaggioPostPagamento(collection, event.params.id, after) } catch (err) { console.error('[postPagamento]', collection, event.params.id, err) }
     }
   )
 }

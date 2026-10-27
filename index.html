@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261026b';
+    var APP_VERSION = '20261027a';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -899,7 +899,7 @@
 
 </div>
 
-<!-- Programma fedeltà: punti, premi, invito WhatsApp dopo il pagamento (js/moduli/fidelity-programma.js) -->
+<!-- Programma fedeltà: punti, premi, WhatsApp grazie+recensione dopo il pagamento (js/moduli/fidelity-programma.js) -->
 <div id="fpBox" style="margin-top:22px">
   <div class="kpis" id="fpKpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:16px"></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px">
@@ -918,9 +918,10 @@
       <div id="fpMsgProgramma" style="font:500 12px var(--f);margin-top:8px"></div>
     </div>
     <div style="background:var(--bg3);border-radius:var(--r);padding:22px">
-      <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📲 Invito card dopo il pagamento</div>
-      <p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:12px">Quando un lavaggio viene pagato e il cliente non ha ancora la card, gli arriva <b>un solo</b> WhatsApp con il link. I punti di quel lavaggio restano da parte e si caricano appena attiva la card (entro <span id="fpPendDays">30</span> giorni).</p>
-      <label style="display:flex;align-items:center;gap:8px;font:600 13px var(--f);margin-bottom:8px;cursor:pointer"><input type="checkbox" id="fpAttivo"> Invito attivo</label>
+      <div style="font:600 12px var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">📲 Grazie + recensione Google dopo il pagamento</div>
+      <p style="font:400 12px var(--f);color:var(--tx2);margin-bottom:12px">Quando un lavaggio o una tappezzeria viene pagato, al cliente arriva <b>un solo</b> WhatsApp (mai due volte allo stesso numero) con il grazie e il link per recensirci su Google. Parte dal Mac Mini, in orario 9-20, dopo il ritardo impostato. I punti fedeltà restano da parte <span id="fpPendDays">30</span> giorni.</p>
+      <label style="display:flex;align-items:center;gap:8px;font:600 13px var(--f);margin-bottom:8px;cursor:pointer"><input type="checkbox" id="fpAttivo"> Messaggio attivo</label>
+      <div style="display:flex;align-items:center;gap:8px;font:500 12px var(--f);margin-bottom:8px"><label for="fpRitardo">Manda dopo</label><input id="fpRitardo" type="number" min="0" step="5" style="width:70px;padding:6px 8px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:700 13px var(--mono);color:var(--tx)"> minuti dal pagamento</div>
       <label style="display:flex;align-items:center;gap:8px;font:500 12px var(--f);margin-bottom:6px;cursor:pointer"><input type="checkbox" id="fpSoloTest"> Solo numeri di test (per provare)</label>
       <input id="fpNumeriTest" placeholder="Numeri di test, separati da virgola" style="width:100%;padding:8px 10px;background:var(--bg2);border:1px solid var(--brd);border-radius:var(--r2);font:500 12px var(--mono);color:var(--tx);margin-bottom:10px">
       <label style="font:600 12px var(--f);display:block;margin-bottom:4px">Testo del messaggio <span style="color:var(--tx3);font-weight:400">({nome} e {link} si compilano da soli)</span></label>
@@ -928,7 +929,7 @@
       <pre id="fpAnteprima" style="white-space:pre-wrap;font:400 12px var(--f);background:var(--bg2);padding:10px;border-radius:var(--r2);margin-top:8px;color:var(--tx2)"></pre>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn" id="fpProva">📱 Invia una prova…</button>
-        <button class="btn btn-primary" id="fpSalvaInvito" style="margin-left:auto">Salva invito</button>
+        <button class="btn btn-primary" id="fpSalvaInvito" style="margin-left:auto">Salva messaggio</button>
       </div>
       <div id="fpMsgInvito" style="font:500 12px var(--f);margin-top:8px"></div>
     </div>
@@ -941,7 +942,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261026b"></script>
+<script type="module" src="js/main.js?v=20261027a"></script>
 
 </body>
 </html>

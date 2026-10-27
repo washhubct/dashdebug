@@ -1,4 +1,8 @@
-// ─── WhatsApp Web worker (Mac Mini) — campagne richiamo CRM (01/10/2026) ───
+// ─── WhatsApp Web worker (Mac Mini) — messaggi transazionali (dal 27/10/2026) ───
+// Dopo il ban del 02/10 (campagna richiamo, ~90 messaggi in 2 giorni) il worker manda SOLO
+// messaggi a priorità 10 (grazie+recensione dopo il pagamento, prove dal pannello) finché
+// config/whatsapp.soloTransazionali non è messo a false. I messaggi con `nonPrima` (ms) aspettano.
+// Se il worker tace o si scollega, la function whatsappWatchdog avvisa su Telegram (gruppo Meteo).
 // Il numero aziendale di Wash Hub è collegato come "dispositivo" (QR una volta,
 // sessione in .wwebjs_auth/). La dashboard NON invia: mette i messaggi in
 // `whatsappCoda` (js/moduli/campagna.js); questo processo li manda uno alla volta
@@ -116,10 +120,12 @@ async function loop() {
       const h = now.getHours();
       const puoInviare = pronto && cfg.enabled !== false && Date.now() > pausaFinoA && h >= lim.oraInizio && h < lim.oraFine && inviatiOggi < lim.maxGiorno;
       if (puoInviare) {
-        let snap = await db.collection('whatsappCoda').where('stato', '==', 'in_coda').where('priorita', '==', 10).limit(5).get();
-        if (snap.empty) snap = await db.collection('whatsappCoda').where('stato', '==', 'in_coda').limit(30).get();
-        // Priorità prima (inviti card dopo il pagamento = 10), poi in ordine di arrivo
-        const prossimo = snap.docs.sort((a, b) => (b.data().priorita || 0) - (a.data().priorita || 0) || (a.data().creato || 0) - (b.data().creato || 0))[0];
+        const pronti = snap => snap.docs.filter(d => !(Number(d.data().nonPrima) > Date.now()));
+        let docs = pronti(await db.collection('whatsappCoda').where('stato', '==', 'in_coda').where('priorita', '==', 10).limit(20).get());
+        // Campagne (priorità bassa) solo se esplicitamente riabilitate: config/whatsapp.soloTransazionali=false
+        if (!docs.length && cfg.soloTransazionali === false) docs = pronti(await db.collection('whatsappCoda').where('stato', '==', 'in_coda').limit(30).get());
+        // Priorità prima (post-pagamento = 10), poi in ordine di arrivo
+        const prossimo = docs.sort((a, b) => (b.data().priorita || 0) - (a.data().priorita || 0) || (a.data().creato || 0) - (b.data().creato || 0))[0];
         if (prossimo) {
           await inviaUno(prossimo);
           if (erroriConsecutivi >= 3) { pausaFinoA = Date.now() + 30 * 60e3; erroriConsecutivi = 0; log('3 errori di fila: pausa 30 min'); await statoWorker({ errore: 'pausa 30 min dopo 3 errori' }); }
