@@ -15,6 +15,7 @@ import { initAbbonamenti, renderAbb } from './moduli/abbonamenti.js';
 import { initSospesi, renderSospPage, buildSospesiArray, loadSospesiPagati } from './moduli/sospesi.js';
 import { initReport, renderReport, renderDash } from './moduli/report.js';
 import { initPresenze, renderPresenze } from './moduli/presenze.js';
+import * as presenzeMod from './moduli/presenze.js';
 import { initClienti, caricaClienti, renderClienti } from './moduli/clienti.js';
 import { initCassaAutomatica } from './moduli/cassa-automatica.js';
 import { initCassaStato } from './moduli/cassa-stato.js';
@@ -386,6 +387,9 @@ async function initFirebaseData() {
                 console.warn("Prima Nota Firebase non disponibile:", pnErr.message);
                 if (!state.rawData) state.rawData = { primaNota: { rows: [] } };
             }),
+
+            // Import namespace: con un presenze.js vecchio in cache non rompe il bootstrap
+            Promise.resolve(presenzeMod.caricaOrganico?.()).catch(e => console.warn("Organico (config/organico) non disponibile:", e.message)),
 
             (async () => {
                 try {

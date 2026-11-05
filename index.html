@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261027b';
+    var APP_VERSION = '20261105a';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -655,7 +655,7 @@
 <div id="datiFiscaliSection" style="display:none;margin-top:12px;padding:14px;background:var(--bg3);border-radius:var(--r2);border:1px dashed var(--amb)">
 <div style="margin-bottom:8px;font:600 11px var(--mono);color:var(--amb);text-transform:uppercase;letter-spacing:0.5px">📄 Dati Fiscali per Fatturazione</div>
 <div class="form-grid">
-<div class="ff"><label>Denominazione Sociale *</label><input id="cDenominazione" style="text-transform:uppercase" placeholder="Es: CENTRO PORSCHE CATANIA SRL"></div>
+<div class="ff"><label>Denominazione Sociale *</label><input id="cDenominazione" style="text-transform:uppercase" placeholder="Es: AUTOFFICINA ROSSI SRL"></div>
 <div class="ff"><label>Partita IVA *</label><input id="cPiva" placeholder="Es: 12345678901" maxlength="11"></div>
 <div class="ff"><label>Codice Destinatario (SDI)</label><input id="cCodDest" placeholder="Es: A1B2C3D" maxlength="7" style="text-transform:uppercase"></div>
 <div class="ff"><label>PEC (alternativa a SDI)</label><input id="cPec" type="email" placeholder="Es: fatture@pec.azienda.it"></div>
@@ -894,7 +894,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261027b"></script>
+<script type="module" src="js/main.js?v=20261105a"></script>
 
 </body>
 </html>

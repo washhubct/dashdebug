@@ -1,6 +1,6 @@
 // ─── CONTI CLIENTI — partitario (01/10/2026) ───
-// Clienti che pagano a rate un canone ricorrente (es. SALVO BOMBOLE: affitto
-// spazio €200/mese + luce a consumo). Prima gli acconti erano prenotazioni
+// Clienti che pagano a rate un canone ricorrente (es. affitto spazio mensile
+// + luce a consumo). Prima gli acconti erano prenotazioni
 // finte e il dovuto viveva su un foglio Drive: qui addebiti e acconti stanno
 // in contiClienti/{id}/movimenti e il saldo è sempre la loro differenza.
 //   ADDEBITO_AFFITTO  canone del mese (lo crea la function il giorno 1)

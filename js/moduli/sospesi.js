@@ -203,7 +203,7 @@ export function buildSospesiArray() {
             if (e.saldo === 'FATTURATO') { obj._fatturato = true; obj._dataFatt = e.dataFattura || ''; }
             // Prenotazione già fatturata su FIC (es. fattura immediata) ma rimasta a SOSPESO: è un
             // fatturato in attesa di incasso. Prima restava tra gli "aperti" senza numero e veniva
-            // rifatturata (caso Buccheri: 27/08 in n.30 e di nuovo in n.142, 03/10/2026).
+            // rifatturata (caso reale: stessa prenotazione in due fatture, 03/10/2026).
             if (e.ficDocId || e.ficNumero) { obj._ficDocId = e.ficDocId || null; obj._ficNumero = e.ficNumero ?? null; obj._fatturato = true; obj._dataFatt = obj._dataFatt || e.dataFattura || ''; }
             state.localSosp.push(obj);
         });

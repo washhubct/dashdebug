@@ -1,39 +1,38 @@
-import { db, fsCollection, fsAddDoc, fsGetDocs, fsUpdateDoc, fsDeleteDoc, fsDoc, fsSetDoc } from '../firebase-config.js';
+import { db, fsCollection, fsAddDoc, fsGetDocs, fsGetDoc, fsUpdateDoc, fsDeleteDoc, fsDoc, fsSetDoc } from '../firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 
 // ─── CONFIGURAZIONE DIPENDENTI PER SEDE ───
-export const DIPENDENTI_PER_SEDE = {
-    'lungomare': [
-        // SONY: dal 01/09/2026 a stipendio fisso (vedi DIPENDENTI_FISSI), non più a giornata
-        // PARAM: uscito dall'organico il 14/09/2026 (storico e "da pagare" restano visibili come ex)
-        { nome: 'CUMAR', modalita: 'BONIFICO', importoDefault: 55 },
-        { nome: 'XXX', modalita: 'BONIFICO', importoDefault: 50 },
-        { nome: 'HAPPY', modalita: 'CONTANTI', importoDefault: 45 },
-        // SHENTER: uscito dall'organico il 26/10/2026 (storico e "da pagare" restano visibili come ex)
-        { nome: 'MENTA', modalita: 'BONIFICO', importoDefault: 0 }
-    ],
-    'paesi-etnei': [
-        { nome: 'ROCKY', modalita: 'BONIFICO', importoDefault: 0 },
-        { nome: 'MINTA', modalita: 'CONTANTI', importoDefault: 0 }
-    ]
-};
+// Organico, paghe e stipendi fissi stanno in Firestore config/organico (non nel
+// codice: il repo è pubblico). caricaOrganico() li riempie all'avvio, in place,
+// così chi importa questi oggetti vede sempre i dati aggiornati.
+//   dipendenti: { sedeId: [{ nome, modalita: 'BONIFICO'|'CONTANTI', importoDefault }] }
+//   fissi:      { sedeId: [{ nome, modalita, mensile, dal: 'YYYY-MM-DD' }] }
+export const DIPENDENTI_PER_SEDE = {};
 
 // Dipendenti a stipendio fisso mensile: niente presenze giornaliere, il costo
 // entra nel report pro-rata dal giorno `dal` (report.js costiFissi).
-export const DIPENDENTI_FISSI = {
-    'lungomare': [
-        { nome: 'SONY', modalita: 'BONIFICO', mensile: 1700, dal: '2026-09-01' },
-    ],
-    'paesi-etnei': [],
-};
+export const DIPENDENTI_FISSI = {};
+
+// Costi fissi mensili del report (affitto, operatoreNetto, luce, acqua, assicurazione).
+export const COSTI_FISSI = {};
+
+export async function caricaOrganico() {
+    const snap = await fsGetDoc(fsDoc(db, 'config', 'organico'));
+    const d = snap.exists() ? snap.data() : {};
+    for (const [obj, src] of [[DIPENDENTI_PER_SEDE, d.dipendenti], [DIPENDENTI_FISSI, d.fissi], [COSTI_FISSI, d.costiFissi]]) {
+        Object.keys(obj).forEach(k => delete obj[k]);
+        Object.assign(obj, src || {});
+    }
+    if (!snap.exists()) console.warn('config/organico mancante: nessun dipendente configurato');
+}
 export function isDipendenteFisso(nome, sedeId) {
     return (DIPENDENTI_FISSI[sedeId] || []).some(d => d.nome === nome);
 }
 
 function getDipendenti() {
-    return DIPENDENTI_PER_SEDE[state.sedeAttiva] || DIPENDENTI_PER_SEDE['lungomare'];
+    return DIPENDENTI_PER_SEDE[state.sedeAttiva] || DIPENDENTI_PER_SEDE['lungomare'] || [];
 }
 
 // true se il dipendente è pagato con bonifico (assunto → costo azienda nel report)
@@ -381,7 +380,7 @@ function renderRiepilogoMensile(mese, anno) {
         </tr>`;
     }).join('');
 
-    // Dipendenti a stipendio fisso (es. SONY dal 01/09/2026): una riga per mese con lo
+    // Dipendenti a stipendio fisso (config/organico.fissi): una riga per mese con lo
     // stipendio del mese (pro-rata nel mese di ingresso), pagato sì/no e gli stipendi
     // arretrati dei mesi precedenti. Stato in acconti/{sede}_{nome}.stipendiPagati['YYYY-MM'].
     const meseKey = `${anno}-${String(mese + 1).padStart(2, '0')}`;

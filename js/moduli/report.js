@@ -1,12 +1,13 @@
 import { state, CONFIG } from '../state.js';
 import { pNum, pDate, fEur, esc, gMK, fmtDI } from '../utils.js';
 import { isDipendenteBonifico, DIPENDENTI_FISSI } from './presenze.js';
+import * as presenzeMod from './presenze.js';   // namespace: tollera un presenze.js vecchio in cache
+const costiFissiCfg = () => presenzeMod.COSTI_FISSI || {};
 
 // ─── PERSONALE ───
 // Il personale entra nel margine al NETTO versato (contanti e bonifici).
 // Il costo azienda degli assunti (contributi, ratei, TFR) verrà definito con
 // Michela sui cedolini reali (14/09/2026): per ora nessun coefficiente.
-export const OPERATORE_NETTO_MESE = 1500;   // operatore lavaggio fisso Lungomare (netto)
 
 let ch1 = null;
 let ch2 = null;
@@ -245,15 +246,15 @@ function calcolaDatiOperativi(fromStr, toStr) {
     // --- COSTI FISSI (pro-rata giornaliero) ---
     const giorniPeriodo = Math.max(1, Math.round((to - from) / 864e5));
     const costiFissi = {
-        affitto: Math.round((1560 / 30) * giorniPeriodo * 100) / 100,
-        operatore: Math.round((OPERATORE_NETTO_MESE / 30) * giorniPeriodo * 100) / 100, // netto 1.500/mese
-        luce: Math.round((1000 / 30) * giorniPeriodo * 100) / 100,
-        acqua: Math.round((390 / 30) * giorniPeriodo * 100) / 100,
-        assicurazione: Math.round((82.33 / 30) * giorniPeriodo * 100) / 100,
+        affitto: Math.round(((costiFissiCfg().affitto || 0) / 30) * giorniPeriodo * 100) / 100,
+        operatore: Math.round(((costiFissiCfg().operatoreNetto || 0) / 30) * giorniPeriodo * 100) / 100, // netto mensile
+        luce: Math.round(((costiFissiCfg().luce || 0) / 30) * giorniPeriodo * 100) / 100,
+        acqua: Math.round(((costiFissiCfg().acqua || 0) / 30) * giorniPeriodo * 100) / 100,
+        assicurazione: Math.round(((costiFissiCfg().assicurazione || 0) / 30) * giorniPeriodo * 100) / 100,
         giorni: giorniPeriodo,
         totale: 0
     };
-    // Dipendenti a stipendio fisso (es. SONY 1.700/mese dal 01/09/2026): pro-rata
+    // Dipendenti a stipendio fisso (config/organico.fissi): pro-rata
     // sui soli giorni del periodo a partire da `dal`, così un periodo a cavallo
     // non li conta due volte (prima a giornata, poi a fisso).
     costiFissi.dipendentiFissi = 0;
@@ -757,7 +758,7 @@ export function renderReport() {
     if (d.personaleContanti > 0) uscByCat['👷 Personale a giornata (contanti, netto)'] = d.personaleContanti;
     if (d.personaleBonificoNetto > 0) uscByCat['👷 Personale assunto (bonifico, netto)'] = d.personaleBonificoNetto;
     uscByCat['🏠 Affitto (35% Lav. / 20% Uff. / 45% Parch.)'] = d.costiFissi.affitto;
-    uscByCat[`👤 Operatore Lavaggio fisso (netto ${OPERATORE_NETTO_MESE}/mese)`] = d.costiFissi.operatore;
+    uscByCat[`👤 Operatore Lavaggio fisso (netto ${costiFissiCfg().operatoreNetto || 0}/mese)`] = d.costiFissi.operatore;
     for (const [nome, v] of Object.entries(d.costiFissi.dettaglioFissi || {})) uscByCat[`👷 ${nome} (stipendio fisso, netto)`] = v;
     uscByCat['💡 Luce (media)'] = d.costiFissi.luce;
     uscByCat['💧 Acqua (media)'] = d.costiFissi.acqua;

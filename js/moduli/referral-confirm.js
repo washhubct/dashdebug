@@ -38,7 +38,7 @@ export async function amicoGiaCliente(entry) {
             fsGetDocs(query(fsCollection(db, 'tappezzeria'), where('telefono', 'in', varianti))),
         ]);
         // Vale solo la PRIMA prenotazione del numero: conta ogni altra prenotazione non
-        // disdetta precedente (data + ora), anche dello stesso giorno (caso Nicotra 23/10).
+        // disdetta precedente (data + ora), anche dello stesso giorno (caso reale 23/10).
         const rif = `${entry.dataPren || ''} ${entry.orario || ''}`;
         let prima = false;
         pr.forEach(d => {

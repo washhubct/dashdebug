@@ -64,7 +64,7 @@ export async function amicoGiaCliente(telefono: string, nome = '', email = ''): 
   if (t.length < 9) return false
   // Qualsiasi prenotazione col numero, passata, di oggi o futura (escluse le disdette):
   // il codice amico vale solo sulla PRIMA prenotazione. Prima contavano solo i giorni
-  // passati e Francesco Nicotra ha usato WH7LED 3 volte, 2 nello stesso giorno (23/10).
+  // passati e un cliente ha usato lo stesso codice 3 volte, 2 nello stesso giorno (23/10).
   const v = varianti(t)
   const [pr, tp] = await Promise.all([
     db.collection('prenotazioni').where('telefono', 'in', v.slice(0, 10)).select('stato').get(),

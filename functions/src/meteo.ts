@@ -47,8 +47,8 @@ const CFG_DEFAULT: Cfg = {
   // Tappezzeria: ogni lavoro in lavorazione occupa una persona ~2.5 h/giorno (stima da tarare: nei dati i giorni con
   // tappezzerie hanno 1 persona in più; ogni lavoro dura 3 giorni mediani)
   // Fissi: dipendenti a stipendio mensile, sempre presenti anche se non registrati nelle presenze giornaliere
-  // (Sony, subordinato, €1.700/mese, da settembre 2026 non più nelle presenze). Turno unico: tutti iniziano insieme.
-  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8, giorniLavorativiMese: 26, fissi: [{ nome: 'SONY', sedeId: 'lungomare', costoMese: 1700, dal: '2026-09-01' }] },
+  // (configurati in config/meteo.personale.fissi, non qui). Turno unico: tutti iniziano insieme.
+  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8, giorniLavorativiMese: 26, fissi: [] },
 }
 
 async function getCfg(): Promise<Cfg> {
