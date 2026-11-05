@@ -4,11 +4,11 @@ import { state } from '../state.js';
 import { pNum, fEur, fmtDI, pDate } from '../utils.js';
 
 // ─── CONFIGURAZIONE DIPENDENTI PER SEDE ───
-// Organico, paghe e stipendi fissi stanno in Firestore config/organico (non nel
-// codice: il repo è pubblico). caricaOrganico() li riempie all'avvio, in place,
-// così chi importa questi oggetti vede sempre i dati aggiornati.
-//   dipendenti: { sedeId: [{ nome, modalita: 'BONIFICO'|'CONTANTI', importoDefault }] }
-//   fissi:      { sedeId: [{ nome, modalita, mensile, dal: 'YYYY-MM-DD' }] }
+// Organico, paghe e stipendi fissi stanno su Firestore, non nel codice (il repo è
+// pubblico). caricaOrganico() li riempie all'avvio, in place, così chi importa
+// questi oggetti vede sempre i dati aggiornati.
+//   config/dipendenti (tutti i loggati) perSede: { sedeId: [{ nome, modalita: 'BONIFICO'|'CONTANTI', importoDefault }] }
+//   config/organico   (solo admin)      fissi: { sedeId: [{ nome, modalita, mensile, dal: 'YYYY-MM-DD' }] }, costiFissi
 export const DIPENDENTI_PER_SEDE = {};
 
 // Dipendenti a stipendio fisso mensile: niente presenze giornaliere, il costo
@@ -19,13 +19,14 @@ export const DIPENDENTI_FISSI = {};
 export const COSTI_FISSI = {};
 
 export async function caricaOrganico() {
-    const snap = await fsGetDoc(fsDoc(db, 'config', 'organico'));
-    const d = snap.exists() ? snap.data() : {};
-    for (const [obj, src] of [[DIPENDENTI_PER_SEDE, d.dipendenti], [DIPENDENTI_FISSI, d.fissi], [COSTI_FISSI, d.costiFissi]]) {
+    const leggi = id => fsGetDoc(fsDoc(db, 'config', id)).then(s => s.exists() ? s.data() : {});
+    // config/organico è solo admin: per l'operatore fallisce e stipendi fissi/costi restano vuoti
+    const [dip, org] = await Promise.all([leggi('dipendenti'), leggi('organico').catch(() => ({}))]);
+    for (const [obj, src] of [[DIPENDENTI_PER_SEDE, dip.perSede || org.dipendenti], [DIPENDENTI_FISSI, org.fissi], [COSTI_FISSI, org.costiFissi]]) {
         Object.keys(obj).forEach(k => delete obj[k]);
         Object.assign(obj, src || {});
     }
-    if (!snap.exists()) console.warn('config/organico mancante: nessun dipendente configurato');
+    if (!Object.keys(DIPENDENTI_PER_SEDE).length) console.warn('config/dipendenti mancante: nessun dipendente configurato');
 }
 export function isDipendenteFisso(nome, sedeId) {
     return (DIPENDENTI_FISSI[sedeId] || []).some(d => d.nome === nome);
