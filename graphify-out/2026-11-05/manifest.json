@@ -1,0 +1,620 @@
+{
+  "bridge-cassa/app.py": {
+    "mtime": 1792750556.5894306,
+    "seen": 1793727026.8906822,
+    "ast_hash": "66ed6ecec7eb2165e2c846cb37b925aa",
+    "semantic_hash": "66ed6ecec7eb2165e2c846cb37b925aa"
+  },
+  "bridge-cassa/cancello/cancello_sync.py": {
+    "mtime": 1790370949.0243254,
+    "seen": 1793727026.890684,
+    "ast_hash": "246d8f6ae35902d7416dff0681698d26",
+    "semantic_hash": "246d8f6ae35902d7416dff0681698d26"
+  },
+  "bridge-cassa/chiamate/chiamate_monitor.py": {
+    "mtime": 1792406833.6861289,
+    "seen": 1793727026.890686,
+    "ast_hash": "297ab83e53ff57fe751a9b78471b4d3f",
+    "semantic_hash": "297ab83e53ff57fe751a9b78471b4d3f"
+  },
+  "bridge-cassa/init-tls.sh": {
+    "mtime": 1777315225.0,
+    "seen": 1793727026.890686,
+    "ast_hash": "40ae1b69881645b0d3b660b31c28c7e7",
+    "semantic_hash": "40ae1b69881645b0d3b660b31c28c7e7"
+  },
+  "bridge-cassa/run.py": {
+    "mtime": 1777315203.0,
+    "seen": 1793727026.890687,
+    "ast_hash": "116cf4003d753712f7de660821231c64",
+    "semantic_hash": "116cf4003d753712f7de660821231c64"
+  },
+  "bridge-cassa/smoke-test.sh": {
+    "mtime": 1777071322.0,
+    "seen": 1793727026.890687,
+    "ast_hash": "75198958b55d0eccea3eebd58349a52c",
+    "semantic_hash": "75198958b55d0eccea3eebd58349a52c"
+  },
+  "bridge-cassa/test_mock.py": {
+    "mtime": 1777070752.0,
+    "seen": 1793727026.890688,
+    "ast_hash": "8023b9d1c8260ca8c1ea57827d4a85c0",
+    "semantic_hash": "8023b9d1c8260ca8c1ea57827d4a85c0"
+  },
+  "firebase.json": {
+    "mtime": 1788025963.0,
+    "seen": 1793727026.890688,
+    "ast_hash": "6bfbf21e957aa6c75f82767d9e2e59ae",
+    "semantic_hash": "6bfbf21e957aa6c75f82767d9e2e59ae"
+  },
+  "firestore.indexes.json": {
+    "mtime": 1782241822.0,
+    "seen": 1793727026.8906891,
+    "ast_hash": "2ce4bf49420d1d033694259e3277fd48",
+    "semantic_hash": "2ce4bf49420d1d033694259e3277fd48"
+  },
+  "functions/package.json": {
+    "mtime": 1790193358.0,
+    "seen": 1793727026.8906891,
+    "ast_hash": "33f465d9dabb2f71c6824a143033487c",
+    "semantic_hash": "33f465d9dabb2f71c6824a143033487c"
+  },
+  "functions/src/chiusura.ts": {
+    "mtime": 1791904483.9488473,
+    "seen": 1793727026.8906891,
+    "ast_hash": "123f32a007e9ae9ff86892e39d0101e9",
+    "semantic_hash": "123f32a007e9ae9ff86892e39d0101e9"
+  },
+  "functions/src/conti.ts": {
+    "mtime": 1791380777.83808,
+    "seen": 1793727026.89069,
+    "ast_hash": "a61ea17c8483f64e8b80c6a11894ecf0",
+    "semantic_hash": "a61ea17c8483f64e8b80c6a11894ecf0"
+  },
+  "functions/src/fic.ts": {
+    "mtime": 1790429387.1224658,
+    "seen": 1793727026.890691,
+    "ast_hash": "d89c2f0d5269d181cd5c14caf5e01ccd",
+    "semantic_hash": "d89c2f0d5269d181cd5c14caf5e01ccd"
+  },
+  "functions/src/fidelai-admin.ts": {
+    "mtime": 1793091416.159773,
+    "seen": 1793727026.890691,
+    "ast_hash": "9776d3e44aa496100ce97f20b307e9ca",
+    "semantic_hash": "9776d3e44aa496100ce97f20b307e9ca"
+  },
+  "functions/src/fidelai-bridge.ts": {
+    "mtime": 1793091416.1594727,
+    "seen": 1793727026.890691,
+    "ast_hash": "07a8beffd4f472b561e1cbcbe2b2aa9a",
+    "semantic_hash": "07a8beffd4f472b561e1cbcbe2b2aa9a"
+  },
+  "functions/src/garanzia-stripe.ts": {
+    "mtime": 1792751160.64181,
+    "seen": 1793727026.890692,
+    "ast_hash": "582925f50e35ba0b5239a200bb5d455f",
+    "semantic_hash": "582925f50e35ba0b5239a200bb5d455f"
+  },
+  "functions/src/index.ts": {
+    "mtime": 1793091416.1603673,
+    "seen": 1793727026.890692,
+    "ast_hash": "636e9d16ec9cc3178fb436a360d42105",
+    "semantic_hash": "636e9d16ec9cc3178fb436a360d42105"
+  },
+  "functions/src/meteo.ts": {
+    "mtime": 1793091416.1601195,
+    "seen": 1793727026.8906932,
+    "ast_hash": "8903a7450e39fc6352a9bfdbf058b6ec",
+    "semantic_hash": "8903a7450e39fc6352a9bfdbf058b6ec"
+  },
+  "functions/src/parcheggio-smart.ts": {
+    "mtime": 1790429387.1003156,
+    "seen": 1793727026.8906932,
+    "ast_hash": "e4b3a5e5b3b9399ff08e3dff9b391cc4",
+    "semantic_hash": "e4b3a5e5b3b9399ff08e3dff9b391cc4"
+  },
+  "functions/src/prenota-online.ts": {
+    "mtime": 1792751160.6421046,
+    "seen": 1793727026.890694,
+    "ast_hash": "bf47f866a69e6aa56dede9b96471e017",
+    "semantic_hash": "bf47f866a69e6aa56dede9b96471e017"
+  },
+  "functions/src/priority.ts": {
+    "mtime": 1792751160.6419742,
+    "seen": 1793727026.890694,
+    "ast_hash": "c80e8de520490d5e13d4272b3d1f80b4",
+    "semantic_hash": "c80e8de520490d5e13d4272b3d1f80b4"
+  },
+  "functions/src/referral-check.ts": {
+    "mtime": 1792751160.6413603,
+    "seen": 1793727026.890694,
+    "ast_hash": "b7e40ac4c3f023315094a9cfa74e7c96",
+    "semantic_hash": "b7e40ac4c3f023315094a9cfa74e7c96"
+  },
+  "functions/src/referral-voucher.ts": {
+    "mtime": 1792751127.551895,
+    "seen": 1793727026.8906949,
+    "ast_hash": "1eba1fa3fa20b8a295c8c7fbb63f0dc4",
+    "semantic_hash": "1eba1fa3fa20b8a295c8c7fbb63f0dc4"
+  },
+  "functions/src/telegram.ts": {
+    "mtime": 1793091416.159849,
+    "seen": 1793727026.8906949,
+    "ast_hash": "ddce8736d64f70a27a19b8f69974771c",
+    "semantic_hash": "ddce8736d64f70a27a19b8f69974771c"
+  },
+  "functions/src/uscite.ts": {
+    "mtime": 1788791177.0,
+    "seen": 1793727026.890696,
+    "ast_hash": "c070d6a4e7f2c92bd970b75eef304748",
+    "semantic_hash": "c070d6a4e7f2c92bd970b75eef304748"
+  },
+  "functions/src/whatsapp-watchdog.ts": {
+    "mtime": 1793091416.1601946,
+    "seen": 1793727026.890696,
+    "ast_hash": "45365e319b505d18cab7258e3c8b2c26",
+    "semantic_hash": "45365e319b505d18cab7258e3c8b2c26"
+  },
+  "functions/src/whatsapp.ts": {
+    "mtime": 1790866009.6139243,
+    "seen": 1793727026.890697,
+    "ast_hash": "44ed3f5ff25310071fa5442a81889c99",
+    "semantic_hash": "44ed3f5ff25310071fa5442a81889c99"
+  },
+  "functions/tsconfig.json": {
+    "mtime": 1779834178.0,
+    "seen": 1793727026.890697,
+    "ast_hash": "5828a41475cbb6c4fd508ef6a3dff0f6",
+    "semantic_hash": "5828a41475cbb6c4fd508ef6a3dff0f6"
+  },
+  "js/firebase-config.js": {
+    "mtime": 1791903685.0104992,
+    "seen": 1793727026.890697,
+    "ast_hash": "df00bca8766b774c190155d6f6e8ec18",
+    "semantic_hash": "df00bca8766b774c190155d6f6e8ec18"
+  },
+  "js/main.js": {
+    "mtime": 1793114327.5762966,
+    "seen": 1793727026.890698,
+    "ast_hash": "88e1e74736b956d3c417a4e0aeac3ab2",
+    "semantic_hash": "88e1e74736b956d3c417a4e0aeac3ab2"
+  },
+  "js/moduli/abbonamenti.js": {
+    "mtime": 1793091507.9601226,
+    "seen": 1793727026.890698,
+    "ast_hash": "daddb5de42403ce1a41c943329854a02",
+    "semantic_hash": "daddb5de42403ce1a41c943329854a02"
+  },
+  "js/moduli/auth.js": {
+    "mtime": 1789724093.0,
+    "seen": 1793727026.890699,
+    "ast_hash": "3b3837ecf7a6732e495f5861042c9f6e",
+    "semantic_hash": "3b3837ecf7a6732e495f5861042c9f6e"
+  },
+  "js/moduli/avviso-maltempo.js": {
+    "mtime": 1791578231.759368,
+    "seen": 1793727026.890699,
+    "ast_hash": "3a7d76b35cb6d11016aa17b99ca4e196",
+    "semantic_hash": "3a7d76b35cb6d11016aa17b99ca4e196"
+  },
+  "js/moduli/campagna.js": {
+    "mtime": 1790867116.106457,
+    "seen": 1793727026.890699,
+    "ast_hash": "7144200983474a33bb7dcd75737f2c7a",
+    "semantic_hash": "7144200983474a33bb7dcd75737f2c7a"
+  },
+  "js/moduli/cassa-automatica.js": {
+    "mtime": 1792750556.5897098,
+    "seen": 1793727026.8907,
+    "ast_hash": "723fa3d3fc1da1ff379b141170f5d0c1",
+    "semantic_hash": "723fa3d3fc1da1ff379b141170f5d0c1"
+  },
+  "js/moduli/cassa-stato.js": {
+    "mtime": 1781880781.0,
+    "seen": 1793727026.8907,
+    "ast_hash": "1ecfe4ef9f27e80773da99c2246893f6",
+    "semantic_hash": "1ecfe4ef9f27e80773da99c2246893f6"
+  },
+  "js/moduli/cassa.js": {
+    "mtime": 1790521542.6535451,
+    "seen": 1793727026.890701,
+    "ast_hash": "9e69875d916ed21343650fa75e05a75e",
+    "semantic_hash": "9e69875d916ed21343650fa75e05a75e"
+  },
+  "js/moduli/chiamate.js": {
+    "mtime": 1792406922.588903,
+    "seen": 1793727026.890701,
+    "ast_hash": "e97d824dd5d97b2f1e7dbdd2713a52e7",
+    "semantic_hash": "e97d824dd5d97b2f1e7dbdd2713a52e7"
+  },
+  "js/moduli/clienti.js": {
+    "mtime": 1793091507.9603243,
+    "seen": 1793727026.890701,
+    "ast_hash": "73aea77ae9b69c5825f049853d650341",
+    "semantic_hash": "73aea77ae9b69c5825f049853d650341"
+  },
+  "js/moduli/contanti-passati.js": {
+    "mtime": 1790606598.2944224,
+    "seen": 1793727026.890702,
+    "ast_hash": "d9ebc3349f65d2f2248f48ad35b3fbd5",
+    "semantic_hash": "d9ebc3349f65d2f2248f48ad35b3fbd5"
+  },
+  "js/moduli/conti.js": {
+    "mtime": 1790864248.3847833,
+    "seen": 1793727026.890702,
+    "ast_hash": "6a85b61ea96813754ba90e55395ebcc0",
+    "semantic_hash": "6a85b61ea96813754ba90e55395ebcc0"
+  },
+  "js/moduli/display-cassa.js": {
+    "mtime": 1793022112.3727136,
+    "seen": 1793727026.8907032,
+    "ast_hash": "4114c0ab311e756e0a7b76a881ac9181",
+    "semantic_hash": "4114c0ab311e756e0a7b76a881ac9181"
+  },
+  "js/moduli/fic-ui.js": {
+    "mtime": 1787927145.0,
+    "seen": 1793727026.8907032,
+    "ast_hash": "7184b6163eb45b840cb6ef6cb60f09b1",
+    "semantic_hash": "7184b6163eb45b840cb6ef6cb60f09b1"
+  },
+  "js/moduli/fidelai.js": {
+    "mtime": 1782751572.0,
+    "seen": 1793727026.890704,
+    "ast_hash": "5fc084c525f9a6d19356ea0ce14c2193",
+    "semantic_hash": "5fc084c525f9a6d19356ea0ce14c2193"
+  },
+  "js/moduli/fidelity-programma.js": {
+    "mtime": 1793114341.909337,
+    "seen": 1793727026.890704,
+    "ast_hash": "2cae5cdb251ab4fcb20204949ab98a67",
+    "semantic_hash": "2cae5cdb251ab4fcb20204949ab98a67"
+  },
+  "js/moduli/giornalieri.js": {
+    "mtime": 1791465820.9934387,
+    "seen": 1793727026.890704,
+    "ast_hash": "740a33b3eb56f7c370c1a51450ecc2c8",
+    "semantic_hash": "740a33b3eb56f7c370c1a51450ecc2c8"
+  },
+  "js/moduli/incassi-manuali.js": {
+    "mtime": 1790521542.6533997,
+    "seen": 1793727026.8907049,
+    "ast_hash": "7590d69d8d7246ff640a133eaea247d8",
+    "semantic_hash": "7590d69d8d7246ff640a133eaea247d8"
+  },
+  "js/moduli/log.js": {
+    "mtime": 1779378571.0,
+    "seen": 1793727026.8907049,
+    "ast_hash": "dbb9c8a1d13c7727da4d172abb9a3d2d",
+    "semantic_hash": "dbb9c8a1d13c7727da4d172abb9a3d2d"
+  },
+  "js/moduli/marketing.js": {
+    "mtime": 1779834845.0,
+    "seen": 1793727026.8907058,
+    "ast_hash": "33336ff9bf37ceb90852f3992427ca3e",
+    "semantic_hash": "33336ff9bf37ceb90852f3992427ca3e"
+  },
+  "js/moduli/meteo.js": {
+    "mtime": 1791832002.951098,
+    "seen": 1793727026.8907058,
+    "ast_hash": "4caf1bc0d4ff73f815954cf2db4cf07b",
+    "semantic_hash": "4caf1bc0d4ff73f815954cf2db4cf07b"
+  },
+  "js/moduli/navigazione.js": {
+    "mtime": 1793114327.5765436,
+    "seen": 1793727026.890707,
+    "ast_hash": "d17376f6aa3a314d60f204219f6e14f4",
+    "semantic_hash": "d17376f6aa3a314d60f204219f6e14f4"
+  },
+  "js/moduli/parcheggio-smart.js": {
+    "mtime": 1790520695.9757597,
+    "seen": 1793727026.890707,
+    "ast_hash": "bad7350816d5446c70ec2d23a7ad77bd",
+    "semantic_hash": "bad7350816d5446c70ec2d23a7ad77bd"
+  },
+  "js/moduli/prenotazioni.js": {
+    "mtime": 1792751220.8586063,
+    "seen": 1793727026.890707,
+    "ast_hash": "6e908c4d8d6bf8af2350bbcb49471e1c",
+    "semantic_hash": "6e908c4d8d6bf8af2350bbcb49471e1c"
+  },
+  "js/moduli/presenze.js": {
+    "mtime": 1793006860.0135946,
+    "seen": 1793727026.890708,
+    "ast_hash": "445b251ed2906ff10fc6dce4d145ebdb",
+    "semantic_hash": "445b251ed2906ff10fc6dce4d145ebdb"
+  },
+  "js/moduli/priority-config.js": {
+    "mtime": 1791893737.2298436,
+    "seen": 1793727026.890708,
+    "ast_hash": "ead258c3ccf0254284620a7d3933f327",
+    "semantic_hash": "ead258c3ccf0254284620a7d3933f327"
+  },
+  "js/moduli/referral-confirm.js": {
+    "mtime": 1792751127.5695717,
+    "seen": 1793727026.890709,
+    "ast_hash": "96a89cf9f0984e99f95b1df4aeac2780",
+    "semantic_hash": "96a89cf9f0984e99f95b1df4aeac2780"
+  },
+  "js/moduli/referral-dash.js": {
+    "mtime": 1781880781.0,
+    "seen": 1793727026.890709,
+    "ast_hash": "f3107a8198db0f017b42d1bd3c3c3ac3",
+    "semantic_hash": "f3107a8198db0f017b42d1bd3c3c3ac3"
+  },
+  "js/moduli/report.js": {
+    "mtime": 1791042419.497322,
+    "seen": 1793727026.890709,
+    "ast_hash": "b93a16ecae081bf42f8f23d29174491d",
+    "semantic_hash": "b93a16ecae081bf42f8f23d29174491d"
+  },
+  "js/moduli/servizi-aggiuntivi.js": {
+    "mtime": 1778094158.0,
+    "seen": 1793727026.89071,
+    "ast_hash": "62ceef879130a2bb3e6215956c174f6f",
+    "semantic_hash": "62ceef879130a2bb3e6215956c174f6f"
+  },
+  "js/moduli/sospesi.js": {
+    "mtime": 1791885857.352196,
+    "seen": 1793727026.89071,
+    "ast_hash": "c270685a249545a71ae8eb7df71cd984",
+    "semantic_hash": "c270685a249545a71ae8eb7df71cd984"
+  },
+  "js/moduli/vouchers.js": {
+    "mtime": 1791480424.9210565,
+    "seen": 1793727026.890711,
+    "ast_hash": "15496ff4c76f125a88d3f94e1102f24c",
+    "semantic_hash": "15496ff4c76f125a88d3f94e1102f24c"
+  },
+  "js/prenota.js": {
+    "mtime": 1779483136.0,
+    "seen": 1793727026.890711,
+    "ast_hash": "fa1102c22efaf8f02bd34adaa149814a",
+    "semantic_hash": "fa1102c22efaf8f02bd34adaa149814a"
+  },
+  "js/state.js": {
+    "mtime": 1788253644.0,
+    "seen": 1793727026.890712,
+    "ast_hash": "02953e58e2583bb7fbcb97b30611157d",
+    "semantic_hash": "02953e58e2583bb7fbcb97b30611157d"
+  },
+  "js/utils.js": {
+    "mtime": 1790867243.6961515,
+    "seen": 1793727026.890712,
+    "ast_hash": "fbd63cc51643e93fee40b57f8e5ca409",
+    "semantic_hash": "fbd63cc51643e93fee40b57f8e5ca409"
+  },
+  "manifest.json": {
+    "mtime": 1788250269.0,
+    "seen": 1793727026.890712,
+    "ast_hash": "b76f0f6af5ec9fcdcd2c56a1ee8f78b2",
+    "semantic_hash": "b76f0f6af5ec9fcdcd2c56a1ee8f78b2"
+  },
+  "package.json": {
+    "mtime": 1781880790.0,
+    "seen": 1793727026.890713,
+    "ast_hash": "b84df7ff64ef4718cc7a62cc1541c151",
+    "semantic_hash": "b84df7ff64ef4718cc7a62cc1541c151"
+  },
+  "scripts/_tmp-nc.mjs": {
+    "mtime": 1791033960.5907083,
+    "seen": 1793727026.890713,
+    "ast_hash": "d2467eec94a3a60218ac151feb1aaf47",
+    "semantic_hash": "d2467eec94a3a60218ac151feb1aaf47"
+  },
+  "scripts/analisi-meteo-fatturato.mjs": {
+    "mtime": 1790541599.5607443,
+    "seen": 1793727026.8907142,
+    "ast_hash": "966744b8d326a1ead238863666e574b4",
+    "semantic_hash": "966744b8d326a1ead238863666e574b4"
+  },
+  "scripts/analisi-sospesi.js": {
+    "mtime": 1786293014.0,
+    "seen": 1793727026.8907142,
+    "ast_hash": "dd22e71bda10c21ede09fe2677d9e697",
+    "semantic_hash": "dd22e71bda10c21ede09fe2677d9e697"
+  },
+  "scripts/archivio-giornata.mjs": {
+    "mtime": 1790521620.328851,
+    "seen": 1793727026.8907142,
+    "ast_hash": "70dceb1d7f358b806aa44fa95a40c8d0",
+    "semantic_hash": "70dceb1d7f358b806aa44fa95a40c8d0"
+  },
+  "scripts/backfill-meteo-storico.mjs": {
+    "mtime": 1790541883.0626085,
+    "seen": 1793727026.890715,
+    "ast_hash": "cf847a0f9e185470d7bb3d7657b78fcd",
+    "semantic_hash": "cf847a0f9e185470d7bb3d7657b78fcd"
+  },
+  "scripts/backfill-sedeId-lungomare.js": {
+    "mtime": 1779041756.0,
+    "seen": 1793727026.890715,
+    "ast_hash": "26cd4b4e245129c86ca6a551719bc7a2",
+    "semantic_hash": "26cd4b4e245129c86ca6a551719bc7a2"
+  },
+  "scripts/backup-pre-multisede.js": {
+    "mtime": 1779378173.0,
+    "seen": 1793727026.8907158,
+    "ast_hash": "82ae1197c8bd87923aa199542fa4ed75",
+    "semantic_hash": "82ae1197c8bd87923aa199542fa4ed75"
+  },
+  "scripts/crm-dedup.mjs": {
+    "mtime": 1790865690.6595867,
+    "seen": 1793727026.8907158,
+    "ast_hash": "fa300fa8b2b43780174d4f8e9424fdf4",
+    "semantic_hash": "fa300fa8b2b43780174d4f8e9424fdf4"
+  },
+  "scripts/openapi-config-lastmile.mjs": {
+    "mtime": 1790429387.1006768,
+    "seen": 1793727026.8907158,
+    "ast_hash": "28e73e180122ffcb8331517e729f4083",
+    "semantic_hash": "28e73e180122ffcb8331517e729f4083"
+  },
+  "scripts/reset-pagamenti-20261022.mjs": {
+    "mtime": 1792665378.699925,
+    "seen": 1793727026.890717,
+    "ast_hash": "e0a9c8a6f09055c1a3a4560e8a0d28c3",
+    "semantic_hash": "e0a9c8a6f09055c1a3a4560e8a0d28c3"
+  },
+  "scripts/setup-cassa-config.js": {
+    "mtime": 1777315250.0,
+    "seen": 1793727026.890717,
+    "ast_hash": "2a29e3b62b25ef889a42a91f571e22dd",
+    "semantic_hash": "2a29e3b62b25ef889a42a91f571e22dd"
+  },
+  "scripts/telegram-chat-id.mjs": {
+    "mtime": 1790537689.8210618,
+    "seen": 1793727026.890718,
+    "ast_hash": "c203efb7e515de216734e44003541d7f",
+    "semantic_hash": "c203efb7e515de216734e44003541d7f"
+  },
+  "scripts/wa-worker/package.json": {
+    "mtime": 1790866100.451694,
+    "seen": 1793727026.890718,
+    "ast_hash": "ae3fc68cd3247a0b393893319ac39c49",
+    "semantic_hash": "ae3fc68cd3247a0b393893319ac39c49"
+  },
+  "scripts/wa-worker/wa-worker.mjs": {
+    "mtime": 1793091451.9951618,
+    "seen": 1793727026.890719,
+    "ast_hash": "fc9e051d1218d7733bde0d783cb1a882",
+    "semantic_hash": "fc9e051d1218d7733bde0d783cb1a882"
+  },
+  "version.json": {
+    "mtime": 1793114327.5756204,
+    "seen": 1793727026.890719,
+    "ast_hash": "1067a90633beda923675d23d1e76de96",
+    "semantic_hash": "1067a90633beda923675d23d1e76de96"
+  },
+  "DESIGN-TEMPLATE.md": {
+    "mtime": 1779041209.0,
+    "seen": 1793727026.890719,
+    "ast_hash": "a0bb8ce92403de3efecddf54dfe5dff3",
+    "semantic_hash": "a0bb8ce92403de3efecddf54dfe5dff3"
+  },
+  "DESIGN.md": {
+    "mtime": 1779040951.0,
+    "seen": 1793727026.89072,
+    "ast_hash": "843e99dc1ee53f43eed43d1dc4cce954",
+    "semantic_hash": "843e99dc1ee53f43eed43d1dc4cce954"
+  },
+  "README.md": {
+    "mtime": 1777315355.0,
+    "seen": 1793727026.89072,
+    "ast_hash": "358bd5e9e81942a3468409d9151dc492",
+    "semantic_hash": "358bd5e9e81942a3468409d9151dc492"
+  },
+  "bridge-cassa/PROTOCOLLO-VNE-NOTES.md": {
+    "mtime": 1777070830.0,
+    "seen": 1793727026.890721,
+    "ast_hash": "c3b85d4485ef900a1801bd875c4dd0f3",
+    "semantic_hash": "c3b85d4485ef900a1801bd875c4dd0f3"
+  },
+  "bridge-cassa/README.md": {
+    "mtime": 1777315372.0,
+    "seen": 1793727026.890721,
+    "ast_hash": "9ff5af1e396db1a8d648f8533ad3f4f4",
+    "semantic_hash": "9ff5af1e396db1a8d648f8533ad3f4f4"
+  },
+  "bridge-cassa/cancello/README.md": {
+    "mtime": 1790276003.0,
+    "seen": 1793727026.890722,
+    "ast_hash": "945d1198cdd5b6b36d37e01db119b715",
+    "semantic_hash": "945d1198cdd5b6b36d37e01db119b715"
+  },
+  "bridge-cassa/install-linux.md": {
+    "mtime": 1777315323.0,
+    "seen": 1793727026.890723,
+    "ast_hash": "054ecfe5f8733c07a83ec476aac1f8db",
+    "semantic_hash": "054ecfe5f8733c07a83ec476aac1f8db"
+  },
+  "bridge-cassa/install-windows.md": {
+    "mtime": 1777134214.0,
+    "seen": 1793727026.890723,
+    "ast_hash": "f27154771170b8b1579298c872956698",
+    "semantic_hash": "f27154771170b8b1579298c872956698"
+  },
+  "bridge-cassa/requirements.txt": {
+    "mtime": 1777315189.0,
+    "seen": 1793727026.890723,
+    "ast_hash": "e96964e4631c2e6734f196b6e752a27a",
+    "semantic_hash": "e96964e4631c2e6734f196b6e752a27a"
+  },
+  "design-system/README.md": {
+    "mtime": 1779041015.0,
+    "seen": 1793727026.8907242,
+    "ast_hash": "089d35f212009c34b8bea68eb88b3cd0",
+    "semantic_hash": "089d35f212009c34b8bea68eb88b3cd0"
+  },
+  "design-system/components/badge.md": {
+    "mtime": 1779041162.0,
+    "seen": 1793727026.8907242,
+    "ast_hash": "3435791f80f6ac822a89de26ec16918f",
+    "semantic_hash": "3435791f80f6ac822a89de26ec16918f"
+  },
+  "design-system/components/button.md": {
+    "mtime": 1779041035.0,
+    "seen": 1793727026.8907251,
+    "ast_hash": "8580ac4cd811b096e76c4945637cac62",
+    "semantic_hash": "8580ac4cd811b096e76c4945637cac62"
+  },
+  "design-system/components/card.md": {
+    "mtime": 1779041059.0,
+    "seen": 1793727026.8907251,
+    "ast_hash": "4fbec65986ee0e574be7fda9abed9977",
+    "semantic_hash": "4fbec65986ee0e574be7fda9abed9977"
+  },
+  "design-system/components/input.md": {
+    "mtime": 1779041122.0,
+    "seen": 1793727026.8907259,
+    "ast_hash": "545f889d26a2953eacdc913daf95dbd5",
+    "semantic_hash": "545f889d26a2953eacdc913daf95dbd5"
+  },
+  "design-system/components/modal.md": {
+    "mtime": 1779041102.0,
+    "seen": 1793727026.8907259,
+    "ast_hash": "d9fcd6ff3b45df84fcafab704f7a7cf7",
+    "semantic_hash": "d9fcd6ff3b45df84fcafab704f7a7cf7"
+  },
+  "design-system/components/table.md": {
+    "mtime": 1779041146.0,
+    "seen": 1793727026.8907259,
+    "ast_hash": "c581723ac4f208187c9c3705a1cc480c",
+    "semantic_hash": "c581723ac4f208187c9c3705a1cc480c"
+  },
+  "display.html": {
+    "mtime": 1791818591.9439192,
+    "seen": 1793727026.8907268,
+    "ast_hash": "c9f6fd7317e8779d12fc126d2b1fb379",
+    "semantic_hash": "c9f6fd7317e8779d12fc126d2b1fb379"
+  },
+  "docs/MULTISEDE-MIGRATION.md": {
+    "mtime": 1779041644.0,
+    "seen": 1793727026.8907268,
+    "ast_hash": "2d0c5ef1a6d73d18c84fb3f4bed2a0fa",
+    "semantic_hash": "2d0c5ef1a6d73d18c84fb3f4bed2a0fa"
+  },
+  "docs/WHATSAPP_RUNBOOK.md": {
+    "mtime": 1783982851.0,
+    "seen": 1793727026.890728,
+    "ast_hash": "7b7cc36c03f21bc2d40dcc49528a39db",
+    "semantic_hash": "7b7cc36c03f21bc2d40dcc49528a39db"
+  },
+  "index.html": {
+    "mtime": 1793114341.909204,
+    "seen": 1793727026.890728,
+    "ast_hash": "6fbe7a0d8706873500b35d1e130ee8a5",
+    "semantic_hash": "6fbe7a0d8706873500b35d1e130ee8a5"
+  },
+  "prenota.html": {
+    "mtime": 1788250291.0,
+    "seen": 1793727026.890728,
+    "ast_hash": "7a5f34ccb4bed18bc6fb9332b4b178d8",
+    "semantic_hash": "7a5f34ccb4bed18bc6fb9332b4b178d8"
+  },
+  "img/display/loop.mp4": {
+    "mtime": 1791403244.8918934,
+    "seen": 1793727026.890729,
+    "ast_hash": "f9ce98ed919e6847a5b4d93c666d8f7c",
+    "semantic_hash": "f9ce98ed919e6847a5b4d93c666d8f7c"
+  }
+}

@@ -5,7 +5,8 @@
  * servizio (secret JARVIS_FIC_TOKEN, header Authorization: Bearer) e vede solo:
  *   GET  /azienda                              → quale azienda FIC (nome, id): mai i token
  *   GET  /clienti?q=nome                       → anagrafiche (id, nome, P.IVA)
- *   GET  /documenti?cliente=&tipo=&da=&a=      → fatture emesse di un cliente
+ *   GET  /documenti?cliente=|nome=&tipo=&da=&a= → fatture emesse di un cliente (id FIC, o nome sul documento
+ *                                                se fatturato senza salvarlo in anagrafica)
  *   GET  /documento/:id                        → una fattura con righe e scadenze
  *   POST /fattura                              → nuova fattura COPIATA da una precedente
  *
@@ -79,10 +80,10 @@ export const ficProxy = onRequest({ region: REGION, secrets: [JARVIS_FIC_TOKEN],
       res.json({ clienti: (d?.data || []).map((c: any) => ({ id: c.id, nome: c.name, piva: c.vat_number || '', cf: c.tax_code || '', citta: c.address_city || '' })) }); return
     }
     if (req.method === 'GET' && rotta === 'documenti') {
-      const cliente = Number(req.query.cliente); const tipo = String(req.query.tipo || 'invoice')
-      if (!cliente) { res.status(400).json({ errore: 'cliente: id FIC numerico' }); return }
+      const cliente = Number(req.query.cliente); const nome = String(req.query.nome || '').trim(); const tipo = String(req.query.tipo || 'invoice')
+      if (!cliente && nome.length < 3) { res.status(400).json({ errore: 'cliente (id FIC) o nome (almeno 3 lettere)' }); return }
       if (!TIPI.includes(tipo)) { res.status(400).json({ errore: `tipo: uno di ${TIPI.join(', ')}` }); return }
-      const filtri = [`entity.id = ${cliente}`]; const da = giorno(req.query.da); const a = giorno(req.query.a)
+      const filtri = [cliente ? `entity.id = ${cliente}` : `entity.name contains '${quota(nome)}'`]; const da = giorno(req.query.da); const a = giorno(req.query.a)
       if (da) filtri.push(`date >= '${da}'`); if (a) filtri.push(`date <= '${a}'`)
       const d = await fic(`/issued_documents?type=${tipo}&sort=-date&per_page=50&q=${encodeURIComponent(filtri.join(' and '))}`)
       res.json({ documenti: (d?.data || []).map(riassunto) }); return
