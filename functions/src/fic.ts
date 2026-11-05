@@ -61,7 +61,7 @@ async function getAccessToken(): Promise<{ token: string; companyId: number }> {
   return { token: data.access_token, companyId: s.companyId }
 }
 
-async function fic(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
+export async function fic(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
   const { token, companyId } = await getAccessToken()
   const res = await fetch(`${FIC_API}/c/${companyId}${path}`, {
     method: opts.method || 'GET',
