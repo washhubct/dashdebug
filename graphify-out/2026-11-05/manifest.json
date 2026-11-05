@@ -54,10 +54,10 @@
     "semantic_hash": "2ce4bf49420d1d033694259e3277fd48"
   },
   "functions/package.json": {
-    "mtime": 1790193358.0,
-    "seen": 1793727026.8906891,
-    "ast_hash": "33f465d9dabb2f71c6824a143033487c",
-    "semantic_hash": "33f465d9dabb2f71c6824a143033487c"
+    "mtime": 1793873187.39805,
+    "seen": 1793873491.717909,
+    "ast_hash": "338101430d1b893c4ab9bb82e21dc416",
+    "semantic_hash": ""
   },
   "functions/src/chiusura.ts": {
     "mtime": 1791904483.9488473,
@@ -72,10 +72,10 @@
     "semantic_hash": "a61ea17c8483f64e8b80c6a11894ecf0"
   },
   "functions/src/fic.ts": {
-    "mtime": 1790429387.1224658,
-    "seen": 1793727026.890691,
-    "ast_hash": "d89c2f0d5269d181cd5c14caf5e01ccd",
-    "semantic_hash": "d89c2f0d5269d181cd5c14caf5e01ccd"
+    "mtime": 1793864847.995199,
+    "seen": 1793873491.717912,
+    "ast_hash": "2372b56ac7bfaab5b7c8c0e297ee161d",
+    "semantic_hash": ""
   },
   "functions/src/fidelai-admin.ts": {
     "mtime": 1793091416.159773,
@@ -96,10 +96,10 @@
     "semantic_hash": "582925f50e35ba0b5239a200bb5d455f"
   },
   "functions/src/index.ts": {
-    "mtime": 1793091416.1603673,
-    "seen": 1793727026.890692,
-    "ast_hash": "636e9d16ec9cc3178fb436a360d42105",
-    "semantic_hash": "636e9d16ec9cc3178fb436a360d42105"
+    "mtime": 1793864848.007971,
+    "seen": 1793873491.7179148,
+    "ast_hash": "9433c0a33b7647f6775eb89198b3016d",
+    "semantic_hash": ""
   },
   "functions/src/meteo.ts": {
     "mtime": 1793091416.1601195,
@@ -616,5 +616,95 @@
     "seen": 1793727026.890729,
     "ast_hash": "f9ce98ed919e6847a5b4d93c666d8f7c",
     "semantic_hash": "f9ce98ed919e6847a5b4d93c666d8f7c"
+  },
+  "functions/src/fic-proxy.ts": {
+    "mtime": 1793865006.3460395,
+    "seen": 1793873491.717912,
+    "ast_hash": "c9ab4e848cd3afcd51a7e7361d64bdef",
+    "semantic_hash": ""
+  },
+  "img/display/logo.png": {
+    "mtime": 1791403244.9001305,
+    "seen": 1793873491.717979,
+    "ast_hash": "ff7f41efeace7655c523fb8488e65b47",
+    "semantic_hash": ""
+  },
+  "img/favicon-64.png": {
+    "mtime": 1788250265.0,
+    "seen": 1793873491.71798,
+    "ast_hash": "25bc93ec029fccc423ad741b03db2a21",
+    "semantic_hash": ""
+  },
+  "img/icon-180.png": {
+    "mtime": 1788250265.0,
+    "seen": 1793873491.71798,
+    "ast_hash": "ceccb322e90a87ffd78f3f25c8a1b449",
+    "semantic_hash": ""
+  },
+  "img/icon-192.png": {
+    "mtime": 1788250265.0,
+    "seen": 1793873491.7179809,
+    "ast_hash": "7555050750c1fa4b2960ba31f475adf0",
+    "semantic_hash": ""
+  },
+  "img/icon-512.png": {
+    "mtime": 1788250265.0,
+    "seen": 1793873491.7179809,
+    "ast_hash": "981b5d65a9b219d67d63f5b1acac22af",
+    "semantic_hash": ""
+  },
+  "img/logo-login.png": {
+    "mtime": 1785022060.0,
+    "seen": 1793873491.717982,
+    "ast_hash": "ce3dfa3d0a07fc06d42d935caad57e26",
+    "semantic_hash": ""
+  },
+  "img/logo.png": {
+    "mtime": 1776705774.0,
+    "seen": 1793873491.717982,
+    "ast_hash": "cda17434ba5ebc029b3871d772ed485e",
+    "semantic_hash": ""
+  },
+  "img/mockup-cartellino-cassa.png": {
+    "mtime": 1782078185.0,
+    "seen": 1793873491.717983,
+    "ast_hash": "c1098921249d378a9f621f69d75cf2de",
+    "semantic_hash": ""
+  },
+  "img/qr-card-washhub-2048.png": {
+    "mtime": 1781886147.0,
+    "seen": 1793873491.717983,
+    "ast_hash": "06ed5645cd36f38930976d77fed9b166",
+    "semantic_hash": ""
+  },
+  "img/qr-card-washhub.png": {
+    "mtime": 1781886122.0,
+    "seen": 1793873491.717984,
+    "ast_hash": "5b7c34e78d663c4970e9be2cc32f3ea0",
+    "semantic_hash": ""
+  },
+  "img/qr-card-washhub.svg": {
+    "mtime": 1781886147.0,
+    "seen": 1793873491.717984,
+    "ast_hash": "240c7a4ccbf51833bcce55ba811cbb21",
+    "semantic_hash": ""
+  },
+  "functions/package-lock.json": {
+    "mtime": 1790193358.0,
+    "seen": 1793873491.717985,
+    "ast_hash": "71f14d2b8f6b3092a3f8aa47345c3965",
+    "semantic_hash": ""
+  },
+  "package-lock.json": {
+    "mtime": 1781880790.0,
+    "seen": 1793873491.717986,
+    "ast_hash": "b02c1939e9ebdcd130c945b9814185ce",
+    "semantic_hash": ""
+  },
+  "scripts/wa-worker/package-lock.json": {
+    "mtime": 1790866129.5189555,
+    "seen": 1793873491.717986,
+    "ast_hash": "63d50800309de013f35b6ac7d930bc68",
+    "semantic_hash": ""
   }
 }

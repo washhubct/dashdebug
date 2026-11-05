@@ -618,9 +618,9 @@
     "semantic_hash": "f9ce98ed919e6847a5b4d93c666d8f7c"
   },
   "functions/src/fic-proxy.ts": {
-    "mtime": 1793865006.3460395,
-    "seen": 1793873491.717912,
-    "ast_hash": "c9ab4e848cd3afcd51a7e7361d64bdef",
+    "mtime": 1793873726.6215985,
+    "seen": 1793873896.463587,
+    "ast_hash": "373f78c99a2a88f441735cbed2b03def",
     "semantic_hash": ""
   },
   "img/display/logo.png": {

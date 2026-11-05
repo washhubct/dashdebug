@@ -1,9 +1,9 @@
 # Graph Report - dashdebug  (2026-11-05)
 
 ## Corpus Check
-- 99 files · ~109,663 words
+- 99 files · ~109,696 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 10 file(s) not represented in the graph (top: (none) 3, .service 2, .plist 2)
+- Unclassified: 11 file(s) not represented in the graph (top: (none) 4, .service 2, .plist 2)
 
 ## Summary
 - 1230 nodes · 3054 edges · 70 communities (59 shown, 11 thin omitted)
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ea576459`
+- Built from commit: `84e3c0f2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -96,8 +96,8 @@
 6. `state` - 27 edges
 7. `db` - 26 edges
 8. `Wash Hub Gestionale Design System` - 26 edges
-9. `isAdmin()` - 21 edges
-10. `richiediPagamento()` - 21 edges
+9. `renderPren()` - 21 edges
+10. `pDate()` - 21 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Table empty state` --semantically_similar_to--> `Empty state (.empty)`  [INFERRED] [semantically similar]
@@ -365,25 +365,25 @@ Nodes (10): Flag operativo CASSA AUTO (enabled), Firestore config/cassaAutomatic
   index.html · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **44 isolated node(s):** `Flag operativo CASSA AUTO (enabled)`, `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)`, `Raspberry Pi Zero W` (+39 more)
+- **44 isolated node(s):** `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)`, `Raspberry Pi Zero W`, `bridge-cassa/PROTOCOLLO-VNE-NOTES.md` (+39 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 346 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled)` connect `Install Bridge Pi/Windows` to `Display Cassa Cliente`, `setup-cassa-config.js`?**
-  _High betweenness centrality (0.100) - this node is a cross-community bridge._
-- **What connects `Flag operativo CASSA AUTO (enabled)`, `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub` to the rest of the system?**
+- **Why does `Firestore config/cassaAutomatica` connect `setup-cassa-config.js` to `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)`?**
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
+- **What connects `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)` to the rest of the system?**
   _44 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `prenotazioni.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05619834710743802 - nodes in this community are weakly interconnected._
-- **Why does `Firestore config/cassaAutomatica` connect `setup-cassa-config.js` to `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)`?**
-  _High betweenness centrality (0.088) - this node is a cross-community bridge._
+- **Why does `Cassa Automatica VNE (SelfCashAPI 3.05)` connect `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)` to `setup-cassa-config.js`?**
+  _High betweenness centrality (0.103) - this node is a cross-community bridge._
 - **Should `esc` be split into smaller, more focused modules?**
   _Cohesion score 0.08205128205128205 - nodes in this community are weakly interconnected._
-- **Why does `Cassa Automatica VNE (SelfCashAPI 3.05)` connect `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)` to `setup-cassa-config.js`?**
-  _High betweenness centrality (0.087) - this node is a cross-community bridge._
+- **Why does `Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled)` connect `Install Bridge Pi/Windows` to `Display Cassa Cliente`, `setup-cassa-config.js`?**
+  _High betweenness centrality (0.092) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
