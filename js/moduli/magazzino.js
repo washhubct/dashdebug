@@ -2,11 +2,11 @@
 // Shampoo, cere, profumi, panni… tutto ciò che si ordina. Il carico si fa dalla
 // FOTO della fattura: la function magazzinoApi la fa leggere a Claude e torna
 // una proposta (fornitore, righe, abbinamento al catalogo, variazione prezzo)
-// che l'operatore controlla e conferma. Nessuna conta fisica: i consumi si
-// ricavano dagli ordini stessi. Se riordini un prodotto, quello comprato prima
-// è (più o meno) finito: consumo = quantità degli ordini precedenti / giorni
-// dal primo all'ultimo ordine. La giacenza è stimata: ultimo ordine − consumo
-// × giorni passati. Dal consumo: copertura e ordini da fare.
+// che l'operatore controlla e conferma. Nessuna conta periodica: a ogni
+// riordino chiediamo quanti PEZZI restano (2 fusti, non 40 L). Tra due ordini
+// consumo = rimasti + comprati al primo − rimasti al secondo. Giacenza stimata
+// = rimasti + comprati all'ultimo ordine − consumo × giorni passati.
+// Dal consumo: copertura e ordini da fare.
 // Dati: prodotti, acquisti, fornitori — scritti solo dalla function, qui solo lettura.
 import { db, fsCollection, fsGetDocs, magazzinoCall } from '../firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
@@ -48,26 +48,31 @@ async function carica() {
     render();
 }
 
-// ─── CONSUMI (dagli ordini) ───
-// Ordini della sede per il prodotto, raggruppati per giorno, nella stessa unità.
+// ─── CONSUMI (ordini + rimanenze, in pezzi) ───
+// Ordini della sede per il prodotto, raggruppati per giorno: q = pezzi
+// comprati, r = pezzi che restavano al riordino (null = non indicato → 0).
 function ordini(p) {
     const perGiorno = {};
     acquisti.forEach(a => (a.righe || []).forEach(r => {
         if (r.prodottoId !== p._id || (p.unita && r.unita && r.unita !== p.unita)) return;
-        perGiorno[a.dataISO] = (perGiorno[a.dataISO] || 0) + (Number(r.quantita) || 0);
+        const o = perGiorno[a.dataISO] ||= { dataISO: a.dataISO, q: 0, r: null };
+        o.q += Number(r.quantita) || 0;
+        if (r.rimanenza != null) o.r = Math.max(o.r ?? 0, Number(r.rimanenza) || 0);
     }));
-    return Object.entries(perGiorno).filter(([d, q]) => d && q > 0).sort(([x], [y]) => x.localeCompare(y)).map(([dataISO, q]) => ({ dataISO, q }));
+    return Object.values(perGiorno).filter(o => o.dataISO && o.q > 0).sort((x, y) => x.dataISO.localeCompare(y.dataISO));
 }
 
-// Il riordino dice che lo stock precedente è finito: tutto ciò che è stato
-// comprato prima dell'ultimo ordine è stato consumato tra il primo e l'ultimo.
+// Ogni coppia di ordini consecutivi è una misura del consumo in quel periodo.
 function consumo(ord) {
     const o = ord.slice(-ORDINI_STORICO);
     if (o.length < 2) return null;
-    const giorni = (new Date(o[o.length - 1].dataISO) - new Date(o[0].dataISO)) / 864e5;
+    const periodi = o.slice(1).map((b, i) => {
+        const a = o[i];
+        return { dal: a.dataISO, al: b.dataISO, giorni: Math.round((new Date(b.dataISO) - new Date(a.dataISO)) / 864e5), usati: Math.max(0, (a.r ?? 0) + a.q - (b.r ?? 0)) };
+    });
+    const giorni = periodi.reduce((s, x) => s + x.giorni, 0);
     if (giorni < 3) return null;
-    const usato = o.slice(0, -1).reduce((s, x) => s + x.q, 0);
-    return { giorno: usato / giorni, ordini: o.length };
+    return { giorno: periodi.reduce((s, x) => s + x.usati, 0) / giorni, periodi };
 }
 
 function statoProdotto(p) {
@@ -75,8 +80,8 @@ function statoProdotto(p) {
     const ultimo = ord[ord.length - 1];
     const c = consumo(ord);
     const giorniDaUltimo = ultimo ? Math.max(0, (Date.now() - new Date(ultimo.dataISO)) / 864e5) : 0;
-    // senza consumo noto la stima è l'ultimo ordine intero
-    const g = ultimo ? Math.max(0, ultimo.q - (c ? c.giorno * giorniDaUltimo : 0)) : 0;
+    // senza consumo noto la stima è quanto c'era dopo l'ultimo ordine
+    const g = ultimo ? Math.max(0, (ultimo.r ?? 0) + ultimo.q - (c ? c.giorno * giorniDaUltimo : 0)) : 0;
     const copertura = c ? g / c.giorno : null;
     const min = Number(p.scortaMin?.[state.sedeAttiva]) || 0;
     const daOrdinare = (copertura !== null && copertura < COPERTURA_MIN) || (min > 0 && g <= min);
@@ -114,8 +119,8 @@ function render() {
             return `<tr${s.daOrdinare ? ' style="background:var(--red1)"' : ''}>
                 <td><b>${esc(p.nome)}</b><div style="font:400 10px var(--mono);color:var(--tx3)">${esc(p.categoria || '')}</div></td>
                 <td style="font-size:12px">${esc(p.fornitoreNome || '')}</td>
-                <td style="text-align:right;font:600 13px var(--mono)">${fmtQ(s.g)} ${esc(p.unita || '')}</td>
-                <td style="text-align:right;font:400 12px var(--mono)">${s.c ? `${fmtQ(s.c.giorno * 7)}/sett` : '<span style="color:var(--tx3)" title="Dal secondo ordine di questo prodotto calcolo il consumo">in apprendimento</span>'}</td>
+                <td style="text-align:right;font:600 13px var(--mono)">${fmtQ(s.g)} ${esc(p.unita || '')}${p.formato ? `<div style="font:400 10px var(--mono);color:var(--tx3)">da ${esc(p.formato)}</div>` : ''}</td>
+                <td style="text-align:right;font:400 12px var(--mono)">${s.c ? `<span title="${esc(s.c.periodi.map(x => `${dmy(x.dal)}→${dmy(x.al)}: ${fmtQ(x.usati)} ${p.unita || 'pz'} in ${x.giorni} gg`).join('\n'))}" style="cursor:help;border-bottom:1px dotted var(--tx3)">${fmtQ(s.c.giorno * 7)}/sett</span>` : '<span style="color:var(--tx3)" title="Dal secondo ordine di questo prodotto calcolo il consumo">in apprendimento</span>'}</td>
                 <td style="text-align:right;font:600 12px var(--mono);color:${s.daOrdinare ? 'var(--red)' : 'var(--tx)'}">${s.copertura !== null ? Math.floor(s.copertura) + ' gg' : '—'}</td>
                 <td style="text-align:right;font:400 12px var(--mono)">${p.ultimoPrezzo != null ? fEur(p.ultimoPrezzo) : '—'} ${badgeVar(ult)}</td>
                 <td style="font:400 11px var(--mono);color:var(--tx2)">${p.ultimoAcquistoISO ? p.ultimoAcquistoISO.split('-').reverse().join('/') : '—'}</td></tr>`;
@@ -151,6 +156,12 @@ function renderOrdini(stati) {
     }).join('')}</ul></div>`).join('');
 }
 
+// Stima della giacenza attuale, come suggerimento nel campo "Restavano"
+function stimaTxt(prodottoId) {
+    const p = prodotti.find(x => x._id === prodottoId);
+    return p ? 'stima ' + fmtQ(statoProdotto(p).g) : '';
+}
+
 function ultimaVariazione(prodottoId) {
     for (const a of acquisti) { const r = (a.righe || []).find(r => r.prodottoId === prodottoId); if (r) return r; }
     return null;
@@ -161,6 +172,7 @@ function badgeVar(r) {
     return `<span class="badge ${v > 0 ? 'r' : 'g'}" title="Prima ${fEur(r.prezzoPrec)}">${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
 }
 const fmtQ = n => (Math.round(n * 10) / 10).toLocaleString('it-IT');
+const dmy = iso => (iso || '').slice(5).split('-').reverse().join('/');
 
 // ─── CARICO DA FOTO ───
 async function comprimi(file) {
@@ -211,16 +223,19 @@ function revisione(p) {
             <div style="font:400 11px var(--mono);color:var(--tx2)">P.IVA ${esc(p.fornitore.piva || '—')} · ${esc(p.tipoDocumento)} ${esc(p.numero || 's.n.')} del ${(p.data || '').split('-').reverse().join('/') || '—'} · imponibile ${p.imponibile != null ? fEur(p.imponibile) : '—'} · totale ${p.totale != null ? fEur(p.totale) : '—'}</div></div>
         ${(p.avvisi || []).length ? `<div style="margin-top:8px;font-size:12px;color:var(--amb)">⚠️ ${p.avvisi.map(esc).join('<br>⚠️ ')}</div>` : ''}
         ${!quadra ? `<div style="margin-top:8px;font-size:12px;color:var(--amb)">⚠️ La somma delle righe (${fEur(sommaRighe)}) non torna con l'imponibile: controlla quantità e prezzi.</div>` : ''}
-        <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Carica</th><th>Riga in fattura</th><th>Prodotto a magazzino</th><th>Q.tà</th><th>Unità</th><th>€ unit.</th><th>Prezzo</th></tr></thead><tbody>
+        <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Carica</th><th>Riga in fattura</th><th>Prodotto a magazzino</th><th>Pezzi</th><th>Confezione</th><th>Formato</th><th>€ al pezzo</th><th>Prezzo</th><th title="Pezzi ancora in magazzino prima di questo arrivo">Restavano</th></tr></thead><tbody>
         ${p.righe.map((r, i) => `<tr data-i="${i}">
             <td><input type="checkbox" class="mr-ok" ${r.isProdotto ? 'checked' : ''}></td>
             <td style="font-size:11px;max-width:220px">${esc(r.descrizione)}${r.codice ? `<div style="color:var(--tx3)">cod. ${esc(r.codice)}</div>` : ''}</td>
             <td style="min-width:200px"><select class="mr-prod" style="${inp}">${opzProd(r.prodottoId)}</select><input class="mr-nome" value="${esc(r.nomeProdotto)}" style="${inp};margin-top:4px;${r.prodottoId ? 'display:none' : ''}" placeholder="Nome prodotto"></td>
-            <td style="width:70px"><input class="mr-q" type="number" step="any" value="${r.quantita}" style="${inp}"></td>
-            <td style="width:70px"><input class="mr-u" value="${esc(r.unita)}" style="${inp}"></td>
+            <td style="width:60px"><input class="mr-q" type="number" step="1" min="0" value="${r.quantita}" style="${inp}"></td>
+            <td style="width:80px"><input class="mr-u" value="${esc(r.unita)}" style="${inp}"></td>
+            <td style="width:80px"><input class="mr-f" value="${esc(r.formato || '')}" placeholder="20 L" style="${inp}"></td>
             <td style="width:90px"><input class="mr-p" type="number" step="any" value="${r.prezzoUnitario}" style="${inp}"></td>
-            <td class="mr-var" style="white-space:nowrap">${badgeVar(r) || (r.prodottoId ? '<span style="font-size:11px;color:var(--tx3)">=</span>' : '')}</td></tr>`).join('')}
+            <td class="mr-var" style="white-space:nowrap">${badgeVar(r) || (r.prodottoId ? '<span style="font-size:11px;color:var(--tx3)">=</span>' : '')}</td>
+            <td style="width:80px"><input class="mr-r" type="number" step="0.5" min="0" placeholder="${r.prodottoId ? stimaTxt(r.prodottoId) : ''}" style="${inp};${r.prodottoId && r.isProdotto ? '' : 'visibility:hidden'}"></td></tr>`).join('')}
         </tbody></table></div>
+        <p style="font-size:12px;color:var(--tx2);margin:10px 0 0">📦 <b>Restavano</b>: per ogni prodotto già a magazzino scrivi quanti <b>pezzi</b> c'erano ancora prima di questo arrivo (0 se finito, 1.5 se un fusto e mezzo). Il numero in grigio è la mia stima.</p>
         <button class="btn btn-primary" id="magConferma" style="width:100%;margin-top:14px" ${p.giaCaricata ? 'disabled' : ''}>✓ Carica in magazzino (${esc(state.sedeAttiva)})</button>
         <p id="magEsito" style="font-size:12px;margin:8px 0 0;color:var(--tx3)"></p>`);
     const chiudi = () => ov.remove();
@@ -230,16 +245,27 @@ function revisione(p) {
         const r = p.righe[tr.dataset.i];
         const prod = prodotti.find(x => x._id === tr.querySelector('.mr-prod').value);
         tr.querySelector('.mr-nome').style.display = prod ? 'none' : '';
+        const rim = tr.querySelector('.mr-r');
+        rim.style.visibility = prod && tr.querySelector('.mr-ok').checked ? '' : 'hidden';
+        rim.placeholder = prod ? stimaTxt(prod._id) : '';
         const prezzo = Number(tr.querySelector('.mr-p').value);
-        const prec = prod && (prod.unita || '').toLowerCase() === tr.querySelector('.mr-u').value.trim().toLowerCase() ? Number(prod.ultimoPrezzo) : null;
+        const lc = s => (s || '').trim().toLowerCase();
+        const prec = prod && lc(prod.unita) === lc(tr.querySelector('.mr-u').value) && lc(prod.formato) === lc(tr.querySelector('.mr-f').value) ? Number(prod.ultimoPrezzo) : null;
         r.prezzoPrec = prec || null;
         r.variazionePct = prec ? Math.round((prezzo - prec) / prec * 10000) / 100 : null;
         tr.querySelector('.mr-var').innerHTML = badgeVar(r) || (prod ? '<span style="font-size:11px;color:var(--tx3)">=</span>' : '');
     };
-    ov.querySelectorAll('tbody tr').forEach(tr => tr.querySelectorAll('.mr-prod,.mr-p,.mr-u').forEach(x => x.addEventListener('change', () => aggiornaVar(tr))));
+    ov.querySelectorAll('tbody tr').forEach(tr => tr.querySelectorAll('.mr-ok,.mr-prod,.mr-p,.mr-u,.mr-f').forEach(x => x.addEventListener('change', () => aggiornaVar(tr))));
 
     ov.querySelector('#magConferma').onclick = async () => {
         const btn = ov.querySelector('#magConferma');
+        const mancano = [...ov.querySelectorAll('tbody tr')].filter(tr => tr.querySelector('.mr-ok').checked && tr.querySelector('.mr-prod').value && tr.querySelector('.mr-r').value === '');
+        ov.querySelectorAll('.mr-r').forEach(x => x.style.borderColor = '');
+        if (mancano.length) {
+            mancano.forEach(tr => tr.querySelector('.mr-r').style.borderColor = 'var(--red)');
+            ov.querySelector('#magEsito').textContent = `Scrivi quanti pezzi restavano per ${mancano.length === 1 ? 'il prodotto evidenziato' : `i ${mancano.length} prodotti evidenziati`} (0 se finiti).`;
+            return;
+        }
         ov.querySelectorAll('tbody tr').forEach(tr => {
             const r = p.righe[tr.dataset.i];
             r.isProdotto = tr.querySelector('.mr-ok').checked;
@@ -247,6 +273,8 @@ function revisione(p) {
             r.nomeProdotto = tr.querySelector('.mr-nome').value.trim() || r.nomeProdotto;
             r.quantita = Number(tr.querySelector('.mr-q').value) || 0;
             r.unita = tr.querySelector('.mr-u').value.trim() || 'pz';
+            r.formato = tr.querySelector('.mr-f').value.trim() || null;
+            r.rimanenza = r.prodottoId && tr.querySelector('.mr-r').value !== '' ? Number(tr.querySelector('.mr-r').value) : null;
             r.prezzoUnitario = Number(tr.querySelector('.mr-p').value) || 0;
         });
         btn.disabled = true; btn.textContent = 'Salvataggio…';

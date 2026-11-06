@@ -12,8 +12,10 @@ import { z } from 'zod'
 // Claude (output strutturato) e restituisce una PROPOSTA: fornitore, righe,
 // abbinamento ai prodotti già a catalogo e variazione di prezzo rispetto
 // all'ultimo acquisto. Niente viene salvato finché l'operatore non conferma
-// con `salvaCarico`. Niente conte: consumi e giacenza stimata si ricavano in
-// dashboard dalla sequenza degli ordini (js/moduli/magazzino.js).
+// con `salvaCarico`, indicando per ogni prodotto già noto quanti PEZZI ne
+// restavano: consumi e giacenza stimata si ricavano in dashboard dalla
+// sequenza ordini + rimanenze (js/moduli/magazzino.js). Tutto in pezzi
+// (2 fusti da 20 L), mai litri.
 //
 //   fornitori/{piva|slug}         anagrafica creata dai dati della fattura
 //   prodotti/{id}                 catalogo condiviso tra sedi
@@ -47,9 +49,10 @@ const Fattura = z.object({
     codice: z.string().nullable().describe('Codice articolo del fornitore, se presente'),
     nomeProdotto: z.string().describe('Nome breve e pulito del prodotto, con formato/confezione (es. "Shampoo prelavaggio tanica 25 kg")'),
     categoria: z.enum(CATEGORIE),
-    quantita: z.number(),
-    unita: z.string().describe('Unità della quantità: pz, tanica, kg, L, conf, ...'),
-    prezzoUnitario: z.number().describe('Prezzo unitario netto IVA esclusa, già scontato'),
+    quantita: z.number().describe('Numero di PEZZI/confezioni (es. 2 fusti), mai litri o kg'),
+    unita: z.string().describe('Tipo di confezione al singolare: fusto, tanica, flacone, cartone, secchio, rotolo, pz'),
+    formato: z.string().nullable().describe('Contenuto di UN pezzo: "20 L", "5 kg", "12 x 1 L". null se non indicato'),
+    prezzoUnitario: z.number().describe('Prezzo di UN pezzo/confezione, netto IVA esclusa, già scontato'),
     aliquotaIva: z.number().nullable(),
     totaleRiga: z.number().nullable().describe('Totale riga IVA esclusa'),
     isProdotto: z.boolean().describe('false per trasporto, spese, contributi, cauzioni, arrotondamenti'),
@@ -64,6 +67,7 @@ const ISTRUZIONI = `Leggi il documento d'acquisto di un autolavaggio (fattura, D
 - Il fornitore è chi EMETTE il documento, non il destinatario (il destinatario è l'autolavaggio: LAST MILE SRL / Wash Hub).
 - Numeri in formato decimale (1.234,50 → 1234.5). Prezzi IVA esclusa; se la riga ha uno sconto, prezzoUnitario è il prezzo già scontato.
 - Non inventare: se un dato non si legge mettilo a null e segnalalo in "avvisi".
+- Le quantità sono sempre in PEZZI (confezioni), mai in litri o kg. Se la fattura conta in litri/kg (es. 40 L a 2,00 €/L di uno shampoo in fusti da 20 L) converti: quantita 2, unita "fusto", formato "20 L", prezzoUnitario 40. Se il formato non si capisce lascia la quantità come stampata e segnalalo in "avvisi".
 - Includi anche le righe non prodotto (trasporto, spese) con isProdotto=false.`
 
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '')
@@ -141,7 +145,8 @@ async function leggiFattura(data: any) {
   const righe = f.righe.map(r => {
     const p = r.isProdotto ? abbina(r, fornId, prodSnap.docs) : null
     const prec = p ? Number(p.data().ultimoPrezzo) || null : null
-    const stessaUnita = p && norm(p.data().unita) === norm(r.unita)
+    // il prezzo è per pezzo: confrontabile solo a parità di confezione e formato
+    const stessaUnita = p && norm(p.data().unita) === norm(r.unita) && norm(p.data().formato) === norm(r.formato || '')
     const variazionePct = prec && stessaUnita ? r2(((r.prezzoUnitario - prec) / prec) * 100) : null
     return { ...r, prodottoId: p?.id || null, prodottoNome: p?.data().nome || null, prezzoPrec: stessaUnita ? prec : null, variazionePct }
   })
@@ -187,7 +192,7 @@ async function salvaCarico(data: any, email: string) {
         prodottoId = ref.id
         const alias = FieldValue.arrayUnion(norm(r.descrizione))
         tx.set(ref, {
-          ...(esiste?.exists ? {} : { nome: r.nomeProdotto || r.descrizione, categoria: r.categoria || 'altro', unita: r.unita || 'pz', creato: FieldValue.serverTimestamp(), scortaMin: {} }),
+          ...(esiste?.exists ? {} : { nome: r.nomeProdotto || r.descrizione, categoria: r.categoria || 'altro', unita: r.unita || 'pz', formato: r.formato || null, creato: FieldValue.serverTimestamp(), scortaMin: {} }),
           fornitoreId: fornId, fornitoreNome: f.ragioneSociale,
           ...(r.codice ? { codiceFornitore: r.codice } : {}),
           alias, ultimoPrezzo: prezzo, ultimoAcquistoISO: dataISO,
@@ -197,7 +202,9 @@ async function salvaCarico(data: any, email: string) {
       }
       righe.push({
         prodottoId, descrizione: r.descrizione, nomeProdotto: r.nomeProdotto || null, codice: r.codice || null,
-        categoria: r.categoria || 'altro', quantita, unita: r.unita || 'pz', prezzoUnitario: prezzo,
+        categoria: r.categoria || 'altro', quantita, unita: r.unita || 'pz', formato: r.formato || null, prezzoUnitario: prezzo,
+        // pezzi ancora in magazzino al momento del riordino (chiesti a chi carica)
+        rimanenza: r.rimanenza == null || r.rimanenza === '' ? null : Math.max(0, Number(r.rimanenza) || 0),
         aliquotaIva: r.aliquotaIva ?? null, totaleRiga: r.totaleRiga ?? r2(quantita * prezzo), isProdotto: !!r.isProdotto,
         prezzoPrec: r.prezzoPrec ?? null, variazionePct: r.variazionePct ?? null,
       })

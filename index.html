@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261106b';
+    var APP_VERSION = '20261106c';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -789,7 +789,7 @@
 </div>
 </div>
 
-<!-- Magazzino consumabili: carico da foto fattura (Claude), consumi stimati dagli ordini — js/moduli/magazzino.js -->
+<!-- Magazzino consumabili: carico da foto fattura (Claude), consumi da ordini + rimanenze in pezzi — js/moduli/magazzino.js -->
 <div class="page" id="page-magazzino">
 <div class="sec">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
@@ -921,7 +921,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261106b"></script>
+<script type="module" src="js/main.js?v=20261106c"></script>
 
 </body>
 </html>
