@@ -25,6 +25,7 @@ import { initMarketing, renderMarketing } from './moduli/marketing.js';
 import { initReferralDash, renderReferralDash } from './moduli/referral-dash.js';
 import { initIncassiManuali } from './moduli/incassi-manuali.js';
 import { initConti, caricaConti } from './moduli/conti.js';
+import { initMagazzino } from './moduli/magazzino.js';
 import { initCampagna } from './moduli/campagna.js';
 import { initAvvisoMaltempo } from './moduli/avviso-maltempo.js';
 import { initPriorityConfig } from './moduli/priority-config.js';
@@ -52,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initVouchers();
     initIncassiManuali();
     initConti();
+    initMagazzino();
     initCampagna();
     initAvvisoMaltempo();
     initPriorityConfig();

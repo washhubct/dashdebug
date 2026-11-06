@@ -96,6 +96,7 @@ export function goPage(id) {
         presenze: ['👷', 'Presenze Dipendenti'],
         clienti: ['👥', 'Clienti / CRM'],
         fidelai: ['💎', 'FidelAI — Riscatti & Card'],
+        magazzino: ['📦', 'Magazzino'],
         report: ['💰', 'Report Finanziario'],
         cancellazioni: ['🗑️', 'Registro Cancellazioni'],
         servizi: ['⭐', 'Servizi Aggiuntivi'],

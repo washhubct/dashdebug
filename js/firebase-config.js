@@ -23,6 +23,9 @@ export const ficCall = (action, payload = {}) =>
     httpsCallable(functions, 'ficApi')({ action, payload }).then(r => r.data);
 
 // Meteo → semaforo giornata (functions/src/meteo.ts)
+// Magazzino: la lettura della fattura con Claude può durare fino a ~60 s
+export const magazzinoCall = (action, data = {}) =>
+    httpsCallable(functions, 'magazzinoApi', { timeout: 300000 })({ action, ...data }).then(r => r.data);
 export const meteoCall = (data = {}) => httpsCallable(functions, 'meteoApi')(data).then(r => r.data);
 // 🛡️ Penale no-show sulla carta a garanzia (Stripe), solo su conferma dell'operatore
 export const garanziaAddebitaCall = (pid) => httpsCallable(functions, 'garanziaAddebita')({ pid }).then(r => r.data);

@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261105a';
+    var APP_VERSION = '20261106a';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -121,6 +121,7 @@
 <a class="sb-item" id="nav-presenze"><span class="icon">👷</span>Presenze</a>
 <a class="sb-item" id="nav-clienti"><span class="icon">👥</span>Clienti / CRM</a>
 <a class="sb-item" id="nav-fidelai"><span class="icon">💎</span>FidelAI Riscatti</a>
+<a class="sb-item" id="nav-magazzino"><span class="icon">📦</span>Magazzino</a>
 <div class="sb-section admin-only">Finanza & Sicurezza</div>
 <a class="sb-item admin-only" id="nav-dashboard"><span class="icon">📈</span>Dashboard Analitica</a>
 <a class="sb-item admin-only" id="nav-report"><span class="icon">💰</span>Report Finanziario</a>
@@ -788,6 +789,33 @@
 </div>
 </div>
 
+<!-- Magazzino consumabili: carico da foto fattura (Claude), conte, consumi e ordini — js/moduli/magazzino.js -->
+<div class="page" id="page-magazzino">
+<div class="sec">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
+<div>
+  <h3 style="font:700 15px var(--f);margin-bottom:3px">📦 Magazzino consumabili</h3>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Fotografa la fattura del fornitore: prodotti, quantità e prezzi si caricano da soli. Una conta ogni 2 settimane e imparo i consumi.</p>
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+  <button class="btn btn-primary" id="magFotoBtn">📷 Carica fattura</button>
+  <button class="btn" id="magContaBtn">📋 Conta</button>
+  <button class="btn" id="magRefreshBtn">↻</button>
+  <input type="file" id="magFile" accept="image/*,application/pdf" multiple style="display:none">
+</div>
+</div>
+<div class="kpis" id="magKpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px"></div>
+<div style="padding:12px 14px;border:1px dashed var(--amb);border-radius:var(--r2);margin-bottom:14px"><div style="font:600 11px var(--mono);color:var(--amb);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ordini da fare</div><div id="magOrdini"></div></div>
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+  <input class="search-box" id="magCerca" placeholder="Cerca prodotto o fornitore..." style="flex:1;min-width:200px">
+  <select id="magCat" style="background:var(--bg3);border:1px solid var(--brd);color:var(--tx);padding:6px 10px;border-radius:var(--r2);font:400 12px var(--f);outline:0"><option value="">Tutte le categorie</option></select>
+</div>
+<div class="tbl-wrap" id="magProdotti" style="overflow-x:auto"></div>
+<h4 style="font:700 13px var(--f);margin:18px 0 8px">Ultimi acquisti</h4>
+<div id="magAcquisti"></div>
+</div>
+</div>
+
 <div class="page" id="page-vouchers">
 <div class="sec">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
@@ -894,7 +922,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261105a"></script>
+<script type="module" src="js/main.js?v=20261106a"></script>
 
 </body>
 </html>
