@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261106a';
+    var APP_VERSION = '20261106b';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -789,17 +789,16 @@
 </div>
 </div>
 
-<!-- Magazzino consumabili: carico da foto fattura (Claude), conte, consumi e ordini — js/moduli/magazzino.js -->
+<!-- Magazzino consumabili: carico da foto fattura (Claude), consumi stimati dagli ordini — js/moduli/magazzino.js -->
 <div class="page" id="page-magazzino">
 <div class="sec">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap">
 <div>
   <h3 style="font:700 15px var(--f);margin-bottom:3px">📦 Magazzino consumabili</h3>
-  <p style="font:400 12px var(--f);color:var(--tx2)">Fotografa la fattura del fornitore: prodotti, quantità e prezzi si caricano da soli. Una conta ogni 2 settimane e imparo i consumi.</p>
+  <p style="font:400 12px var(--f);color:var(--tx2)">Fotografa la fattura del fornitore: prodotti, quantità e prezzi si caricano da soli. Dagli ordini successivi imparo i consumi e ti dico quando riordinare.</p>
 </div>
 <div style="display:flex;gap:6px;flex-wrap:wrap">
   <button class="btn btn-primary" id="magFotoBtn">📷 Carica fattura</button>
-  <button class="btn" id="magContaBtn">📋 Conta</button>
   <button class="btn" id="magRefreshBtn">↻</button>
   <input type="file" id="magFile" accept="image/*,application/pdf" multiple style="display:none">
 </div>
@@ -922,7 +921,7 @@
 
 <div class="loader" id="loader" style="display:none"><div class="spinner"></div><p>Caricamento dati...</p></div>
 
-<script type="module" src="js/main.js?v=20261106a"></script>
+<script type="module" src="js/main.js?v=20261106b"></script>
 
 </body>
 </html>

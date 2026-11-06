@@ -2,11 +2,12 @@
 // Shampoo, cere, profumi, panni… tutto ciò che si ordina. Il carico si fa dalla
 // FOTO della fattura: la function magazzinoApi la fa leggere a Claude e torna
 // una proposta (fornitore, righe, abbinamento al catalogo, variazione prezzo)
-// che l'operatore controlla e conferma. Le conte fisiche ("📋 Conta") fissano
-// la giacenza: tra due conte, consumo = giacenza iniziale + acquisti − finale.
-// Dal consumo medio giornaliero: giorni di copertura e ordini da fare.
-// Dati: prodotti (giacenza{sedeId}), acquisti, inventari, fornitori — scritti
-// solo dalla function, qui solo lettura.
+// che l'operatore controlla e conferma. Nessuna conta fisica: i consumi si
+// ricavano dagli ordini stessi. Se riordini un prodotto, quello comprato prima
+// è (più o meno) finito: consumo = quantità degli ordini precedenti / giorni
+// dal primo all'ultimo ordine. La giacenza è stimata: ultimo ordine − consumo
+// × giorni passati. Dal consumo: copertura e ordini da fare.
+// Dati: prodotti, acquisti, fornitori — scritti solo dalla function, qui solo lettura.
 import { db, fsCollection, fsGetDocs, magazzinoCall } from '../firebase-config.js';
 import { query, where } from 'https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js';
 import { state } from '../state.js';
@@ -14,8 +15,9 @@ import { fEur, esc } from '../utils.js';
 
 const COPERTURA_MIN = 14;   // giorni: sotto → da ordinare
 const COPERTURA_ORDINE = 30; // giorni di scorta che un ordine deve coprire
+const ORDINI_STORICO = 6;    // ultimi ordini usati per il consumo (segue la stagione)
 
-let prodotti = [], acquisti = [], inventari = [];
+let prodotti = [], acquisti = [];
 const call = (action, data = {}) => magazzinoCall(action, { ...data, sedeId: state.sedeAttiva });
 let filtroCat = '', cerca = '';
 
@@ -23,7 +25,6 @@ export function initMagazzino() {
     document.addEventListener('pageChanged', e => { if (e.detail?.pageId === 'magazzino') carica(); });
     document.getElementById('magFotoBtn')?.addEventListener('click', () => document.getElementById('magFile')?.click());
     document.getElementById('magFile')?.addEventListener('change', e => { const f = [...(e.target.files || [])]; e.target.value = ''; if (f.length) leggiFattura(f); });
-    document.getElementById('magContaBtn')?.addEventListener('click', apriConta);
     document.getElementById('magRefreshBtn')?.addEventListener('click', carica);
     document.getElementById('magCat')?.addEventListener('change', e => { filtroCat = e.target.value; render(); });
     document.getElementById('magCerca')?.addEventListener('input', e => { cerca = e.target.value.toLowerCase(); render(); });
@@ -32,14 +33,12 @@ export function initMagazzino() {
 async function carica() {
     const sede = state.sedeAttiva;
     try {
-        const [p, a, i] = await Promise.all([
+        const [p, a] = await Promise.all([
             fsGetDocs(fsCollection(db, 'prodotti')),
             fsGetDocs(query(fsCollection(db, 'acquisti'), where('sedeId', '==', sede))),
-            fsGetDocs(query(fsCollection(db, 'inventari'), where('sedeId', '==', sede))),
         ]);
         prodotti = p.docs.map(d => ({ _id: d.id, ...d.data() })).sort((x, y) => (x.nome || '').localeCompare(y.nome || ''));
         acquisti = a.docs.map(d => ({ _id: d.id, ...d.data() })).sort((x, y) => (y.dataISO || '').localeCompare(x.dataISO || ''));
-        inventari = i.docs.map(d => ({ _id: d.id, ...d.data() })).sort((x, y) => (x.dataISO || '').localeCompare(y.dataISO || ''));
     } catch (e) {
         console.warn('Magazzino non disponibile:', e.message);
         const el = document.getElementById('magProdotti');
@@ -49,27 +48,39 @@ async function carica() {
     render();
 }
 
-// ─── CONSUMI ───
-// Usa la prima e l'ultima conta della sede che contengono il prodotto.
-function consumo(p) {
-    const conte = inventari.map(inv => ({ dataISO: inv.dataISO, r: (inv.righe || []).find(r => r.prodottoId === p._id) })).filter(c => c.r);
-    if (conte.length < 2) return null;
-    const a = conte[0], b = conte[conte.length - 1];
-    const giorni = (new Date(b.dataISO) - new Date(a.dataISO)) / 864e5;
+// ─── CONSUMI (dagli ordini) ───
+// Ordini della sede per il prodotto, raggruppati per giorno, nella stessa unità.
+function ordini(p) {
+    const perGiorno = {};
+    acquisti.forEach(a => (a.righe || []).forEach(r => {
+        if (r.prodottoId !== p._id || (p.unita && r.unita && r.unita !== p.unita)) return;
+        perGiorno[a.dataISO] = (perGiorno[a.dataISO] || 0) + (Number(r.quantita) || 0);
+    }));
+    return Object.entries(perGiorno).filter(([d, q]) => d && q > 0).sort(([x], [y]) => x.localeCompare(y)).map(([dataISO, q]) => ({ dataISO, q }));
+}
+
+// Il riordino dice che lo stock precedente è finito: tutto ciò che è stato
+// comprato prima dell'ultimo ordine è stato consumato tra il primo e l'ultimo.
+function consumo(ord) {
+    const o = ord.slice(-ORDINI_STORICO);
+    if (o.length < 2) return null;
+    const giorni = (new Date(o[o.length - 1].dataISO) - new Date(o[0].dataISO)) / 864e5;
     if (giorni < 3) return null;
-    const entrate = acquisti.filter(x => x.dataISO > a.dataISO && x.dataISO <= b.dataISO)
-        .flatMap(x => x.righe || []).filter(r => r.prodottoId === p._id).reduce((s, r) => s + (Number(r.quantita) || 0), 0);
-    const usato = a.r.quantita + entrate - b.r.quantita;
-    return usato > 0 ? { giorno: usato / giorni, giorni: Math.round(giorni) } : null;
+    const usato = o.slice(0, -1).reduce((s, x) => s + x.q, 0);
+    return { giorno: usato / giorni, ordini: o.length };
 }
 
 function statoProdotto(p) {
-    const g = Number(p.giacenza?.[state.sedeAttiva]) || 0;
-    const c = consumo(p);
+    const ord = ordini(p);
+    const ultimo = ord[ord.length - 1];
+    const c = consumo(ord);
+    const giorniDaUltimo = ultimo ? Math.max(0, (Date.now() - new Date(ultimo.dataISO)) / 864e5) : 0;
+    // senza consumo noto la stima è l'ultimo ordine intero
+    const g = ultimo ? Math.max(0, ultimo.q - (c ? c.giorno * giorniDaUltimo : 0)) : 0;
     const copertura = c ? g / c.giorno : null;
     const min = Number(p.scortaMin?.[state.sedeAttiva]) || 0;
     const daOrdinare = (copertura !== null && copertura < COPERTURA_MIN) || (min > 0 && g <= min);
-    const qOrdine = c ? Math.max(0, Math.ceil(c.giorno * COPERTURA_ORDINE - g)) : (daOrdinare ? Math.max(1, Math.ceil(min * 2 - g)) : 0);
+    const qOrdine = c ? Math.max(1, Math.ceil(c.giorno * COPERTURA_ORDINE - g)) : (daOrdinare ? Math.max(1, Math.ceil(min * 2 - g)) : 0);
     return { g, c, copertura, daOrdinare, qOrdine };
 }
 
@@ -97,14 +108,14 @@ function render() {
     const el = document.getElementById('magProdotti');
     if (el) el.innerHTML = !prodotti.length
         ? '<div class="empty">Nessun prodotto: carica la prima fattura con 📷 e il catalogo si crea da solo.</div>'
-        : `<table><thead><tr><th>Prodotto</th><th>Fornitore</th><th style="text-align:right">Giacenza</th><th style="text-align:right">Consumo</th><th style="text-align:right">Copertura</th><th style="text-align:right">Ultimo prezzo</th><th>Ultimo acquisto</th></tr></thead><tbody>${lista.map(p => {
+        : `<table><thead><tr><th>Prodotto</th><th>Fornitore</th><th style="text-align:right" title="Stimata: ultimo ordine meno il consumo dei giorni passati">Giacenza stimata</th><th style="text-align:right">Consumo</th><th style="text-align:right">Copertura</th><th style="text-align:right">Ultimo prezzo</th><th>Ultimo acquisto</th></tr></thead><tbody>${lista.map(p => {
             const s = stati.get(p._id);
             const ult = ultimaVariazione(p._id);
             return `<tr${s.daOrdinare ? ' style="background:var(--red1)"' : ''}>
                 <td><b>${esc(p.nome)}</b><div style="font:400 10px var(--mono);color:var(--tx3)">${esc(p.categoria || '')}</div></td>
                 <td style="font-size:12px">${esc(p.fornitoreNome || '')}</td>
                 <td style="text-align:right;font:600 13px var(--mono)">${fmtQ(s.g)} ${esc(p.unita || '')}</td>
-                <td style="text-align:right;font:400 12px var(--mono)">${s.c ? `${fmtQ(s.c.giorno * 7)}/sett` : '<span style="color:var(--tx3)" title="Servono almeno 2 conte a distanza di qualche giorno">in apprendimento</span>'}</td>
+                <td style="text-align:right;font:400 12px var(--mono)">${s.c ? `${fmtQ(s.c.giorno * 7)}/sett` : '<span style="color:var(--tx3)" title="Dal secondo ordine di questo prodotto calcolo il consumo">in apprendimento</span>'}</td>
                 <td style="text-align:right;font:600 12px var(--mono);color:${s.daOrdinare ? 'var(--red)' : 'var(--tx)'}">${s.copertura !== null ? Math.floor(s.copertura) + ' gg' : '—'}</td>
                 <td style="text-align:right;font:400 12px var(--mono)">${p.ultimoPrezzo != null ? fEur(p.ultimoPrezzo) : '—'} ${badgeVar(ult)}</td>
                 <td style="font:400 11px var(--mono);color:var(--tx2)">${p.ultimoAcquistoISO ? p.ultimoAcquistoISO.split('-').reverse().join('/') : '—'}</td></tr>`;
@@ -129,7 +140,7 @@ function renderOrdini(stati) {
         const imparati = prodotti.filter(p => stati.get(p._id).c).length;
         el.innerHTML = `<div style="font-size:12px;color:var(--tx2)">${imparati
             ? '✓ Nessun ordine da fare: tutte le scorte coprono almeno ' + COPERTURA_MIN + ' giorni.'
-            : '🧠 Sto imparando i consumi: fai una conta (📋) ogni 2 settimane circa. Dalla seconda conta calcolo consumi, copertura e ordini.'}</div>`;
+            : '🧠 Sto imparando i consumi dagli ordini: dal secondo ordine di un prodotto calcolo quanto ne usate, quanto ne resta e quando riordinare.'}</div>`;
         return;
     }
     const perForn = {};
@@ -247,25 +258,5 @@ function revisione(p) {
             btn.disabled = false; btn.textContent = '✓ Carica in magazzino';
             ov.querySelector('#magEsito').textContent = 'Errore: ' + (e.message || e);
         }
-    };
-}
-
-// ─── CONTA FISICA ───
-function apriConta() {
-    if (!prodotti.length) { alert('Carica prima una fattura: il catalogo prodotti nasce dagli acquisti.'); return; }
-    const inp = 'background:var(--bg3);border:1px solid var(--brd);color:var(--tx);border-radius:6px;padding:6px;font:400 14px var(--mono);width:90px;text-align:right';
-    const ov = overlayBase(`
-        <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">📋 Conta giacenze — ${esc(state.sedeAttiva)}</h3><button class="btn" id="magContaClose">✕</button></div>
-        <p style="font-size:12px;color:var(--tx2)">Scrivi quanto c'è davvero (anche a metà: 1,5 taniche = 1.5). Lascia vuoto ciò che non hai contato.</p>
-        <table><tbody>${prodotti.map(p => `<tr><td>${esc(p.nome)}<div style="font:400 10px var(--mono);color:var(--tx3)">a sistema: ${fmtQ(Number(p.giacenza?.[state.sedeAttiva]) || 0)} ${esc(p.unita || '')}</div></td>
-            <td style="text-align:right"><input type="number" step="any" min="0" data-id="${p._id}" class="mc-q" style="${inp}"> ${esc(p.unita || '')}</td></tr>`).join('')}</tbody></table>
-        <button class="btn btn-primary" id="magContaSalva" style="width:100%;margin-top:14px">Salva conta</button>
-        <p id="magContaEsito" style="font-size:12px;margin:8px 0 0;color:var(--tx3)"></p>`);
-    ov.querySelector('#magContaClose').onclick = () => ov.remove();
-    ov.querySelector('#magContaSalva').onclick = async () => {
-        const righe = [...ov.querySelectorAll('.mc-q')].filter(i => i.value !== '').map(i => ({ prodottoId: i.dataset.id, quantita: Number(i.value) }));
-        if (!righe.length) { ov.querySelector('#magContaEsito').textContent = 'Nessuna quantità inserita.'; return; }
-        try { await call('salvaInventario', { righe }); ov.remove(); carica(); }
-        catch (e) { ov.querySelector('#magContaEsito').textContent = 'Errore: ' + (e.message || e); }
     };
 }

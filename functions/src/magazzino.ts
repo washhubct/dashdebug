@@ -12,14 +12,13 @@ import { z } from 'zod'
 // Claude (output strutturato) e restituisce una PROPOSTA: fornitore, righe,
 // abbinamento ai prodotti già a catalogo e variazione di prezzo rispetto
 // all'ultimo acquisto. Niente viene salvato finché l'operatore non conferma
-// con `salvaCarico`. `salvaInventario` registra una conta fisica (la giacenza
-// diventa quella contata): acquisti + conte = consumi reali per sede.
+// con `salvaCarico`. Niente conte: consumi e giacenza stimata si ricavano in
+// dashboard dalla sequenza degli ordini (js/moduli/magazzino.js).
 //
 //   fornitori/{piva|slug}         anagrafica creata dai dati della fattura
-//   prodotti/{id}                 catalogo condiviso tra sedi; giacenza{sedeId}
+//   prodotti/{id}                 catalogo condiviso tra sedi
 //   prodotti/{id}/prezzi/{acqId}  storico prezzi
 //   acquisti/{fornitore_numero_anno}  id deterministico → niente doppioni
-//   inventari/{auto}              conte fisiche per sede
 // Scritture solo da qui (admin SDK); le rules danno solo la lettura.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -192,7 +191,6 @@ async function salvaCarico(data: any, email: string) {
           fornitoreId: fornId, fornitoreNome: f.ragioneSociale,
           ...(r.codice ? { codiceFornitore: r.codice } : {}),
           alias, ultimoPrezzo: prezzo, ultimoAcquistoISO: dataISO,
-          giacenza: { [sedeId]: FieldValue.increment(quantita) },
           aggiornato: FieldValue.serverTimestamp(),
         }, { merge: true })
         tx.set(ref.collection('prezzi').doc(acquistoId), { prezzo, unita: r.unita || 'pz', quantita, dataISO, fornitoreId: fornId, sedeId })
@@ -214,30 +212,12 @@ async function salvaCarico(data: any, email: string) {
   })
 }
 
-async function salvaInventario(data: any, email: string) {
-  const sedeId = String(data.sedeId)
-  const righe: { prodottoId: string; quantita: number }[] = (data.righe || []).filter((r: any) => r.prodottoId && Number.isFinite(Number(r.quantita)))
-  if (!righe.length) throw new HttpsError('invalid-argument', 'Nessuna quantità inserita')
-  const batch = db.batch()
-  const dataISO = oggiISO()
-  const snaps = await db.getAll(...righe.map(r => db.doc(`prodotti/${r.prodottoId}`)))
-  const dettaglio = righe.map((r, i) => {
-    const prima = Number(snaps[i].data()?.giacenza?.[sedeId]) || 0
-    batch.set(snaps[i].ref, { giacenza: { [sedeId]: Number(r.quantita) }, ultimaContaISO: { [sedeId]: dataISO } }, { merge: true })
-    return { prodottoId: r.prodottoId, quantita: Number(r.quantita), teorica: prima }
-  })
-  batch.set(db.collection('inventari').doc(), { sedeId, dataISO, righe: dettaglio, fattoDa: email, creato: FieldValue.serverTimestamp() })
-  await batch.commit()
-  return { ok: true, prodotti: righe.length }
-}
-
 export const magazzinoApi = onCall({ region: REGION, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: '512MiB' }, async (request) => {
   const { action, sedeId } = request.data || {}
   const email = await controllaAccesso(request.auth as any, sedeId)
   switch (action) {
     case 'leggiFattura': return leggiFattura(request.data)
     case 'salvaCarico': return salvaCarico(request.data, email)
-    case 'salvaInventario': return salvaInventario(request.data, email)
     default: throw new HttpsError('invalid-argument', 'Azione sconosciuta')
   }
 })
