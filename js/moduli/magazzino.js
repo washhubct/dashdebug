@@ -176,6 +176,7 @@ const dmy = iso => (iso || '').slice(5).split('-').reverse().join('/');
 
 // ─── CARICO DA FOTO ───
 async function comprimi(file) {
+    if (/\.xml$/i.test(file.name) || /xml/.test(file.type)) return { base64: await b64(file), mediaType: 'text/xml' };
     if (file.type === 'application/pdf') {
         if (file.size > 8e6) throw new Error('PDF troppo grande (max 8 MB)');
         return { base64: await b64(file), mediaType: 'application/pdf' };

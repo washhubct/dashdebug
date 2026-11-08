@@ -69,7 +69,7 @@ const ISTRUZIONI = `Leggi il documento d'acquisto di un autolavaggio (fattura, D
 - Il fornitore è chi EMETTE il documento, non il destinatario (il destinatario è l'autolavaggio: LAST MILE SRL / Wash Hub).
 - Numeri in formato decimale (1.234,50 → 1234.5). Prezzi IVA esclusa; se la riga ha uno sconto, prezzoUnitario è il prezzo già scontato.
 - Non inventare: se un dato non si legge mettilo a null e segnalalo in "avvisi".
-- Le quantità sono sempre in PEZZI (confezioni), mai in litri o kg. Se la fattura conta in litri/kg (es. 40 L a 2,00 €/L di uno shampoo in fusti da 20 L) converti: quantita 2, unita "fusto", formato "20 L", prezzoUnitario 40. Se il formato non si capisce lascia la quantità come stampata e segnalalo in "avvisi".
+- Le quantità sono sempre in PEZZI (confezioni), mai in litri o kg. Se la fattura conta in litri/kg (es. 40 L a 2,00 €/L di uno shampoo in fusti da 20 L) converti: quantita 2, unita "fusto", formato "20 L", prezzoUnitario 40. Nelle sigle dei fornitori "T/25" o "TANICA 25" = tanica da 25 kg, "ML 4500" = flacone da 4,5 L. Se il formato non si capisce lascia la quantità come stampata e segnalalo in "avvisi".
 - Includi anche le righe non prodotto (trasporto, spese) con isProdotto=false.`
 
 const norm = (s: string) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '')
@@ -111,7 +111,10 @@ function abbina(riga: { codice: string | null; descrizione: string; nomeProdotto
 async function leggiFattura(data: any) {
   const files: { base64: string; mediaType: string }[] = data.files || []
   if (!files.length || files.length > 6) throw new HttpsError('invalid-argument', 'Da 1 a 6 foto/PDF')
-  const content: Anthropic.Beta.BetaContentBlockParam[] = files.map(f => f.mediaType === 'application/pdf'
+  // XML FatturaPA (da FIC/SDI) passa come testo: più preciso di una foto
+  const content: Anthropic.Beta.BetaContentBlockParam[] = files.map(f => /xml$/.test(f.mediaType)
+    ? { type: 'text', text: 'Fattura elettronica XML:\n' + Buffer.from(f.base64, 'base64').toString('utf8') }
+    : f.mediaType === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.base64 } }
     : { type: 'image', source: { type: 'base64', media_type: f.mediaType as 'image/jpeg' | 'image/png' | 'image/webp', data: f.base64 } })
   content.push({ type: 'text', text: ISTRUZIONI })
