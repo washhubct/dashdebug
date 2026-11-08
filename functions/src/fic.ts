@@ -20,7 +20,8 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 const REGION = 'europe-west1'
 const FIC_API = 'https://api-v2.fattureincloud.it'
-const OAUTH_SCOPE = 'entity.clients:a issued_documents.invoices:a settings:r'
+// received_documents/suppliers in sola lettura: fatture passive per il magazzino
+const OAUTH_SCOPE = 'entity.clients:a issued_documents.invoices:a settings:r received_documents:r entity.suppliers:r'
 
 const secretsRef = () => getFirestore().doc('secrets/fic')
 
