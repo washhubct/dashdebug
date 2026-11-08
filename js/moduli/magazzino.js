@@ -218,6 +218,7 @@ function revisione(p) {
     const inp = 'background:var(--bg3);border:1px solid var(--brd);color:var(--tx);border-radius:6px;padding:5px 6px;font:400 12px var(--mono);width:100%';
     const ov = overlayBase(`
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><h3 style="margin:0">Controlla e conferma</h3><button class="btn" id="magRevClose">✕</button></div>
+        ${p.emessaDaNoi ? '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--red1);color:var(--red);font-size:13px">⛔ Questa fattura l\'abbiamo emessa noi: è una vendita, non un acquisto da un fornitore.</div>' : ''}
         ${p.giaCaricata ? '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--red1);color:var(--red);font-size:13px">⛔ Questo documento risulta già caricato.</div>' : ''}
         <div style="margin-top:10px;font-size:13px"><b>${esc(p.fornitore.ragioneSociale)}</b> ${p.fornitoreNuovo ? '<span class="badge b">nuovo fornitore</span>' : ''}
             <div style="font:400 11px var(--mono);color:var(--tx2)">P.IVA ${esc(p.fornitore.piva || '—')} · ${esc(p.tipoDocumento)} ${esc(p.numero || 's.n.')} del ${(p.data || '').split('-').reverse().join('/') || '—'} · imponibile ${p.imponibile != null ? fEur(p.imponibile) : '—'} · totale ${p.totale != null ? fEur(p.totale) : '—'}</div></div>
@@ -236,7 +237,7 @@ function revisione(p) {
             <td style="width:80px"><input class="mr-r" type="number" step="0.5" min="0" placeholder="${r.prodottoId ? stimaTxt(r.prodottoId) : ''}" style="${inp};${r.prodottoId && r.isProdotto ? '' : 'visibility:hidden'}"></td></tr>`).join('')}
         </tbody></table></div>
         <p style="font-size:12px;color:var(--tx2);margin:10px 0 0">📦 <b>Restavano</b>: per ogni prodotto già a magazzino scrivi quanti <b>pezzi</b> c'erano ancora prima di questo arrivo (0 se finito, 1.5 se un fusto e mezzo). Il numero in grigio è la mia stima.</p>
-        <button class="btn btn-primary" id="magConferma" style="width:100%;margin-top:14px" ${p.giaCaricata ? 'disabled' : ''}>✓ Carica in magazzino (${esc(state.sedeAttiva)})</button>
+        <button class="btn btn-primary" id="magConferma" style="width:100%;margin-top:14px" ${p.giaCaricata || p.emessaDaNoi ? 'disabled' : ''}>✓ Carica in magazzino (${esc(state.sedeAttiva)})</button>
         <p id="magEsito" style="font-size:12px;margin:8px 0 0;color:var(--tx3)"></p>`);
     const chiudi = () => ov.remove();
     ov.querySelector('#magRevClose').onclick = chiudi;

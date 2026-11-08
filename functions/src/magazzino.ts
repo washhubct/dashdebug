@@ -29,6 +29,8 @@ const MODEL = 'claude-opus-5-5'
 const ANTHROPIC_API_KEY = defineSecret('ANTHROPIC_API_KEY')
 const ADMIN_EMAILS = ['amministrazione@avrlogisticarl.com', 'michela@avrlogisticarl.com']
 const db = getFirestore()
+// P.IVA delle nostre società: un documento EMESSO da loro è una vendita, non un acquisto
+const PIVA_NOSTRE = ['06183200879']
 
 const CATEGORIE = ['shampoo', 'cera', 'profumi', 'detergenti', 'pneumatici e cerchi', 'interni', 'panni e spugne', 'attrezzatura', 'altro'] as const
 
@@ -137,6 +139,7 @@ async function leggiFattura(data: any) {
   if (!f) throw new HttpsError('internal', 'Lettura non riuscita, riprova con una foto più nitida')
 
   const fornId = fornitoreId(f.fornitore)
+  const emessaDaNoi = PIVA_NOSTRE.includes(fornId)
   const [fornSnap, prodSnap] = await Promise.all([db.doc(`fornitori/${fornId}`).get(), db.collection('prodotti').get()])
   const anno = (f.data || oggiISO()).slice(0, 4)
   const acquistoId = f.numero ? `${fornId}_${slug(f.numero)}_${anno}` : null
@@ -152,7 +155,7 @@ async function leggiFattura(data: any) {
   })
 
   return {
-    proposta: { ...f, righe, fornitoreId: fornId, fornitoreNuovo: !fornSnap.exists, acquistoId, giaCaricata },
+    proposta: { ...f, righe, fornitoreId: fornId, fornitoreNuovo: !fornSnap.exists, acquistoId, giaCaricata, emessaDaNoi },
     usage: { input: res.usage.input_tokens, output: res.usage.output_tokens },
   }
 }
@@ -162,6 +165,7 @@ async function salvaCarico(data: any, email: string) {
   const sedeId = String(data.sedeId)
   if (!p?.fornitore?.ragioneSociale || !Array.isArray(p.righe)) throw new HttpsError('invalid-argument', 'Proposta non valida')
   const fornId = fornitoreId(p.fornitore)
+  if (PIVA_NOSTRE.includes(fornId)) throw new HttpsError('failed-precondition', 'Documento emesso da noi: è una vendita, non un acquisto')
   const dataISO = /^\d{4}-\d{2}-\d{2}$/.test(p.data || '') ? p.data : oggiISO()
   const acquistoId = p.numero ? `${fornId}_${slug(p.numero)}_${dataISO.slice(0, 4)}` : `${fornId}_${Date.now()}`
   const acqRef = db.doc(`acquisti/${acquistoId}`)
