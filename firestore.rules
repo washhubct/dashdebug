@@ -217,7 +217,11 @@ service cloud.firestore {
     // CONFIG — parametri operativi (cassa automatica VNE)
     // ═══════════════════════════════════════════════════════════
     match /config/{doc} {
-      allow read:  if isSignedIn();
+      // organico (stipendi fissi, costi fissi) e meteo (personale.fissi con lo
+      // stipendio) solo admin: la dash degli operatori non li legge (l'elenco
+      // dipendenti per le Presenze sta in config/dipendenti). Le Cloud Functions
+      // usano l'admin SDK e non passano dalle rules.
+      allow read:  if isSignedIn() && (!(doc in ['organico', 'meteo']) || isAdmin());
       allow write: if isAdmin();
     }
 
@@ -359,6 +363,27 @@ service cloud.firestore {
         allow read:  if isSignedIn();
         allow write: if false;
       }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MAGAZZINO CONSUMABILI — scritture SOLO dalla function magazzinoApi
+    // (admin SDK, controlla sede e login). Dalla dash solo lettura.
+    // ═══════════════════════════════════════════════════════════
+    match /prodotti/{id} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+      match /prezzi/{acq} {
+        allow read:  if isSignedIn();
+        allow write: if false;
+      }
+    }
+    match /fornitori/{id} {
+      allow read:  if isSignedIn();
+      allow write: if false;
+    }
+    match /acquisti/{id} {
+      allow read:  if isSignedIn() && hasSedeAccess(resource.data.sedeId);
+      allow write: if false;
     }
 
     // ═══════════════════════════════════════════════════════════
