@@ -113,7 +113,8 @@ async function leggiFattura(data: any) {
   if (!files.length || files.length > 6) throw new HttpsError('invalid-argument', 'Da 1 a 6 foto/PDF')
   // XML FatturaPA (da FIC/SDI) passa come testo: più preciso di una foto
   const content: Anthropic.Beta.BetaContentBlockParam[] = files.map(f => /xml$/.test(f.mediaType)
-    ? { type: 'text', text: 'Fattura elettronica XML:\n' + Buffer.from(f.base64, 'base64').toString('utf8') }
+    // senza <Allegati>: alcuni fornitori incorporano il PDF in base64 (×20 token per niente)
+    ? { type: 'text', text: 'Fattura elettronica XML:\n' + Buffer.from(f.base64, 'base64').toString('utf8').replace(/<Allegati>[\s\S]*?<\/Allegati>/g, '') }
     : f.mediaType === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.base64 } }
     : { type: 'image', source: { type: 'base64', media_type: f.mediaType as 'image/jpeg' | 'image/png' | 'image/webp', data: f.base64 } })
