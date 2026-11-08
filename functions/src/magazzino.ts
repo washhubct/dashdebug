@@ -226,12 +226,49 @@ async function salvaCarico(data: any, email: string) {
   })
 }
 
+// Conferma dei carichi importati (pezzi/confezione/formato corretti da chi ha
+// la merce davanti) + rilevazione "quanti ne restano oggi" per prodotto.
+async function verificaCarichi(data: any, email: string) {
+  const sedeId = String(data.sedeId)
+  const acq: { id: string; righe: { i: number; quantita: number; unita: string; formato: string | null }[] }[] = data.acquisti || []
+  const ril: { prodottoId: string; pezzi: number }[] = (data.rilevazioni || []).filter((r: any) => r.prodottoId && Number.isFinite(Number(r.pezzi)))
+  const oggi = oggiISO()
+  return db.runTransaction(async tx => {
+    const snaps = await Promise.all(acq.map(a => tx.get(db.doc(`acquisti/${a.id}`))))
+    const prodIds = [...new Set(snaps.flatMap(s => (s.data()?.righe || []).map((r: any) => r.prodottoId)).filter(Boolean))] as string[]
+    const prodSnaps = new Map((await Promise.all(prodIds.map(id => tx.get(db.doc(`prodotti/${id}`))))).map(s => [s.id, s]))
+    snaps.forEach((s, k) => {
+      const a = s.data()
+      if (!s.exists || !a || a.sedeId !== sedeId) throw new HttpsError('permission-denied', 'Acquisto non della sede')
+      const righe = [...a.righe]
+      for (const c of acq[k].righe) {
+        const r = righe[c.i]
+        if (!r?.isProdotto || !(Number(c.quantita) > 0)) continue
+        const prezzo = r.totaleRiga ? r2(Number(r.totaleRiga) / Number(c.quantita)) : r.prezzoUnitario
+        righe[c.i] = { ...r, quantita: Number(c.quantita), unita: c.unita || 'pz', formato: c.formato || null, prezzoUnitario: prezzo }
+        const p = r.prodottoId ? prodSnaps.get(r.prodottoId) : null
+        if (p?.exists) {
+          const ultimo = (a.dataISO || '') >= (p.data()?.ultimoAcquistoISO || '')
+          tx.set(p.ref, { unita: c.unita || 'pz', formato: c.formato || null, ...(ultimo ? { ultimoPrezzo: prezzo } : {}), aggiornato: FieldValue.serverTimestamp() }, { merge: true })
+          tx.set(p.ref.collection('prezzi').doc(s.id), { prezzo, unita: c.unita || 'pz', quantita: Number(c.quantita) }, { merge: true })
+        }
+      }
+      tx.update(s.ref, { righe, daVerificare: false, verificatoDa: email, verificatoISO: oggi })
+    })
+    for (const r of ril) {
+      tx.set(db.doc(`prodotti/${r.prodottoId}`), { rilevazioni: { [sedeId]: FieldValue.arrayUnion({ dataISO: oggi, pezzi: Math.max(0, Number(r.pezzi)), da: email }) } }, { merge: true })
+    }
+    return { ok: true }
+  })
+}
+
 export const magazzinoApi = onCall({ region: REGION, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: '512MiB' }, async (request) => {
   const { action, sedeId } = request.data || {}
   const email = await controllaAccesso(request.auth as any, sedeId)
   switch (action) {
     case 'leggiFattura': return leggiFattura(request.data)
     case 'salvaCarico': return salvaCarico(request.data, email)
+    case 'verificaCarichi': return verificaCarichi(request.data, email)
     default: throw new HttpsError('invalid-argument', 'Azione sconosciuta')
   }
 })
