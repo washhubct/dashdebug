@@ -169,47 +169,119 @@ function renderFornitori() {
 }
 
 // ─── VERIFICA (carichi importati da FIC) ───
-// Pezzi/confezione/formato letti dall'XML vanno confermati da chi ha la merce
-// davanti; "restano oggi" è una rilevazione che misura il consumo.
+// Una scheda per prodotto: cosa è arrivato (pezzi/confezione/formato letti
+// dall'XML, correggibili) e quanti ne restano oggi. "Restano oggi" è una
+// rilevazione che misura il consumo.
+const CONFEZIONI = ['pz', 'tanica', 'fusto', 'flacone', 'cartone', 'secchio', 'rotolo', 'sacco'];
+const PLURALE = { pz: 'pezzi', tanica: 'taniche', fusto: 'fusti', flacone: 'flaconi', cartone: 'cartoni', secchio: 'secchi', rotolo: 'rotoli', sacco: 'sacchi' };
+const unitaPeso = u => /^(kg|g|gr|l|lt|litri?|ml)$/i.test((u || '').trim());
+const nomeUnita = (u, n) => n === 1 ? (u === 'pz' ? 'pezzo' : u) : (PLURALE[u] || u);
+const fornCorto = n => (n || '').replace(/\s+(DI\s|S\.?R\.?L|S\.?P\.?A|S\.?N\.?C|S\.?A\.?S).*$/i, '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
 function renderVerifica() {
     const el = document.getElementById('magVerifica');
     if (!el) return;
     const daVer = acquisti.filter(a => a.daVerificare).sort((x, y) => (x.dataISO || '').localeCompare(y.dataISO || ''));
     el.style.display = daVer.length ? '' : 'none';
     if (!daVer.length) return;
-    const inp = 'background:var(--bg3);border:1px solid var(--brd);color:var(--tx);border-radius:6px;padding:5px 6px;font:400 12px var(--mono);width:100%';
-    const prodIds = [...new Set(daVer.flatMap(a => (a.righe || []).filter(r => r.prodottoId).map(r => r.prodottoId)))];
-    el.innerHTML = `<div style="font:600 11px var(--mono);color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔎 Da verificare</div>
-        <p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Fatture importate da Fatture in Cloud. <b>1)</b> Controlla i <b>pezzi</b> di ogni riga (es. 2 taniche da 25 kg, non 50). <b>2)</b> Scrivi quanti pezzi di ogni prodotto <b>restano oggi</b> in magazzino (0 se finito).</p>
-        ${daVer.map(a => `<div style="margin-bottom:10px"><b style="font-size:12px">${esc(a.fornitoreNome)}</b> <span style="font:400 11px var(--mono);color:var(--tx2)">n. ${esc(a.numero || '')} del ${dmy(a.dataISO)}</span>
-            <table style="margin-top:4px"><thead><tr><th>Riga in fattura</th><th>Pezzi</th><th>Confezione</th><th>Formato</th><th>€ al pezzo</th></tr></thead><tbody>
-            ${(a.righe || []).map((r, i) => r.isProdotto ? `<tr data-a="${a._id}" data-i="${i}" class="vr">
-                <td style="font-size:11px">${esc(r.nomeProdotto || r.descrizione)}<div style="color:var(--tx3)">${esc(r.descrizione)}</div></td>
-                <td style="width:70px"><input class="vr-q" type="number" step="1" min="0" value="${r.quantita}" style="${inp}"></td>
-                <td style="width:90px"><input class="vr-u" value="${esc(r.unita || '')}" style="${inp}"></td>
-                <td style="width:90px"><input class="vr-f" value="${esc(r.formato || '')}" style="${inp}"></td>
-                <td style="font:400 12px var(--mono)" class="vr-p">${fEur(r.prezzoUnitario)}</td></tr>` : '').join('')}
-            </tbody></table></div>`).join('')}
-        <div style="font:600 12px var(--f);margin:12px 0 6px">Quanti pezzi restano oggi?</div>
-        <table><tbody>${prodIds.map(id => { const p = prodotti.find(x => x._id === id); return p ? `<tr><td style="font-size:12px">${esc(p.nome)}</td><td style="width:110px"><input class="vr-r" data-id="${id}" type="number" step="0.5" min="0" style="${inp}"></td><td style="font-size:11px;color:var(--tx3)">${esc(p.unita || 'pz')}</td></tr>` : ''; }).join('')}</tbody></table>
-        <button class="btn btn-primary" id="magVerSalva" style="width:100%;margin-top:12px">✓ Confermo</button>
-        <p id="magVerEsito" style="font-size:12px;margin:8px 0 0;color:var(--tx3)"></p>`;
-    el.querySelectorAll('tr.vr').forEach(tr => tr.querySelector('.vr-q').addEventListener('input', () => {
-        const r = acquisti.find(a => a._id === tr.dataset.a).righe[tr.dataset.i];
-        const q = Number(tr.querySelector('.vr-q').value);
-        tr.querySelector('.vr-p').textContent = q > 0 && r.totaleRiga ? fEur(r.totaleRiga / q) : '—';
+
+    const fornitori = [...new Set(daVer.map(a => a.fornitoreNome))];
+    const gruppi = new Map();
+    daVer.forEach(a => (a.righe || []).forEach((r, i) => {
+        if (!r.isProdotto) return;
+        const key = r.prodottoId || `x:${a._id}:${i}`;
+        const g = gruppi.get(key) || { key, prodotto: prodotti.find(p => p._id === r.prodottoId), nome: r.nomeProdotto || r.descrizione, forn: a.fornitoreNome, righe: [] };
+        g.righe.push({ a, i, r });
+        gruppi.set(key, g);
     }));
+    // prima le schede con confezioni da sistemare, poi per fornitore e nome
+    const lista = [...gruppi.values()].sort((x, y) => (y.righe.some(o => unitaPeso(o.r.unita)) - x.righe.some(o => unitaPeso(o.r.unita))) || x.forn.localeCompare(y.forn) || x.nome.localeCompare(y.nome));
+
+    const rigaArrivo = ({ a, i, r }) => {
+        const peso = unitaPeso(r.unita);
+        const opt = [...new Set([...CONFEZIONI, r.unita || 'pz'])].map(u => `<option ${u === (r.unita || 'pz') ? 'selected' : ''}>${esc(u)}</option>`).join('');
+        return `<div class="mv-arr${peso ? ' open' : ''}" data-a="${a._id}" data-i="${i}">
+            <div class="mv-arr-row"><span class="d">${dmy(a.dataISO)}</span><span class="q"></span><span class="p"></span><button class="mv-edit-btn" type="button">Correggi</button></div>
+            ${peso ? `<div class="mv-alert">⚠ In fattura c'è "${fmtQ(r.quantita)} ${esc(r.unita)}": quante confezioni sono arrivate?</div>` : ''}
+            <div class="mv-ed">
+                <label>Pezzi<input class="vr-q" type="number" inputmode="numeric" min="0" step="1" value="${peso ? '' : r.quantita}" placeholder="?"></label>
+                <label>Confezione<select class="vr-u">${opt}</select></label>
+                <label>Formato<input class="vr-f" value="${esc(r.formato || (peso ? `${fmtQ(r.quantita)} ${r.unita}` : ''))}" placeholder="es. 25 kg"></label>
+            </div></div>`;
+    };
+
+    el.innerHTML = `<div class="mv-head"><div><h4>🔎 Controllo merce arrivata</h4>
+            <p>Ho letto le fatture da Fatture in Cloud. Per ogni prodotto <b>controlla cosa è arrivato</b> (tocca <i>Correggi</i> se è sbagliato) e <b>conta quanti ne hai oggi</b> in magazzino.</p></div>
+            <div class="mv-count"><span id="mvFatti">0</span><small> / ${lista.length}</small></div></div>
+        <div class="mv-bar"><i id="mvBar" style="width:0"></i></div>
+        <div class="mv-grid">${lista.map(g => `<div class="mv-card" data-k="${esc(g.key)}">
+            <div class="mv-top"><div class="mv-name">${esc(g.prodotto?.nome || g.nome)}<span class="mv-tick"></span></div><span class="mv-forn f${fornitori.indexOf(g.forn) % 3}">${esc(fornCorto(g.forn))}</span></div>
+            <div class="mv-lbl">Arrivati</div>
+            ${g.righe.map(rigaArrivo).join('')}
+            ${g.prodotto ? `<div class="mv-oggi"><div class="t">Quanti ne hai oggi?<small></small></div>
+                <div class="mv-step"><button type="button" data-d="-1">−</button><input class="vr-r" data-id="${g.prodotto._id}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="?"><button type="button" data-d="1">+</button><span class="u"></span><button type="button" class="fin">Finito</button></div></div>` : ''}
+        </div>`).join('')}</div>
+        <div class="mv-foot"><span id="mvMancano"></span><button class="btn btn-primary" id="magVerSalva">✓ Conferma</button></div>
+        <p id="magVerEsito" style="font-size:12px;margin:8px 0 0;color:var(--red)"></p>`;
+
+    const aggiorna = () => {
+        let fatti = 0;
+        el.querySelectorAll('.mv-card').forEach(card => {
+            let ok = true, unita = '';
+            card.querySelectorAll('.mv-arr').forEach(box => {
+                const r = acquisti.find(a => a._id === box.dataset.a).righe[box.dataset.i];
+                const q = box.querySelector('.vr-q').value, u = box.querySelector('.vr-u').value, f = box.querySelector('.vr-f').value.trim();
+                const n = Number(q);
+                box.querySelector('.q').innerHTML = q === '' ? '<span style="color:var(--amb)">quanti pezzi?</span>' : `<b>${fmtQ(n)} ${esc(nomeUnita(u, n))}</b>${f ? ` da ${esc(f)}` : ''}`;
+                box.querySelector('.p').textContent = n > 0 && r.totaleRiga ? fEur(r.totaleRiga / n) + ' cad.' : '';
+                const al = box.querySelector('.mv-alert');
+                if (al) al.style.display = unitaPeso(u) ? '' : 'none';
+                if (q === '' || unitaPeso(u)) ok = false;
+                unita = u;
+            });
+            const rest = card.querySelector('.vr-r');
+            if (rest) {
+                card.querySelector('.mv-step .u').textContent = nomeUnita(unita, Number(rest.value || 2));
+                card.querySelector('.mv-oggi small').textContent = /tanica|fusto|flacone|secchio|sacco/.test(unita) ? 'Conta anche quelli aperti (mezza = 0,5)' : '';
+                card.querySelector('.fin').classList.toggle('on', rest.value === '0');
+                if (rest.value === '') ok = false;
+            }
+            card.classList.toggle('ok', ok);
+            card.classList.toggle('warn', [...card.querySelectorAll('.vr-u')].some(x => unitaPeso(x.value)));
+            card.querySelector('.mv-tick').textContent = ok ? ' ✓' : '';
+            fatti += ok;
+        });
+        const tot = el.querySelectorAll('.mv-card').length;
+        el.querySelector('#mvFatti').textContent = fatti;
+        el.querySelector('#mvBar').style.width = (fatti / tot * 100) + '%';
+        el.querySelector('#mvMancano').textContent = fatti === tot ? 'Tutto controllato.' : `Mancano ${tot - fatti} prodott${tot - fatti === 1 ? 'o' : 'i'}`;
+    };
+    el.querySelectorAll('.mv-edit-btn').forEach(b => b.onclick = () => b.closest('.mv-arr').classList.toggle('open'));
+    el.querySelectorAll('.mv-step').forEach(s => {
+        const inp = s.querySelector('.vr-r');
+        s.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d)); aggiorna(); });
+        s.querySelector('.fin').onclick = () => { inp.value = 0; aggiorna(); };
+    });
+    el.oninput = el.onchange = aggiorna;
+    aggiorna();
+
     el.querySelector('#magVerSalva').onclick = async () => {
-        const vuoti = [...el.querySelectorAll('.vr-r')].filter(x => x.value === '');
-        el.querySelectorAll('.vr-r').forEach(x => x.style.borderColor = '');
-        if (vuoti.length) { vuoti.forEach(x => x.style.borderColor = 'var(--red)'); el.querySelector('#magVerEsito').textContent = 'Scrivi quanti pezzi restano per ogni prodotto (0 se finito).'; return; }
+        const esito = el.querySelector('#magVerEsito');
+        const manca = el.querySelector('.mv-card:not(.ok)');
+        if (manca) {
+            manca.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            manca.classList.remove('miss'); void manca.offsetWidth; manca.classList.add('miss');
+            esito.textContent = 'Completa le schede senza ✓: pezzi arrivati in confezioni (non kg/litri) e quanti ne hai oggi.';
+            return;
+        }
+        esito.textContent = '';
         const perAcq = {};
-        el.querySelectorAll('tr.vr').forEach(tr => (perAcq[tr.dataset.a] ||= []).push({ i: Number(tr.dataset.i), quantita: Number(tr.querySelector('.vr-q').value) || 0, unita: tr.querySelector('.vr-u').value.trim() || 'pz', formato: tr.querySelector('.vr-f').value.trim() || null }));
+        el.querySelectorAll('.mv-arr').forEach(box => (perAcq[box.dataset.a] ||= []).push({ i: Number(box.dataset.i), quantita: Number(box.querySelector('.vr-q').value) || 0, unita: box.querySelector('.vr-u').value, formato: box.querySelector('.vr-f').value.trim() || null }));
         const btn = el.querySelector('#magVerSalva'); btn.disabled = true; btn.textContent = 'Salvataggio…';
         try {
             await call('verificaCarichi', { acquisti: Object.entries(perAcq).map(([id, righe]) => ({ id, righe })), rilevazioni: [...el.querySelectorAll('.vr-r')].map(x => ({ prodottoId: x.dataset.id, pezzi: Number(x.value) })) });
             carica();
-        } catch (e) { btn.disabled = false; btn.textContent = '✓ Confermo'; el.querySelector('#magVerEsito').textContent = 'Errore: ' + (e.message || e); }
+        } catch (e) { btn.disabled = false; btn.textContent = '✓ Conferma'; esito.textContent = 'Errore: ' + (e.message || e); }
     };
 }
 

@@ -350,3 +350,59 @@ body:not([data-sede="paesi-etnei"]) .pe-only { display: none !important; }
     .topbar { padding-top: max(16px, env(safe-area-inset-top)); }
     .page-content { padding-bottom: max(28px, calc(env(safe-area-inset-bottom) + 16px)); }
 }
+
+/* ─── MAGAZZINO: controllo merce arrivata ─── */
+.mv { background: var(--bg2); border: 1px solid var(--gold-ring); border-radius: var(--r); padding: 18px; margin-bottom: 14px; }
+.mv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.mv-head h4 { font: 700 16px var(--f); margin: 0 0 4px; }
+.mv-head p { font: 400 13px var(--f); color: var(--tx2); margin: 0; max-width: 620px; }
+.mv-count { font: 700 22px var(--mono); color: var(--gold); white-space: nowrap; }
+.mv-count small { font: 400 12px var(--mono); color: var(--tx3); }
+.mv-bar { height: 6px; background: var(--bg4); border-radius: 3px; margin: 12px 0 16px; overflow: hidden; }
+.mv-bar i { display: block; height: 100%; background: var(--grn); border-radius: 3px; transition: width .25s; }
+.mv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.mv-card { border: 1.5px solid var(--brd2); border-radius: var(--r2); padding: 14px; background: var(--bg2); transition: border-color .2s, background .2s; }
+.mv-card.ok { border-color: var(--grn); background: var(--grn1); }
+.mv-card.warn { border-color: var(--amb); }
+.mv-card.miss { animation: mvShake .4s; border-color: var(--red); }
+@keyframes mvShake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.mv-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.mv-name { font: 600 15px var(--f); line-height: 1.25; }
+.mv-name .mv-tick { color: var(--grn); margin-left: 4px; }
+.mv-forn { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .4px; padding: 3px 7px; border-radius: 6px; white-space: nowrap; background: var(--gold-subtle); color: var(--gold); }
+.mv-forn.f1 { background: var(--blu1); color: var(--blu); }
+.mv-forn.f2 { background: var(--amb1); color: var(--amb); }
+.mv-lbl { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .5px; color: var(--tx3); margin-bottom: 4px; }
+.mv-arr { border-top: 1px solid var(--brd); padding: 8px 0; }
+.mv-arr-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.mv-arr-row .d { font: 400 11px var(--mono); color: var(--tx3); width: 42px; flex-shrink: 0; }
+.mv-arr-row .q { flex: 1; }
+.mv-arr-row .q b { font-weight: 600; }
+.mv-arr-row .p { font: 400 12px var(--mono); color: var(--tx2); white-space: nowrap; }
+.mv-edit-btn { background: none; border: 0; color: var(--blu); font: 500 12px var(--f); cursor: pointer; padding: 4px 2px; }
+.mv-alert { margin-top: 6px; font-size: 12px; color: var(--amb); font-weight: 500; }
+.mv-ed { display: none; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+.mv-arr.open .mv-ed { display: grid; }
+.mv-ed label { font: 500 10px var(--mono); color: var(--tx3); text-transform: uppercase; display: flex; flex-direction: column; gap: 3px; }
+.mv-ed input, .mv-ed select { background: var(--bg4); border: 1px solid var(--brd2); color: var(--tx); border-radius: 8px; padding: 8px; font: 500 14px var(--f); width: 100%; min-width: 0; outline: 0; }
+.mv-ed input:focus, .mv-ed select:focus, .mv-step input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-ring); }
+.mv-oggi { border-top: 1px solid var(--brd); padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mv-oggi .t { font: 600 13px var(--f); }
+.mv-oggi .t small { display: block; font: 400 11px var(--f); color: var(--tx3); }
+.mv-step { display: flex; align-items: center; gap: 6px; }
+.mv-step button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--brd2); background: var(--bg4); font: 600 18px var(--f); color: var(--tx); cursor: pointer; }
+.mv-step button:active { transform: scale(.94); }
+.mv-step input { width: 56px; height: 36px; text-align: center; border: 1px solid var(--brd2); border-radius: 10px; font: 700 16px var(--mono); background: var(--bg2); color: var(--tx); outline: 0; -moz-appearance: textfield; }
+.mv-step input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.mv-step .u { font-size: 12px; color: var(--tx2); min-width: 48px; }
+.mv-step .fin { width: auto; padding: 0 10px; font: 500 12px var(--f); color: var(--tx2); }
+.mv-step .fin.on { background: var(--tx); color: var(--bg2); border-color: var(--tx); }
+.mv-foot { position: sticky; bottom: 0; margin: 16px -18px -18px; padding: 12px 18px; background: var(--bg2); border-top: 1px solid var(--brd2); border-radius: 0 0 var(--r) var(--r); display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 2; }
+.mv-foot span { font-size: 13px; color: var(--tx2); }
+.mv-foot .btn { min-width: 200px; padding: 12px 18px; font-size: 14px; }
+@media (max-width: 430px) {
+    .mv { padding: 14px; }
+    .mv-grid { grid-template-columns: 1fr; }
+    .mv-foot { margin: 14px -14px -14px; padding: 10px 14px; flex-direction: column; align-items: stretch; }
+    .mv-foot .btn { min-width: 0; }
+}
