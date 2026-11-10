@@ -69,6 +69,19 @@ interface Ora { h: number; mm: number; prob: number | null; nuvole: number; wc: 
 interface Sintesi {
   data: string; mm: number; ore: number; probMax: number; probMedia: number; nuvole: number; tmax: number; ventoMax: number
   mmGiorno: number; dopoMm: number; dopoOre: number; orePioggia: number[]; orario: Ora[]; wcPrevalente: number
+  cielo?: Cielo
+}
+
+// Cielo per fascia (Guido 10/11: "verde con cielo coperto"). Il semaforo resta sulla pioggia — nei dati Lungomare
+// le giornate asciutte e nuvolose incassano come le serene — ma la media del giorno nasconde una mattina grigia.
+interface Cielo { mattina: number; pomeriggio: number; testo: string }
+const CIELO: [number, string, string][] = [[25, '☀️', 'sereno'], [55, '🌤️', 'poco nuvoloso'], [80, '⛅', 'nuvoloso'], [101, '☁️', 'coperto']]
+const cieloCat = (n: number) => CIELO.find(([max]) => n < max) || CIELO[3]
+function cielo(orario: { h: number; nuvole: number }[]): Cielo {
+  const media = (a: number[]) => Math.round(a.reduce((x, y) => x + y, 0) / (a.length || 1))
+  const mattina = media(orario.filter(o => o.h < 13).map(o => o.nuvole)), pomeriggio = media(orario.filter(o => o.h >= 13).map(o => o.nuvole))
+  const [, em, tm] = cieloCat(mattina), [, ep, tp] = cieloCat(pomeriggio)
+  return { mattina, pomeriggio, testo: tm === tp ? `${em} ${tm} tutto il giorno` : `${em} ${tm} la mattina, ${ep} ${tp} il pomeriggio` }
 }
 
 // ── Fonti: più modelli indipendenti, mai un solo meteo (Guido 27/09). Tutte gratuite, senza chiave. ──
@@ -99,6 +112,7 @@ function sintesi(data: string, cfg: Cfg, giorno: Ora[], dopo: Ora[]): Sintesi {
     orePioggia: orario.filter(o => o.mm >= 0.1).map(o => o.h),
     orario,
     wcPrevalente: Number(Object.entries(wcCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0),
+    cielo: cielo(orario),
   }
 }
 
@@ -172,6 +186,7 @@ async function previsioneMultiFonte(sede: SedeCfg, cfg: Cfg, data: string): Prom
     nuvole: Math.round(mediana(list.map(s => s.nuvole))), tmax: Math.round(mediana(list.map(s => s.tmax))), ventoMax: Math.round(mediana(list.map(s => s.ventoMax))),
     mmGiorno: r1(mediana(list.map(s => s.mmGiorno))), dopoMm: r1(mediana(list.map(s => s.dopoMm))), dopoOre: Math.round(mediana(list.map(s => s.dopoOre))),
     orePioggia, orario: base.orario, wcPrevalente: base.wcPrevalente,
+    cielo: cielo(ore.map(h => ({ h, nuvole: mediana(list.map(s => s.orario.find(o => o.h === h)?.nuvole).filter((n): n is number => n != null)) }))),
   }
   return { ensemble, fonti }
 }
@@ -189,9 +204,9 @@ function livello(s: Sintesi, cfg: Cfg): { livello: Livello; motivo: string } {
   if (mm >= S.rosso.mm || s.ore >= S.rosso.ore) return { livello: 'ROSSO', motivo: `pioggia ${s.mm} mm in ${s.ore} ore di apertura (${s.mmGiorno} mm nelle 24h)` }
   if (mm >= S.arancio.mm || s.ore >= S.arancio.ore) return { livello: 'ARANCIO', motivo: `pioggia ${s.mm} mm in ${s.ore} ore (${s.mmGiorno} mm nelle 24h)` }
   if (s.mm >= S.giallo.mm || s.ore >= S.giallo.ore) return { livello: 'GIALLO', motivo: `pioggia debole ${s.mm} mm (${s.ore} h)` }
-  if (s.nuvole >= S.giallo.nuvole) return { livello: 'GIALLO', motivo: `molto nuvoloso (${s.nuvole}%)` }
-  if (s.dopoMm >= S.giallo.dopoMm) return { livello: 'GIALLO', motivo: `asciutto ma dopodomani pioggia ${s.dopoMm} mm` }
-  return { livello: 'VERDE', motivo: `asciutto, nuvole ${s.nuvole}%` }
+  if (s.nuvole >= S.giallo.nuvole) return { livello: 'GIALLO', motivo: `niente pioggia ma molto nuvoloso (${s.nuvole}%)` }
+  if (s.dopoMm >= S.giallo.dopoMm) return { livello: 'GIALLO', motivo: `niente pioggia, ma dopodomani ${s.dopoMm} mm` }
+  return { livello: 'VERDE', motivo: 'niente pioggia' }
 }
 
 const WC: Record<number, string> = { 0: 'sereno', 1: 'poco nuvoloso', 2: 'nuvoloso', 3: 'coperto', 45: 'nebbia', 48: 'nebbia', 51: 'pioviggine', 53: 'pioviggine', 55: 'pioviggine', 61: 'pioggia debole', 63: 'pioggia', 65: 'pioggia forte', 80: 'rovesci', 81: 'rovesci', 82: 'rovesci forti', 95: 'temporale', 96: 'temporale', 99: 'temporale' }
@@ -250,7 +265,7 @@ function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo
   const cambio = precedente && precedente !== lv.livello ? ` (ieri sera ${EMOJI[precedente]})` : ''
   return `${EMOJI[lv.livello]} <b>${sedeNome} — ${LABEL[lv.livello]}</b>${cambio}
 ${lv.motivo}
-${WC[s.wcPrevalente] || 'variabile'}, prob. max ${s.probMax}%, nuvole ${s.nuvole}%, max ${s.tmax}°, vento ${s.ventoMax} km/h
+${s.cielo?.testo || WC[s.wcPrevalente] || 'variabile'} · prob. pioggia max ${s.probMax}% · max ${s.tmax}° · vento ${s.ventoMax} km/h
 Ore con pioggia: ${ore} · dopodomani ${s.dopoMm} mm${incerto}
 Fonti ${accordo}/${n} · ${rigaFonti(fonti, cfg, lv.livello)}${consiglio ? `
 👥 <b>Personale consigliato: ${consiglio.personale}</b>${consiglio.fissi ? ` (${consiglio.fissi} fiss${consiglio.fissi === 1 ? 'o' : 'i'} + ${consiglio.personale - consiglio.fissi} a giornata)` : ''} · attese ~${consiglio.attese} auto (${consiglio.prenotate} già prenotate) · ~${consiglio.capacita} auto a persona${consiglio.tappezzerie ? ` · ${consiglio.tappezzerie} tappezzeri${consiglio.tappezzerie === 1 ? 'a' : 'e'} in lavorazione (+${String(consiglio.caricoTappezzeria).replace('.', ',')} persona)` : ''}${consiglio.nota ? ` · ${consiglio.nota}` : ''}` : ''}`
@@ -399,7 +414,7 @@ export const meteoApi = onCall({ region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }
   if (action === 'ultimi') {
     const da = giornoRome(-Math.min(60, Number(giorni) || 14))
     const snap = await db.collection('meteoGiornata').where('sedeId', '==', sedeId).get()   // date filtrate in memoria: niente indice composito
-    return { giorni: snap.docs.filter(d => d.data().data >= da).sort((a, b) => String(b.data().data).localeCompare(String(a.data().data))).map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, tappezzerie: x.tappezzerie || null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
+    return { giorni: snap.docs.filter(d => d.data().data >= da).sort((a, b) => String(b.data().data).localeCompare(String(a.data().data))).map(d => { const x = d.data(); return { data: x.data, livello: x.livello, livelloSera: x.livelloSera, livelloMattina: x.livelloMattina, motivo: x.motivo, mm: x.mm, ore: x.ore, probMax: x.probMax, nuvole: x.nuvole, cielo: x.cielo || null, tmax: x.tmax, orePioggia: x.orePioggia, dopoMm: x.dopoMm, reale: x.reale || null, incasso: x.incasso ?? null, incassoLavaggi: x.incassoLavaggi ?? null, presenze: x.presenze || null, incassoPerDipendente: x.incassoPerDipendente ?? null, margineLordo: x.margineLordo ?? null, esito: x.esito || null, storico: !!x.storico, auto: x.auto ?? null, tappezzerie: x.tappezzerie || null, consiglio: x.consiglio || null, consiglioEsito: x.consiglioEsito || null, nFonti: x.nFonti ?? null, fontiSera: x.fontiSera || null, fontiEsito: x.fontiEsito || null, erroreMm: x.erroreMm ?? null, aggiornatoTs: x.aggiornatoTs } }) }
   }
   if (action === 'config') return await getCfg()
   if (action === 'testOra') {   // admin: forza la previsione di stasera adesso (taratura)
