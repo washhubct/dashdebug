@@ -23,7 +23,9 @@ import { referralSeValido, validaReferral, datiAmico } from './referral-check'
 //   POST /caparra/checkout { dati prenotazione, consenso } → { id, url }
 //   POST /caparra/webhook  (return_url SumUp)
 //   GET  /caparra/stato?id=
-//   POST /disdici          { telefono, nome, dataPren } → { disdette, troppoTardi, rimborsi }
+//   POST /disdici          { telefono, nome, dataPren, orari? } → { disdette, troppoTardi, rimborsi } | { scegli: [...] }
+//   POST /gia-prenotato    { telefono, dataPren, vettura, targa? } → { stessaAuto: [orario] }
+//   POST /sposta           { telefono, nome, dataPren, daOrario, aOrario } → { ok, orario }
 //   POST /referral/valida  { codice, telefono, nome }    → { esito: ok | self | non-trovato | gia-cliente | esaurito }
 // Config: config/caparra { attivo, importo, mesi, oreDisdetta }
 // ═══════════════════════════════════════════════════════════════════
@@ -161,6 +163,18 @@ async function rimborsaOrdine(col: 'caparraOrdini' | 'priorityOrdini', id: strin
 }
 
 const DATA_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// Stesso telefono, stesso giorno (Guido 10/11, caso Di Mauro): con vetture diverse è normale (famiglia, flotta),
+// con la stessa vettura quasi sempre è uno spostamento → il sito propone di spostare invece di raddoppiare.
+const norm = (x: unknown) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+function stessaAuto(v: Record<string, any>, vettura: string, targa: string) {
+  const tv = norm(v.targa || (String(v.note || '').match(/Targa: ([A-Z0-9]+)/i) || [])[1])
+  if (tv && targa) return tv === targa
+  return norm(v.vettura) === norm(vettura)
+}
+// Il nome della prenotazione contiene almeno una parola (≥3 lettere) di quello scritto
+const nomeCombacia = (cliente: unknown, nome: string) => nome.toUpperCase().split(/\s+/).filter(w => w.length >= 3).some(w => String(cliente || '').toUpperCase().includes(w))
+const attiva = (v: Record<string, any>) => v.saldato !== 'SI' && v.stato !== 'NO_SHOW' && v.stato !== 'DISDETTA'
 const TEL_RE = /^\+?[0-9 ]{8,16}$/
 
 export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY], cors: false, maxInstances: 10 }, async (req, res) => {
@@ -255,6 +269,41 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
       return
     }
 
+    // ── POST /gia-prenotato ── stessa vettura già prenotata quel giorno? (solo gli orari, niente dati personali)
+    if (req.method === 'POST' && path === '/gia-prenotato') {
+      const b = (req.body || {}) as Record<string, unknown>
+      const t = tel9(b.telefono), dataPren = String(b.dataPren || '')
+      if (t.length < 9 || !DATA_RE.test(dataPren)) { res.json({ stessaAuto: [] }); return }
+      const snap = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
+      const stessa = snap.docs.map(d => d.data()).filter(v => tel9(v.telefono) === t && attiva(v) && stessaAuto(v, String(b.vettura || ''), norm(b.targa)))
+      res.json({ stessaAuto: stessa.map(v => v.orario).sort() })
+      return
+    }
+
+    // ── POST /sposta ── cambia orario alla prenotazione esistente (stesso doc: caparra e storico restano attaccati)
+    if (req.method === 'POST' && path === '/sposta') {
+      const b = (req.body || {}) as Record<string, unknown>
+      const t = tel9(b.telefono), nome = String(b.nome || '').trim(), dataPren = String(b.dataPren || '')
+      const daOrario = String(b.daOrario || ''), aOrario = String(b.aOrario || '')
+      if (t.length < 9 || nome.length < 3 || !DATA_RE.test(dataPren) || !SLOTS.includes(aOrario)) { res.status(400).json({ error: 'Dati non validi' }); return }
+      if (romeToEpoch(`${dataPren}T${aOrario}`) <= Date.now()) { res.status(409).json({ error: 'Questo orario è già passato. Scegline un altro.' }); return }
+      const snap = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
+      const mia = snap.docs.find(d => { const v = d.data(); return v.orario === daOrario && tel9(v.telefono) === t && nomeCombacia(v.cliente, nome) && attiva(v) })
+      if (!mia) { res.status(404).json({ error: 'Non trovo la prenotazione da spostare: scrivici su WhatsApp.' }); return }
+      if (mia.data().priorityOrdineId) { res.status(409).json({ error: 'La prenotazione Priority non si sposta online: scrivici su WhatsApp.' }); return }
+      if (romeToEpoch(`${dataPren}T${daOrario}`) <= Date.now()) { res.status(409).json({ error: `L'orario delle ${daOrario} è già iniziato: scrivici su WhatsApp.` }); return }
+      const ok = await db.runTransaction(async tx => {
+        const occ = await tx.get(db.collection('prenotazioni').where('dataPren', '==', dataPren))
+        if (occ.docs.some(d => d.id !== mia.id && d.data().orario === aOrario && d.data().stato !== 'DISDETTA')) return false
+        tx.update(mia.ref, { orario: aOrario, spostataDa: daOrario, spostataTs: Date.now(), spostataVia: 'sito' })
+        return true
+      })
+      if (!ok) { res.status(409).json({ error: 'Questo orario è appena stato preso. Scegline un altro.' }); return }
+      console.log(`↔️ spostata online ${dataPren} ${daOrario} → ${aOrario} tel …${t.slice(-3)}`)
+      res.json({ ok: true, orario: aOrario })
+      return
+    }
+
     // ── POST /disdici ──
     if (req.method === 'POST' && path === '/disdici') {
       const b = (req.body || {}) as Record<string, unknown>
@@ -264,11 +313,16 @@ export const prenotaOnline = onRequest({ region: REGION, secrets: [SUMUP_API_KEY
       if (t.length < 9 || nome.length < 3 || !DATA_RE.test(dataPren)) { res.status(400).json({ error: 'Inserisci telefono, nome e giorno della prenotazione' }); return }
       const cfg = await getConfig()
       const snap = await db.collection('prenotazioni').where('dataPren', '==', dataPren).get()
-      const mie = snap.docs.filter(d => {
-        const v = d.data()
-        return tel9(v.telefono) === t && String(v.cliente || '').toUpperCase().includes(nome)
-          && v.saldato !== 'SI' && v.stato !== 'NO_SHOW' && v.stato !== 'DISDETTA'
-      })
+      const tutte = snap.docs.filter(d => { const v = d.data(); return tel9(v.telefono) === t && nomeCombacia(v.cliente, nome) && attiva(v) })
+      if (!tutte.length) { res.status(404).json({ error: 'Nessuna prenotazione trovata con questi dati per quel giorno.' }); return }
+      // Più prenotazioni nello stesso giorno: si sceglie quali disdire, mai tutte d'ufficio (caso Di Mauro 10/11)
+      const orari = Array.isArray(b.orari) ? (b.orari as unknown[]).map(String) : null
+      if (!orari && tutte.length > 1) {
+        res.json({ disdette: [], troppoTardi: [], rimborsi: [], oreDisdetta: cfg.oreDisdetta,
+          scegli: tutte.map(d => { const v = d.data(); return { orario: v.orario, vettura: v.vettura || '', disdicibile: romeToEpoch(`${dataPren}T${v.orario || '00:00'}`) - Date.now() >= cfg.oreDisdetta * 3600e3 } }).sort((x, y) => String(x.orario).localeCompare(String(y.orario))) })
+        return
+      }
+      const mie = orari ? tutte.filter(d => orari.includes(d.data().orario)) : tutte
       if (!mie.length) { res.status(404).json({ error: 'Nessuna prenotazione trovata con questi dati per quel giorno.' }); return }
       const disdette: string[] = [], troppoTardi: string[] = [], rimborsi: { tipo: string; importo: number; ok: boolean }[] = []
       for (const d of mie) {
