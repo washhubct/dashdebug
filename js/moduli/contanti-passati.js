@@ -7,8 +7,8 @@ import { fmtDI } from '../utils.js';
 import { state } from '../state.js';
 
 // Finestra di visibilità dei contanti per sede (giorni indietro oltre a oggi).
-// Paesi Etnei: 7 giorni, perché Skippa registra gli incassi manuali anche a distanza di giorni (Guido 28/09/2026).
-const FINESTRA_GIORNI = { lungomare: 0, 'paesi-etnei': 7 };
+// Paesi Etnei: 31 giorni, perché Skippa registra gli incassi manuali anche a più di una settimana di distanza (Guido 28/09 → 11/11/2026).
+const FINESTRA_GIORNI = { lungomare: 0, 'paesi-etnei': 31 };
 
 export const oggiISO = () => fmtDI(new Date());
 
@@ -26,7 +26,7 @@ export function toISO(d) {
     return a ? `${a}-${m}-${g}` : '';
 }
 
-/** true se il giorno è fuori dalla finestra di visibilità della sede attiva (Lungomare: prima di oggi; Paesi Etnei: più di 7 giorni fa). */
+/** true se il giorno è fuori dalla finestra di visibilità della sede attiva (Lungomare: prima di oggi; Paesi Etnei: più di 31 giorni fa). */
 export const giornoPassato = (data) => { const iso = toISO(data); return !!iso && iso < limiteISO(); };
 
 /** true se il movimento va nascosto: pagato in contanti in un giorno già concluso. */

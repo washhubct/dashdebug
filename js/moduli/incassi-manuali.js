@@ -114,6 +114,7 @@ async function addIncasso() {
 
         renderIncassiManuali();
         renderCassa();
+        if (nascondiContante(metodo, dStr)) alert(`Incasso salvato ✓\n\nI contanti del ${dIta} sono troppo vecchi per comparire in lista, ma sono registrati (Prima Nota e Report). Non reinserirlo.`);
     } catch (e) {
         console.error('Errore salvataggio incasso manuale:', e);
         alert('Errore Cloud');
