@@ -28,7 +28,7 @@
 // svuotando cache Service Worker e localStorage di versione.
 (function(){
     // Tenere uguale a version.json: il gestionale aperto lo controlla ogni 5 min e si ricarica
-    var APP_VERSION = '20261111a';
+    var APP_VERSION = '20261113a';
     window.WH_APP_VERSION = APP_VERSION;
     var KEY = 'wh_app_version';
     try {
@@ -799,12 +799,14 @@
 </div>
 <div style="display:flex;gap:6px;flex-wrap:wrap">
   <button class="btn btn-primary" id="magFotoBtn">📷 Carica fattura</button>
+  <button class="btn" id="magContaBtn">📋 Conta magazzino</button>
   <button class="btn" id="magRefreshBtn">↻</button>
   <input type="file" id="magFile" accept="image/*,application/pdf,.xml,text/xml" multiple style="display:none">
 </div>
 </div>
 <div class="kpis" id="magKpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px"></div>
 <div id="magVerifica" class="mv" style="display:none"></div>
+<div id="magConta" class="mv" style="display:none;margin-bottom:14px"></div>
 <div style="padding:12px 14px;border:1px dashed var(--amb);border-radius:var(--r2);margin-bottom:14px"><div style="font:600 11px var(--mono);color:var(--amb);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ordini da fare</div><div id="magOrdini"></div></div>
 <div id="magFornitori" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-bottom:14px"></div>
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">

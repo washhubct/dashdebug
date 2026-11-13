@@ -20,12 +20,14 @@ const ORDINI_STORICO = 6;    // ultimi ordini usati per il consumo (segue la sta
 let prodotti = [], acquisti = [];
 const call = (action, data = {}) => magazzinoCall(action, { ...data, sedeId: state.sedeAttiva });
 let filtroCat = '', filtroForn = '', cerca = '';
+let contaAperta = false;
 
 export function initMagazzino() {
     document.addEventListener('pageChanged', e => { if (e.detail?.pageId === 'magazzino') carica(); });
     document.getElementById('magFotoBtn')?.addEventListener('click', () => document.getElementById('magFile')?.click());
     document.getElementById('magFile')?.addEventListener('change', e => { const f = [...(e.target.files || [])]; e.target.value = ''; if (f.length) leggiFattura(f); });
     document.getElementById('magRefreshBtn')?.addEventListener('click', carica);
+    document.getElementById('magContaBtn')?.addEventListener('click', () => { contaAperta = !contaAperta; renderConta(); if (contaAperta) document.getElementById('magConta')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     document.getElementById('magCat')?.addEventListener('change', e => { filtroCat = e.target.value; render(); });
     document.getElementById('magForn')?.addEventListener('change', e => { filtroForn = e.target.value; render(); });
     document.getElementById('magCerca')?.addEventListener('input', e => { cerca = e.target.value.toLowerCase(); render(); });
@@ -118,6 +120,7 @@ function render() {
         <div class="kpi ${aumenti.length ? 'r' : ''}"><div class="kpi-label">Rincari recenti</div><div class="kpi-val">${aumenti.length}</div></div>`;
 
     renderVerifica();
+    renderConta();
     renderOrdini(stati);
     renderFornitori();
 
@@ -259,7 +262,7 @@ function renderVerifica() {
     el.querySelectorAll('.mv-edit-btn').forEach(b => b.onclick = () => b.closest('.mv-arr').classList.toggle('open'));
     el.querySelectorAll('.mv-step').forEach(s => {
         const inp = s.querySelector('.vr-r');
-        s.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d)); aggiorna(); });
+        s.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { if (inp.value === '' && b.dataset.d < 0) return; inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d)); aggiorna(); });
         s.querySelector('.fin').onclick = () => { inp.value = 0; aggiorna(); };
     });
     el.oninput = el.onchange = aggiorna;
@@ -275,6 +278,7 @@ function renderVerifica() {
             return;
         }
         esito.textContent = '';
+        if (!confermaZeri([...el.querySelectorAll('.vr-r')])) return;
         const perAcq = {};
         el.querySelectorAll('.mv-arr').forEach(box => (perAcq[box.dataset.a] ||= []).push({ i: Number(box.dataset.i), quantita: Number(box.querySelector('.vr-q').value) || 0, unita: box.querySelector('.vr-u').value, formato: box.querySelector('.vr-f').value.trim() || null }));
         const btn = el.querySelector('#magVerSalva'); btn.disabled = true; btn.textContent = 'Salvataggio…';
@@ -282,6 +286,70 @@ function renderVerifica() {
             await call('verificaCarichi', { acquisti: Object.entries(perAcq).map(([id, righe]) => ({ id, righe })), rilevazioni: [...el.querySelectorAll('.vr-r')].map(x => ({ prodottoId: x.dataset.id, pezzi: Number(x.value) })) });
             carica();
         } catch (e) { btn.disabled = false; btn.textContent = '✓ Conferma'; esito.textContent = 'Errore: ' + (e.message || e); }
+    };
+}
+
+// Zero su un prodotto arrivato da poco = quasi sempre "Finito" premuto per chiudere la scheda
+// senza contare (09/11: Odorbact 24 flaconi arrivati il 4/11 segnati a 0). Chiedo conferma.
+function confermaZeri(inputs) {
+    const da14 = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+    const sospetti = inputs.filter(x => x.value === '0').map(x => {
+        const p = prodotti.find(q => q._id === x.dataset.id);
+        const arr = acquisti.filter(a => (a.dataISO || '') >= da14).flatMap(a => (a.righe || []).filter(r => r.prodottoId === x.dataset.id).map(r => ({ q: r.quantita, u: r.unita, d: a.dataISO })));
+        return arr.length ? `• ${p?.nome || '?'}: ne sono arrivati ${arr.map(r => `${fmtQ(r.q)} ${r.u} il ${dmy(r.d)}`).join(' + ')}` : null;
+    }).filter(Boolean);
+    return !sospetti.length || confirm(`Hai segnato 0 (finiti) prodotti arrivati da poco:\n\n${sospetti.join('\n')}\n\nSono davvero finiti tutti? Annulla per contarli.`);
+}
+
+// ─── CONTA MAGAZZINO ───
+// Conta libera dei pezzi (anche senza fatture da verificare): ogni numero inserito
+// è una rilevazione "quanti ne restano oggi" che aggiorna consumi e giacenza.
+// Si salvano solo i prodotti compilati.
+function renderConta() {
+    const el = document.getElementById('magConta');
+    if (!el) return;
+    el.style.display = contaAperta ? '' : 'none';
+    if (!contaAperta) return;
+    const sede = state.sedeAttiva;
+    const lista = prodotti.filter(p => acquisti.some(a => (a.righe || []).some(r => r.prodottoId === p._id)) || p.rilevazioni?.[sede]?.length)
+        .sort((x, y) => (x.fornitoreNome || '').localeCompare(y.fornitoreNome || '') || x.nome.localeCompare(y.nome));
+    const fornitori = [...new Set(lista.map(p => p.fornitoreNome))];
+    const ultima = p => (p.rilevazioni?.[sede] || []).reduce((m, r) => (!m || r.dataISO >= m.dataISO ? r : m), null);
+    el.innerHTML = `<div class="mv-head"><div><h4>📋 Conta magazzino</h4>
+            <p>Conta i pezzi che hai davanti, <b>anche quelli aperti</b> (mezza tanica = 0,5). Compila solo quelli che hai contato: gli altri restano come sono.</p></div>
+            <div class="mv-count"><span id="mcFatti">0</span><small> / ${lista.length}</small></div></div>
+        <div class="mv-grid">${lista.map(p => { const u = ultima(p); return `<div class="mv-card">
+            <div class="mv-top"><div class="mv-name">${esc(p.nome)}<span class="mv-tick"></span></div><span class="mv-forn f${fornitori.indexOf(p.fornitoreNome) % 3}">${esc(fornCorto(p.fornitoreNome))}</span></div>
+            <div class="mv-lbl">${u ? `Ultima conta: ${fmtQ(u.pezzi)} ${esc(nomeUnita(p.unita || 'pz', u.pezzi))} il ${dmy(u.dataISO)}` : 'Mai contato'}${p.formato ? ` · da ${esc(p.formato)}` : ''}</div>
+            <div class="mv-oggi"><div class="t">Quanti ne hai oggi?</div>
+                <div class="mv-step"><button type="button" data-d="-1">−</button><input class="vr-r" data-id="${p._id}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="?"><button type="button" data-d="1">+</button><span class="u">${esc(nomeUnita(p.unita || 'pz', 2))}</span></div></div>
+        </div>`; }).join('')}</div>
+        <div class="mv-foot"><span id="mcMancano"></span><button class="btn" id="magContaChiudi">Chiudi</button> <button class="btn btn-primary" id="magContaSalva">✓ Salva conta</button></div>
+        <p id="magContaEsito" style="font-size:12px;margin:8px 0 0;color:var(--red)"></p>`;
+    const aggiorna = () => {
+        let n = 0;
+        el.querySelectorAll('.mv-card').forEach(c => { const ok = c.querySelector('.vr-r').value !== ''; c.classList.toggle('ok', ok); c.querySelector('.mv-tick').textContent = ok ? ' ✓' : ''; n += ok; });
+        el.querySelector('#mcFatti').textContent = n;
+        el.querySelector('#mcMancano').textContent = n ? `${n} contati` : 'Nessun prodotto contato';
+    };
+    el.querySelectorAll('.mv-step').forEach(s => {
+        const inp = s.querySelector('.vr-r');
+        s.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { if (inp.value === '' && b.dataset.d < 0) return; inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d)); aggiorna(); });
+    });
+    el.oninput = aggiorna;
+    aggiorna();
+    el.querySelector('#magContaChiudi').onclick = () => { contaAperta = false; renderConta(); };
+    el.querySelector('#magContaSalva').onclick = async () => {
+        const esito = el.querySelector('#magContaEsito');
+        const compilati = [...el.querySelectorAll('.vr-r')].filter(x => x.value !== '');
+        if (!compilati.length) { esito.textContent = 'Inserisci almeno un prodotto contato.'; return; }
+        if (!confermaZeri(compilati)) return;
+        const btn = el.querySelector('#magContaSalva'); btn.disabled = true; btn.textContent = 'Salvataggio…';
+        try {
+            await call('verificaCarichi', { acquisti: [], rilevazioni: compilati.map(x => ({ prodottoId: x.dataset.id, pezzi: Number(x.value) })) });
+            contaAperta = false;
+            carica();
+        } catch (e) { btn.disabled = false; btn.textContent = '✓ Salva conta'; esito.textContent = 'Errore: ' + (e.message || e); }
     };
 }
 
