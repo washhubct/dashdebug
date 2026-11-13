@@ -16,6 +16,7 @@ import { fEur, esc } from '../utils.js';
 const COPERTURA_MIN = 14;   // giorni: sotto → da ordinare
 const COPERTURA_ORDINE = 30; // giorni di scorta che un ordine deve coprire
 const ORDINI_STORICO = 6;    // ultimi ordini usati per il consumo (segue la stagione)
+const COPERTURA_ALTA = 60;   // giorni: sopra → scorta troppo alta (magazzino pieno, rischio scadenze)
 
 let prodotti = [], acquisti = [];
 const call = (action, data = {}) => magazzinoCall(action, { ...data, sedeId: state.sedeAttiva });
@@ -70,16 +71,21 @@ function ordini(p) {
 }
 
 // Ogni coppia di ordini consecutivi è una misura del consumo in quel periodo.
+// Un periodo che finisce a 0 (o con rimasti non indicati) non dice quando il prodotto
+// è finito: i giorni passati a scaffale vuoto farebbero sembrare il consumo più basso
+// e l'ordine arriverebbe tardi. Quei periodi valgono solo come minimo, se non c'è altro.
 function consumo(ord) {
     const o = ord.slice(-ORDINI_STORICO);
     if (o.length < 2) return null;
     const periodi = o.slice(1).map((b, i) => {
         const a = o[i];
-        return { dal: a.dataISO, al: b.dataISO, giorni: Math.round((new Date(b.dataISO) - new Date(a.dataISO)) / 864e5), usati: Math.max(0, (a.r ?? 0) + a.q - (b.r ?? 0)) };
+        return { dal: a.dataISO, al: b.dataISO, giorni: Math.round((new Date(b.dataISO) - new Date(a.dataISO)) / 864e5), usati: Math.max(0, (a.r ?? 0) + a.q - (b.r ?? 0)), esaurito: !(b.r > 0) };
     });
-    const giorni = periodi.reduce((s, x) => s + x.giorni, 0);
+    const pieni = periodi.filter(x => !x.esaurito);
+    const base = pieni.reduce((s, x) => s + x.giorni, 0) >= 3 ? pieni : periodi;
+    const giorni = base.reduce((s, x) => s + x.giorni, 0);
     if (giorni < 3) return null;
-    return { giorno: periodi.reduce((s, x) => s + x.usati, 0) / giorni, periodi };
+    return { giorno: base.reduce((s, x) => s + x.usati, 0) / giorni, periodi, minimo: base !== pieni };
 }
 
 function statoProdotto(p) {
@@ -91,7 +97,8 @@ function statoProdotto(p) {
     const g = ultimo ? Math.max(0, (ultimo.r ?? 0) + ultimo.q - (c ? c.giorno * giorniDaUltimo : 0)) : 0;
     const copertura = c ? g / c.giorno : null;
     const min = Number(p.scortaMin?.[state.sedeAttiva]) || 0;
-    const daOrdinare = (copertura !== null && copertura < COPERTURA_MIN) || (min > 0 && g <= min);
+    const finito = !!ultimo && ultimo.q === 0 && ultimo.r === 0; // l'ultima conta l'ha trovato a zero
+    const daOrdinare = finito || (copertura !== null && copertura < COPERTURA_MIN) || (min > 0 && g <= min);
     const qOrdine = c ? Math.max(1, Math.ceil(c.giorno * COPERTURA_ORDINE - g)) : (daOrdinare ? Math.max(1, Math.ceil(min * 2 - g)) : 0);
     return { g, c, copertura, daOrdinare, qOrdine };
 }
@@ -136,7 +143,7 @@ function render() {
                 <td style="font-size:12px">${esc(p.fornitoreNome || '')}</td>
                 <td style="text-align:right;font:600 13px var(--mono)">${fmtQ(s.g)} ${esc(p.unita || '')}${p.formato ? `<div style="font:400 10px var(--mono);color:var(--tx3)">da ${esc(p.formato)}</div>` : ''}</td>
                 <td style="text-align:right;font:400 12px var(--mono)">${s.c ? `<span title="${esc(s.c.periodi.map(x => `${dmy(x.dal)}→${dmy(x.al)}: ${fmtQ(x.usati)} ${p.unita || 'pz'} in ${x.giorni} gg`).join('\n'))}" style="cursor:help;border-bottom:1px dotted var(--tx3)">${fmtQ(s.c.giorno * 7)}/sett</span>` : '<span style="color:var(--tx3)" title="Dal secondo ordine di questo prodotto calcolo il consumo">in apprendimento</span>'}</td>
-                <td style="text-align:right;font:600 12px var(--mono);color:${s.daOrdinare ? 'var(--red)' : 'var(--tx)'}">${s.copertura !== null ? Math.floor(s.copertura) + ' gg' : '—'}</td>
+                <td style="text-align:right;font:600 12px var(--mono);color:${s.daOrdinare ? 'var(--red)' : s.copertura > COPERTURA_ALTA ? 'var(--amb)' : 'var(--tx)'}"${s.copertura > COPERTURA_ALTA ? ' title="Scorta alta: non riordinare finché non scende"' : ''}>${s.copertura !== null ? Math.floor(s.copertura) + ' gg' + (s.copertura > COPERTURA_ALTA ? ' ⚠' : '') : '—'}${s.c?.minimo ? '<div style="font:400 10px var(--mono);color:var(--tx3)" title="Ogni volta che l\'hai contato era già finito: il consumo vero è più alto">consumo minimo</div>' : ''}</td>
                 <td style="text-align:right;font:400 12px var(--mono)">${p.ultimoPrezzo != null ? fEur(p.ultimoPrezzo) : '—'} ${badgeVar(ult)}</td>
                 <td style="font:400 11px var(--mono);color:var(--tx2)">${p.ultimoAcquistoISO ? p.ultimoAcquistoISO.split('-').reverse().join('/') : '—'}</td></tr>`;
         }).join('')}</tbody></table>`;

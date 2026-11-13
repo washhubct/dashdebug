@@ -1,7 +1,7 @@
 # Graph Report - dashdebug  (2026-11-13)
 
 ## Corpus Check
-- 101 files · ~116,338 words
+- 101 files · ~116,322 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: (none) 4, .service 2, .plist 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9a0a2b33`
+- Built from commit: `be186e1d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -98,8 +98,8 @@
 6. `state` - 28 edges
 7. `db` - 27 edges
 8. `Wash Hub Gestionale Design System` - 26 edges
-9. `pDate()` - 21 edges
-10. `renderPren()` - 21 edges
+9. `renderPren()` - 21 edges
+10. `isAdmin()` - 21 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Table empty state` --semantically_similar_to--> `Empty state (.empty)`  [INFERRED] [semantically similar]
@@ -383,7 +383,7 @@ Nodes (5): chiusuraGiornaliera, giornoRome(), isDomenica(), SEDI, slugTipo()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `js/moduli/cassa-automatica.js (modale + polling)` connect `setup-cassa-config.js` to `Design Pattern e Modali`?**
-  _High betweenness centrality (0.126) - this node is a cross-community bridge._
+  _High betweenness centrality (0.124) - this node is a cross-community bridge._
 - **What connects `Flag operativo CASSA AUTO (enabled)`, `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub` to the rest of the system?**
   _44 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `fEur` be split into smaller, more focused modules?**

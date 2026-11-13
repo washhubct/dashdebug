@@ -696,9 +696,9 @@
     "semantic_hash": ""
   },
   "js/moduli/magazzino.js": {
-    "mtime": 1794581325.128677,
-    "seen": 1794581333.020406,
-    "ast_hash": "5279061b776889b9d0ac52aeb24e30c2",
+    "mtime": 1794581473.1433089,
+    "seen": 1794581474.339912,
+    "ast_hash": "b8b40c27f78f6283821eeaae5e47f406",
     "semantic_hash": ""
   },
   "functions/package-lock.json": {
