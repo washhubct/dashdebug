@@ -222,7 +222,7 @@ function renderVerifica() {
             <div class="mv-lbl">Arrivati</div>
             ${g.righe.map(rigaArrivo).join('')}
             ${g.prodotto ? `<div class="mv-oggi"><div class="t">Quanti ne hai oggi?<small></small></div>
-                <div class="mv-step"><button type="button" data-d="-1">−</button><input class="vr-r" data-id="${g.prodotto._id}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="?"><button type="button" data-d="1">+</button><span class="u"></span><button type="button" class="fin">Finito</button></div></div>` : ''}
+                <div class="mv-step"><button type="button" data-d="-1">−</button><input class="vr-r" data-id="${g.prodotto._id}" type="number" inputmode="decimal" min="0" step="0.5" placeholder="?"><button type="button" data-d="1">+</button><span class="u"></span></div></div>` : ''}
         </div>`).join('')}</div>
         <div class="mv-foot"><span id="mvMancano"></span><button class="btn btn-primary" id="magVerSalva">✓ Conferma</button></div>
         <p id="magVerEsito" style="font-size:12px;margin:8px 0 0;color:var(--red)"></p>`;
@@ -246,7 +246,6 @@ function renderVerifica() {
             if (rest) {
                 card.querySelector('.mv-step .u').textContent = nomeUnita(unita, Number(rest.value || 2));
                 card.querySelector('.mv-oggi small').textContent = /tanica|fusto|flacone|secchio|sacco/.test(unita) ? 'Conta anche quelli aperti (mezza = 0,5)' : '';
-                card.querySelector('.fin').classList.toggle('on', rest.value === '0');
                 if (rest.value === '') ok = false;
             }
             card.classList.toggle('ok', ok);
@@ -263,7 +262,6 @@ function renderVerifica() {
     el.querySelectorAll('.mv-step').forEach(s => {
         const inp = s.querySelector('.vr-r');
         s.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { if (inp.value === '' && b.dataset.d < 0) return; inp.value = Math.max(0, (Number(inp.value) || 0) + Number(b.dataset.d)); aggiorna(); });
-        s.querySelector('.fin').onclick = () => { inp.value = 0; aggiorna(); };
     });
     el.oninput = el.onchange = aggiorna;
     aggiorna();

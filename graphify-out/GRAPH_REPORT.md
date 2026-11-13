@@ -1,41 +1,41 @@
-# Graph Report - dashdebug  (2026-11-05)
+# Graph Report - dashdebug  (2026-11-13)
 
 ## Corpus Check
-- 99 files · ~109,696 words
+- 101 files · ~116,338 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: (none) 4, .service 2, .plist 2)
 
 ## Summary
-- 1230 nodes · 3054 edges · 70 communities (59 shown, 11 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 83 edges (avg confidence: 0.86)
+- 1293 nodes · 3228 edges · 72 communities (61 shown, 11 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 84 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `84e3c0f2`
+- Built from commit: `9a0a2b33`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- prenotazioni.js
-- esc
-- Prenota Online Priority Garanzia
+- fEur
+- fEur
+- prenota-online.ts
 - Meteo Semaforo Function
-- Sospesi e Fatture FIC
+- sospesi.js
 - Script Archivio e Analisi
 - Bridge Cassa VNE Flask
 - Parcheggio Smart Function
 - CRM Dedup Script
 - Presenze e Paghe
-- Auth e Programma Fedelta
-- Parcheggio Smart UI
+- report.js
+- parcheggio-smart.js
 - Dipendenze Functions
 - Cancello Sync e Chiamate
-- fEur
-- Bridge Python su Raspberry Pi Zero W (bridge-cassa/)
-- Bootstrap e Navigazione
-- Index Functions e SMS
+- esc
+- setup-cassa-config.js
+- main.js
+- ref_firebase_admin
 - Worker WhatsApp Web
-- Firebase Config e Marketing
+- firebase-config.js
 - Fatture in Cloud Function
 - Bridge FidelAI Function
 - Prenota Pubblico JS
@@ -44,11 +44,11 @@
 - WhatsApp Cloud API (spenta)
 - Voucher
 - Palette e Sedi Design
-- report.js
+- prenotazioni.js
 - Brand e Form Design
 - TS Config Functions
 - Shell Index HTML
-- Monitor Chiamate UI
+- fidelity-programma.js
 - Dipendenze Worker WA
 - Backfill Meteo Storico
 - Cancello Client Firestore
@@ -59,13 +59,13 @@
 - Design Bottoni e Filtri
 - Migrazione Multisede Docs
 - FidelAI Admin Riscatti
-- Meteo Card UI
-- Servizi Aggiuntivi
+- renderCassa
+- servizi-aggiuntivi.js
 - Manifest PWA
 - Backup Pre Multisede
 - Cancello Docs
 - Mock VNE Test
-- FidelAI Riscatti UI
+- chiamate.js
 - Backfill sedeId
 - Chiamate Client Firestore
 - Protocollo VNE Note
@@ -73,9 +73,9 @@
 - Analisi Sospesi Script
 - Chiamate Monitor Core
 - Display Cassa Cliente
-- Chiusura Giornaliera
-- Reset Pagamenti Script
-- fidelity-programma.js
+- reset-pagamenti-20261022.mjs
+- meteo.js
+- cassa-stato.js
 - Microcopy e Tono
 - Design Tokens
 - Runbook WhatsApp
@@ -85,19 +85,21 @@
 - Telegram Chat ID
 - Bridge Errori 404
 - Init TLS Bridge
-- setup-cassa-config.js
+- giornalieri.js
+- Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled)
+- chiusura.ts
 
 ## God Nodes (most connected - your core abstractions)
-1. `esc()` - 74 edges
-2. `fEur()` - 54 edges
+1. `esc()` - 83 edges
+2. `fEur()` - 60 edges
 3. `fmtDI()` - 50 edges
 4. `pNum()` - 49 edges
 5. `renderCassa()` - 36 edges
-6. `state` - 27 edges
-7. `db` - 26 edges
+6. `state` - 28 edges
+7. `db` - 27 edges
 8. `Wash Hub Gestionale Design System` - 26 edges
-9. `renderPren()` - 21 edges
-10. `pDate()` - 21 edges
+9. `pDate()` - 21 edges
+10. `renderPren()` - 21 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Table empty state` --semantically_similar_to--> `Empty state (.empty)`  [INFERRED] [semantically similar]
@@ -122,27 +124,27 @@
 - **VNE automatic cash payment flow (gestionale → bridge → VNE)** — index_page_cassa, bridge_cassa_install_linux_config_cassaautomatica, bridge_cassa_readme_flask_bridge, bridge_cassa_readme_bridge_endpoints, bridge_cassa_protocollo_vne_notes_vne_selfcash_api [INFERRED 0.85]
 - **White-label rebranding flow** — design_template_brand_placeholders, design_template_primary_color_tokens, design_template_gold_to_primary_replacement, design_template_sidebar_logo_branding, design_template_new_client_setup_checklist [INFERRED 0.85]
 
-## Communities (70 total, 11 thin omitted)
+## Communities (72 total, 11 thin omitted)
 
-### Community 0 - "prenotazioni.js"
-Cohesion: 0.06
-Nodes (104): ficCall(), garanziaAddebitaCall(), aggiornaBtnIncasso(), calcScad(), deleteAbb(), disdiciAbb(), editAbb(), fatturaFICAbb() (+96 more)
+### Community 0 - "fEur"
+Cohesion: 0.11
+Nodes (51): aggiornaBtnIncasso(), calcScad(), deleteAbb(), disdiciAbb(), editAbb(), fatturaFICAbb(), hideAbbF(), incassoOraSelezionato() (+43 more)
 
-### Community 1 - "esc"
-Cohesion: 0.08
-Nodes (61): apriAvviso(), render(), GIORNI, giornoLabel(), initAvvisoMaltempo(), primoNome(), apriCampagna(), ascoltaCoda() (+53 more)
+### Community 1 - "fEur"
+Cohesion: 0.17
+Nodes (30): magazzinoCall(), acquisti, b64(), badgeVar(), call(), carica(), comprimi(), confermaZeri() (+22 more)
 
-### Community 2 - "Prenota Online Priority Garanzia"
-Cohesion: 0.06
+### Community 2 - "prenota-online.ts"
+Cohesion: 0.07
 Nodes (57): ALLOWED_ORIGINS, cors(), finalizza(), form(), garanziaAddebita, getConfigGaranzia(), prenotaGaranzia, SLOTS (+49 more)
 
 ### Community 3 - "Meteo Semaforo Function"
 Cohesion: 0.09
-Nodes (39): bloccoSede(), Cfg, CFG_DEFAULT, Consiglio, consiglioPersonale(), EMOJI, fmtData(), FonteId (+31 more)
+Nodes (43): bloccoSede(), Cfg, CFG_DEFAULT, Cielo, CIELO, cielo(), cieloCat(), Consiglio (+35 more)
 
-### Community 4 - "Sospesi e Fatture FIC"
-Cohesion: 0.17
-Nodes (38): richiediPagamento(), segnaPagataFIC(), arricchisciServizio(), buildSospesiArray(), chiediNumeroFattura(), esportaExcelSospesi(), esportaPdfSospesi(), eurS() (+30 more)
+### Community 4 - "sospesi.js"
+Cohesion: 0.15
+Nodes (42): ficCall(), _mostraModalMetodo(), richiediPagamento(), mostraEsitoFattura(), segnaPagataFIC(), arricchisciServizio(), buildSospesiArray(), chiediNumeroFattura() (+34 more)
 
 ### Community 5 - "Script Archivio e Analisi"
 Cohesion: 0.07
@@ -153,56 +155,56 @@ Cohesion: 0.14
 Nodes (19): annulla(), annulla_aperta(), annulla_con_retry(), aperta(), aperta_get(), aperta_set(), chiusura(), handle_preflight() (+11 more)
 
 ### Community 7 - "Parcheggio Smart Function"
-Cohesion: 0.12
-Nodes (32): ALLOWED_ORIGINS, cors(), emettiScontrino(), epochToRomeLocal(), finalizza(), fmtIt(), generaCodice(), getConfig() (+24 more)
+Cohesion: 0.11
+Nodes (33): ALLOWED_ORIGINS, cors(), emettiScontrino(), epochToRomeLocal(), finalizza(), fmtIt(), generaCodice(), getConfig() (+25 more)
 
 ### Community 8 - "CRM Dedup Script"
 Cohesion: 0.08
 Nodes (31): APPLY, bk, byKey, byTel, byTok, clienti, daUnire, db (+23 more)
 
 ### Community 9 - "Presenze e Paghe"
-Cohesion: 0.15
-Nodes (29): accontiLocali, applicaCreditoAutomatico(), applicaPagamento(), caricaPresenze(), DIPENDENTI_FISSI, DIPENDENTI_PER_SEDE, eliminaPresenza(), getDipendenti() (+21 more)
+Cohesion: 0.13
+Nodes (30): accontiLocali, applicaCreditoAutomatico(), applicaPagamento(), caricaPresenze(), COSTI_FISSI, DIPENDENTI_FISSI, DIPENDENTI_PER_SEDE, eliminaPresenza() (+22 more)
 
-### Community 10 - "Auth e Programma Fedelta"
-Cohesion: 0.17
-Nodes (8): auth, ADMIN_EMAILS, initAuth(), messaggioErroreLogin(), requireAdmin(), tabFlag, apri(), initPriorityConfig()
+### Community 10 - "report.js"
+Cohesion: 0.16
+Nodes (27): initDashDates(), loadHistoricalData(), needsHistorical(), onDateChg(), qp(), isDipendenteBonifico(), calcolaDatiOperativi(), costiFissiCfg() (+19 more)
 
-### Community 11 - "Parcheggio Smart UI"
+### Community 11 - "parcheggio-smart.js"
 Cohesion: 0.18
 Nodes (27): aggiornaPreview(), apriWhatsApp(), caricaCodici(), caricaConfig(), caricaStatoCancello(), codici, config, fmtIt() (+19 more)
 
 ### Community 12 - "Dipendenze Functions"
-Cohesion: 0.10
-Nodes (25): dependencies, firebase-admin@^12.0.0, firebase-functions@^6.0.0, nodemailer@^6.10.1, twilio@^5.0.0, devDependencies, @types/node@^20.0.0, @types/nodemailer@^8.0.2 (+17 more)
+Cohesion: 0.07
+Nodes (46): dependencies, @anthropic-ai/sdk@^1.6.0, firebase-admin@^12.0.0, firebase-functions@^6.0.0, nodemailer@^6.10.1, twilio@^5.0.0, zod@^4.6.7, devDependencies (+38 more)
 
 ### Community 13 - "Cancello Sync e Chiamate"
 Cohesion: 0.17
 Nodes (7): carica_stato(), ciclo(), local_iso(), main(), now_ms(), nuovo_employee_no(), salva_stato()
 
-### Community 14 - "fEur"
-Cohesion: 0.11
-Nodes (44): annullaPagamento(), avviaPagamento(), bridge(), healthBridge(), initCassaAutomatica(), mapVneError(), _mostraModalMetodo(), openCassaModal() (+36 more)
+### Community 14 - "esc"
+Cohesion: 0.08
+Nodes (60): apriAvviso(), render(), giornoLabel(), primoNome(), apriCampagna(), ascoltaCoda(), render(), ascoltaConfig() (+52 more)
 
-### Community 15 - "Bridge Python su Raspberry Pi Zero W (bridge-cassa/)"
-Cohesion: 0.24
-Nodes (11): Bridge Python su Raspberry Pi Zero W (bridge-cassa/), js/moduli/cassa-automatica.js (modale + polling), Cassa Automatica VNE (SelfCashAPI 3.05), js/moduli/cassa-stato.js widget stato VNE, Modalita alternativa HTTP loopback + Cloudflare Tunnel, Firebase project dashboard-washhub, GitHub Pages deploy (git push origin main), Architettura LAN-only (HTTPS self-signed, mDNS) (+3 more)
+### Community 15 - "setup-cassa-config.js"
+Cohesion: 0.12
+Nodes (21): Bridge Python su Raspberry Pi Zero W (bridge-cassa/), Flag operativo CASSA AUTO (enabled), js/moduli/cassa-automatica.js (modale + polling), Cassa Automatica VNE (SelfCashAPI 3.05), js/moduli/cassa-stato.js widget stato VNE, Modalita alternativa HTTP loopback + Cloudflare Tunnel, Firestore config/cassaAutomatica, Firebase project dashboard-washhub (+13 more)
 
-### Community 16 - "Bootstrap e Navigazione"
-Cohesion: 0.20
-Nodes (14): getCutoffISO(), initDashDates(), initFirebaseData(), initSelezioneSedeUI(), loadHistoricalData(), loadPrenotazioniFast(), loadPrimaNotaFast(), needsHistorical() (+6 more)
+### Community 16 - "main.js"
+Cohesion: 0.15
+Nodes (15): getCutoffISO(), initFirebaseData(), initSelezioneSedeUI(), loadPrenotazioniFast(), loadPrimaNotaFast(), caricaClienti(), initMarketing(), renderMarketing() (+7 more)
 
-### Community 17 - "Index Functions e SMS"
-Cohesion: 0.14
-Nodes (14): db, smsReminder, TWILIO_FROM, TWILIO_SID, TWILIO_TOKEN, Previsione, telegram(), TELEGRAM_BOT_TOKEN (+6 more)
+### Community 17 - "ref_firebase_admin"
+Cohesion: 0.15
+Nodes (14): db, smsReminder, TWILIO_FROM, TWILIO_SID, TWILIO_TOKEN, Previsione, chunk(), emettiVoucherReferral() (+6 more)
 
 ### Community 18 - "Worker WhatsApp Web"
 Cohesion: 0.16
 Nodes (18): cfgRef, CHIUSURE, client, db, DEFAULT_LIMITI, DIR, giorno, inviaUno() (+10 more)
 
-### Community 19 - "Firebase Config e Marketing"
-Cohesion: 0.19
-Nodes (10): app, db, firebaseConfig, functions, initMarketing(), renderMarketing(), smsData, initReferralDash() (+2 more)
+### Community 19 - "firebase-config.js"
+Cohesion: 0.18
+Nodes (13): app, db, firebaseConfig, functions, GIORNI, initAvvisoMaltempo(), initCassaAutomatica(), VNE_MESS_MAP (+5 more)
 
 ### Community 20 - "Fatture in Cloud Function"
 Cohesion: 0.12
@@ -232,9 +234,9 @@ Nodes (14): aggiornaScadutiClient(), codiceLibero(), creaVoucherReferral(), gene
 Cohesion: 0.19
 Nodes (14): Oro Wash Hub (--gold #C8A84E), Scala estesa oro 50-900, Location variants (data-sede accent), Sede Lungomare (#0077B6 blu mare), Sede Paesi Etnei (#2D2D2D grigio lavico), Sidebar component, CSS custom properties in :root, Brand placeholders ({{BRAND_NAME}}, {{PRIMARY_COLOR}}, {{SEDE_NOME}}...) (+6 more)
 
-### Community 28 - "report.js"
-Cohesion: 0.20
-Nodes (23): isDipendenteBonifico(), calcolaDatiOperativi(), endOfDay(), getCentroCosto(), getDataRecord(), getDescrizione(), getEntrata(), getUscita() (+15 more)
+### Community 28 - "prenotazioni.js"
+Cohesion: 0.08
+Nodes (60): garanziaAddebitaCall(), annullaPagamento(), avviaPagamento(), bridge(), mapVneError(), openCassaModal(), rimborso(), sleep() (+52 more)
 
 ### Community 29 - "Brand e Form Design"
 Cohesion: 0.17
@@ -248,9 +250,9 @@ Nodes (11): compileOnSave, compilerOptions, esModuleInterop, module, noImplicitR
 Cohesion: 0.18
 Nodes (12): APP_VERSION auto-reload + version.json polling, index.html Gestionale SPA shell, occupato() guard (cassaAutoBox / modal / input), Abbonamenti page (+ conti a canone), Admin pages (Dashboard, Report, Cancellazioni, Servizi), Clienti / CRM page, Marketing pages (SMS Reminder, Porta un Amico, Voucher), Prenotazioni + Tappezzeria page (+4 more)
 
-### Community 32 - "Monitor Chiamate UI"
-Cohesion: 0.38
-Nodes (11): apriPrenota(), avviaChiamate(), box(), chiE(), disegnaPerse(), etichetta(), isoOggi(), mostra() (+3 more)
+### Community 32 - "fidelity-programma.js"
+Cohesion: 0.15
+Nodes (20): auth, ADMIN_EMAILS, initAuth(), isAdmin(), messaggioErroreLogin(), requireAdmin(), tabFlag, anteprima() (+12 more)
 
 ### Community 33 - "Dipendenze Worker WA"
 Cohesion: 0.20
@@ -261,8 +263,8 @@ Cohesion: 0.17
 Nodes (6): auto, cfg, db, esistenti, pn, pres
 
 ### Community 36 - "Install Bridge Pi/Windows"
-Cohesion: 0.20
-Nodes (14): Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled), Install bridge on Raspberry Pi Zero W (LAN-only), Raspberry Pi Zero W washhub-cassa.local, Self-signed TLS via init-tls.sh (SAN LAN IP), washhub-cassa-bridge systemd service, Cloudflare Tunnel cassa.washhub.it (CNAME on GoDaddy), Install bridge on Windows PC (fallback), NSSM WashHubCassaBridge Windows service (+6 more)
+Cohesion: 0.25
+Nodes (11): Install bridge on Raspberry Pi Zero W (LAN-only), Raspberry Pi Zero W washhub-cassa.local, Self-signed TLS via init-tls.sh (SAN LAN IP), washhub-cassa-bridge systemd service, Cloudflare Tunnel cassa.washhub.it (CNAME on GoDaddy), Install bridge on Windows PC (fallback), NSSM WashHubCassaBridge Windows service, Bridge cassa VNE README (+3 more)
 
 ### Community 37 - "Design Pattern e Modali"
 Cohesion: 0.24
@@ -288,11 +290,11 @@ Nodes (7): Backfill sedeId migration script (phase 1), MULTISEDE-MIGRATION roadm
 Cohesion: 0.28
 Nodes (8): ADMIN_EMAILS, baseOpts, callFidelai(), FIDELAI_API_BASE, FIDELAI_BRIDGE_SECRET, FIDELAI_MERCHANT, fidelaiLoyalty, fidelaiRedeem
 
-### Community 43 - "Meteo Card UI"
-Cohesion: 0.33
-Nodes (8): meteoCall(), EMOJI, fmtD(), GG, initMeteo(), LABEL, oggiISO(), renderMeteo()
+### Community 43 - "renderCassa"
+Cohesion: 0.21
+Nodes (17): addUscita(), delUscita(), initCassa(), renderCassa(), renderCassaAutoEntries(), FINESTRA_GIORNI, giornoPassato(), limiteISO() (+9 more)
 
-### Community 44 - "Servizi Aggiuntivi"
+### Community 44 - "servizi-aggiuntivi.js"
 Cohesion: 0.38
 Nodes (8): addServizio(), _esc(), initServiziAggiuntivi(), _loadFromFirestore(), loadServiziAttivi(), renderPanel(), _servizi, wireForm()
 
@@ -308,9 +310,9 @@ Nodes (5): admin, COLLECTIONS, db, fs, path
 Cohesion: 0.29
 Nodes (7): cancello@washhub.it Firebase account, cancello_sync.py service (washhub-cancello systemd), Firestore cancelloStato/lungomare (pinOccupati), Firestore codiciParcheggio collection, cancello-sync README (Parcheggio Smart), Hikvision DS-K1T805MX gate terminals (EST .51 / INT .50), Parcheggio Smart page
 
-### Community 49 - "FidelAI Riscatti UI"
-Cohesion: 0.36
-Nodes (7): ensureFidelaiDb(), FIDELAI_CONFIG, handleLookup(), handleRedeem(), initFidelai(), normalizePhone(), showResult()
+### Community 49 - "chiamate.js"
+Cohesion: 0.33
+Nodes (11): apriPrenota(), avviaChiamate(), box(), chiE(), disegnaPerse(), etichetta(), isoOggi(), mostra() (+3 more)
 
 ### Community 50 - "Backfill sedeId"
 Cohesion: 0.29
@@ -325,20 +327,20 @@ Cohesion: 0.29
 Nodes (4): admin, argv, db, SEDE
 
 ### Community 56 - "Display Cassa Cliente"
-Cohesion: 0.29
-Nodes (8): ascolta() cassaDisplay/{sede} listener, Firestore cassaDisplay/{sede}, FidelAI merchants/{MERCHANT}/customers/{tel} (fideliai-app), mostra() thank-you + FidelAI QR, riposo() idle video loop, display.html customer-facing cash screen (kiosk), Incasso Giornaliero page (cassa), FidelAI Riscatti + Programma fedeltà page
-
-### Community 57 - "Chiusura Giornaliera"
-Cohesion: 0.53
-Nodes (5): chiusuraGiornaliera, giornoRome(), isDomenica(), SEDI, slugTipo()
-
-### Community 58 - "Reset Pagamenti Script"
-Cohesion: 0.33
-Nodes (5): APPLY, batch, db, FINO, tot
-
-### Community 59 - "fidelity-programma.js"
 Cohesion: 0.40
-Nodes (12): isAdmin(), anteprima(), call(), carica(), esempio(), initFidelityProgramma(), inviaProva(), premi (+4 more)
+Nodes (6): ascolta() cassaDisplay/{sede} listener, FidelAI merchants/{MERCHANT}/customers/{tel} (fideliai-app), mostra() thank-you + FidelAI QR, riposo() idle video loop, display.html customer-facing cash screen (kiosk), FidelAI Riscatti + Programma fedeltà page
+
+### Community 57 - "reset-pagamenti-20261022.mjs"
+Cohesion: 0.18
+Nodes (8): APPLY, batch, db, FINO, tot, db, H, s
+
+### Community 58 - "meteo.js"
+Cohesion: 0.33
+Nodes (8): meteoCall(), EMOJI, fmtD(), GG, initMeteo(), LABEL, oggiISO(), renderMeteo()
+
+### Community 59 - "cassa-stato.js"
+Cohesion: 0.50
+Nodes (8): healthBridge(), statoCassa(), ensureCard(), initCassaStato(), refresh(), renderSkeleton(), startAutoRefresh(), stopAutoRefresh()
 
 ### Community 60 - "Microcopy e Tono"
 Cohesion: 0.40
@@ -356,34 +358,42 @@ Nodes (5): WhatsApp 24h conversation window, WhatsApp Cloud API activation runbo
 Cohesion: 0.67
 Nodes (3): devDependencies, firebase-admin@^13.10.0, firebase-admin
 
-### Community 69 - "setup-cassa-config.js"
-Cohesion: 0.22
-Nodes (10): Flag operativo CASSA AUTO (enabled), Firestore config/cassaAutomatica, bridge-cassa install-linux.md / install-windows.md, Checklist installazione cassa, admin, arg(), argv, db (+2 more)
+### Community 69 - "giornalieri.js"
+Cohesion: 0.56
+Nodes (8): addGiornaliero(), calcPrezzoGiornaliero(), checkoutGiornaliero(), delGiornaliero(), initGiornalieri(), _mostraModalCheckout(), parcheggioInSospeso(), renderGiornalieri()
+
+### Community 70 - "Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled)"
+Cohesion: 0.40
+Nodes (5): Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled), Bridge endpoints (/health /paga /polling /annulla /stato /rimborso /chiusura), BRIDGE_TOKEN Bearer authentication, Firestore cassaDisplay/{sede}, Incasso Giornaliero page (cassa)
+
+### Community 71 - "chiusura.ts"
+Cohesion: 0.53
+Nodes (5): chiusuraGiornaliera, giornoRome(), isDomenica(), SEDI, slugTipo()
 
 ## Ambiguous Edges - Review These
 - `Prenotazioni + Tappezzeria page` → `Cloud Functions whatsappWebhook / whatsappSend / whatsappSendBulk`  [AMBIGUOUS]
   index.html · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **44 isolated node(s):** `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)`, `Raspberry Pi Zero W`, `bridge-cassa/PROTOCOLLO-VNE-NOTES.md` (+39 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 346 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **44 isolated node(s):** `Flag operativo CASSA AUTO (enabled)`, `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)`, `Raspberry Pi Zero W` (+39 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 359 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **11 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Firestore config/cassaAutomatica` connect `setup-cassa-config.js` to `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)`?**
-  _High betweenness centrality (0.103) - this node is a cross-community bridge._
-- **What connects `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub`, `GitHub Pages deploy (git push origin main)` to the rest of the system?**
+- **Why does `js/moduli/cassa-automatica.js (modale + polling)` connect `setup-cassa-config.js` to `Design Pattern e Modali`?**
+  _High betweenness centrality (0.126) - this node is a cross-community bridge._
+- **What connects `Flag operativo CASSA AUTO (enabled)`, `Modalita alternativa HTTP loopback + Cloudflare Tunnel`, `Firebase project dashboard-washhub` to the rest of the system?**
   _44 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `prenotazioni.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.05619834710743802 - nodes in this community are weakly interconnected._
-- **Why does `Cassa Automatica VNE (SelfCashAPI 3.05)` connect `Bridge Python su Raspberry Pi Zero W (bridge-cassa/)` to `setup-cassa-config.js`?**
-  _High betweenness centrality (0.103) - this node is a cross-community bridge._
-- **Should `esc` be split into smaller, more focused modules?**
-  _Cohesion score 0.08205128205128205 - nodes in this community are weakly interconnected._
-- **Why does `Firestore config/cassaAutomatica (bridgeUrl, bridgeToken, enabled)` connect `Install Bridge Pi/Windows` to `Display Cassa Cliente`, `setup-cassa-config.js`?**
-  _High betweenness centrality (0.092) - this node is a cross-community bridge._
+- **Should `fEur` be split into smaller, more focused modules?**
+  _Cohesion score 0.11320754716981132 - nodes in this community are weakly interconnected._
+- **Should `prenota-online.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.06610259122157588 - nodes in this community are weakly interconnected._
+- **Should `Meteo Semaforo Function` be split into smaller, more focused modules?**
+  _Cohesion score 0.08562367864693446 - nodes in this community are weakly interconnected._
+- **Should `Script Archivio e Analisi` be split into smaller, more focused modules?**
+  _Cohesion score 0.0728744939271255 - nodes in this community are weakly interconnected._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
