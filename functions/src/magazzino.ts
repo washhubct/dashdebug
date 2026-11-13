@@ -1,9 +1,11 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
+import { telegram, TELEGRAM_BOT_TOKEN } from './telegram'
 
 // ═══════════════════════════════════════════════════════════════════
 // MAGAZZINO CONSUMABILI (dal 06/11/2026)
@@ -272,4 +274,15 @@ export const magazzinoApi = onCall({ region: REGION, secrets: [ANTHROPIC_API_KEY
     case 'verificaCarichi': return verificaCarichi(request.data, email)
     default: throw new HttpsError('invalid-argument', 'Azione sconosciuta')
   }
+})
+
+// Promemoria conta settimanale (Guido 13/11/2026): lunedì 8:30 sul gruppo Telegram del meteo
+// (config/meteo.telegram.chatProposta). Ogni conta è una misura del consumo: più conte,
+// consumi più precisi, ordini giusti (né magazzino pieno né prodotti finiti).
+export const promemoriaContaMagazzino = onSchedule({ schedule: '30 8 * * 1', timeZone: 'Europe/Rome', region: REGION, secrets: [TELEGRAM_BOT_TOKEN] }, async () => {
+  const chat = (await db.doc('config/meteo').get()).data()?.telegram?.chatProposta
+  const prodotti = (await db.collection('prodotti').get()).docs.map(d => d.data())
+  const ultima = prodotti.flatMap(p => (p.rilevazioni?.lungomare || []).map((r: any) => String(r.dataISO))).sort().pop()
+  const quando = ultima ? `Ultima conta: ${ultima.split('-').reverse().join('/')}.` : 'Non è ancora stata fatta nessuna conta.'
+  await telegram(chat, `📋 <b>Lunedì: conta del magazzino</b>\n\nSkippa, apri la dashboard → <b>Magazzino</b> → <b>📋 Conta magazzino</b> e conta quello che c'è, anche le taniche aperte (mezza = 0,5).\n${quando}\n\nhttps://dashboard.washhub.it`)
 })
