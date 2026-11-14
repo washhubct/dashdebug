@@ -33,7 +33,7 @@ interface Cfg {
   oraApertura: number; oraChiusura: number
   soglie: { rosso: { mm: number; ore: number }; arancio: { mm: number; ore: number }; giallo: { mm: number; ore: number; nuvole: number; dopoMm: number } }
   telegram: { chatProposta: string; chatDipendenti: string; inviaDipendenti: boolean }
-  personale: { min: number; max: number; capacitaPercentile: number; giorniStorico: number; oreTappezzeriaGiorno: number; oreGiornata: number; giorniLavorativiMese: number; fissi: { nome: string; sedeId: string; costoMese: number; dal: string }[] }
+  personale: { min: number; max: number; giorniOrganico: number; capacitaPercentile: number; giorniStorico: number; oreTappezzeriaGiorno: number; oreGiornata: number; giorniLavorativiMese: number; fissi: { nome: string; sedeId: string; costoMese: number; dal: string }[] }
 }
 const CFG_DEFAULT: Cfg = {
   sedi: {
@@ -48,7 +48,9 @@ const CFG_DEFAULT: Cfg = {
   // tappezzerie hanno 1 persona in più; ogni lavoro dura 3 giorni mediani)
   // Fissi: dipendenti a stipendio mensile, sempre presenti anche se non registrati nelle presenze giornaliere
   // (configurati in config/meteo.personale.fissi, non qui). Turno unico: tutti iniziano insieme.
-  personale: { min: 2, max: 7, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8, giorniLavorativiMese: 26, fissi: [] },
+  // Tetto del consiglio = organico reale: il massimo di persone al lavoro nello stesso giorno negli ultimi giorniOrganico
+  // giorni (presenze + fissi). Inutile consigliare 7 persone se in squadra sono 5 (Guido 13/11). `max` resta il limite assoluto.
+  personale: { min: 2, max: 7, giorniOrganico: 30, capacitaPercentile: 0.8, giorniStorico: 365, oreTappezzeriaGiorno: 2.5, oreGiornata: 8, giorniLavorativiMese: 26, fissi: [] },
 }
 
 async function getCfg(): Promise<Cfg> {
@@ -219,7 +221,7 @@ function rigaFonti(fonti: Partial<Record<FonteId, Sintesi>>, cfg: Cfg, lv: Livel
 
 // ── Quante persone domani? auto attese (storico stesso giorno della settimana × stesso livello meteo, con le
 // prenotazioni già in calendario come minimo) diviso quante auto lava una persona. Impara ogni sera dalla verifica.
-interface Consiglio { personale: number; fissi: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null; tappezzerie: number; caricoTappezzeria: number }
+interface Consiglio { personale: number; organico: number | null; fissi: number; attese: number; prenotate: number; capacita: number; base: string; nota: string | null; tappezzerie: number; caricoTappezzeria: number }
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0 }
 async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg: Cfg): Promise<Consiglio | null> {
   const db = getFirestore()
@@ -232,7 +234,8 @@ async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg
   if (conAuto.length < 30) return null   // sede senza storico prenotazioni (Paesi Etnei self-service)
   const wd = new Date(data + 'T12:00:00Z').getUTCDay()
   const wdOf = (x: any) => new Date(x.data + 'T12:00:00Z').getUTCDay()
-  const verdi = conAuto.filter(x => x.reale.livello === 'VERDE' && x.presenze?.dipendenti > 0)
+  // Giornate con a registro solo i fissi = presenze non ancora caricate: fuori dalla capacità (darebbero 20+ auto a persona)
+  const verdi = conAuto.filter(x => x.reale.livello === 'VERDE' && x.presenze?.dipendenti > (x.presenze.fissi?.length || 0))
   const capacita = Math.max(3, pct(verdi.map(x => Number(x.auto) / x.presenze.dipendenti), cfg.personale.capacitaPercentile) || 6)
   const stessoGiorno = conAuto.filter(x => x.reale.livello === lv && wdOf(x) === wd).map(x => Number(x.auto))
   let attese: number, base: string
@@ -255,7 +258,12 @@ async function consiglioPersonale(sedeId: string, data: string, lv: Livello, cfg
   if (lv === 'ROSSO') { personale = Math.min(personale, Math.max(cfg.personale.min, Math.ceil(caricoTappezzeria))); nota = 'valutare chiusura' + (tappezzerie ? ', le tappezzerie si lavorano al coperto' : '') }
   const fissi = cfg.personale.fissi.filter(f => f.sedeId === sedeId && data >= f.dal).length
   personale = Math.max(personale, fissi)
-  return { personale, fissi, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota, tappezzerie, caricoTappezzeria }
+  const daOrg = new Date(data + 'T12:00:00Z'); daOrg.setUTCDate(daOrg.getUTCDate() - cfg.personale.giorniOrganico)
+  const presSnap = await db.collection('presenzeDipendenti').where('sedeId', '==', sedeId).get()
+  const perGiorno = presenzePerGiorno(presSnap.docs.map(d => d.data()), daOrg.toISOString().slice(0, 10), data)
+  const organico = Math.max(0, ...Object.entries(perGiorno).map(([g, docs]) => presenzeDaDocs(docs, cfg, sedeId, g).dipendenti)) || null
+  if (organico && personale >= organico) { personale = organico; nota = [nota, "tutto l'organico"].filter(Boolean).join(' · ') }
+  return { personale, organico, fissi, attese, prenotate, capacita: Math.round(capacita * 10) / 10, base, nota, tappezzerie, caricoTappezzeria }
 }
 
 function bloccoSede(sedeNome: string, s: Sintesi, lv: { livello: Livello; motivo: string }, cfg: Cfg, fonti: Partial<Record<FonteId, Sintesi>>, consiglio: Consiglio | null, precedente?: Livello): string {
@@ -356,6 +364,43 @@ export function presenzeDaDocs(docs: any[], cfg?: Cfg, sedeId?: string, data?: s
   return { dipendenti: nomi.length, nomi, fissi, costo: Math.round(costo * 100) / 100 }
 }
 
+// Doc presenzeDipendenti raggruppati per giorno, da `da` (incluso) a `a` (escluso)
+function presenzePerGiorno(docs: any[], da: string, a: string) {
+  const out: Record<string, any[]> = {}
+  for (const x of docs) if (x.dataISO >= da && x.dataISO < a) (out[x.dataISO] ||= []).push(x)
+  return out
+}
+
+// Le presenze vengono spesso caricate giorni dopo: la verifica delle 21:05 fotografa solo i fissi e la capacità
+// (auto a persona) impara da un dato falso. Ogni sera si rifà la foto dei giorni passati dove le presenze sono cambiate.
+export async function riallineaPresenze(sedeId: string, cfg: Cfg, giorni: number, prova = false) {
+  const db = getFirestore()
+  const da = giornoRome(-giorni), oggi = giornoRome(0)
+  const [pres, mg] = await Promise.all([
+    db.collection('presenzeDipendenti').where('sedeId', '==', sedeId).get(),
+    db.collection('meteoGiornata').where('sedeId', '==', sedeId).get(),
+  ])
+  const perGiorno = presenzePerGiorno(pres.docs.map(d => d.data()), da, oggi)
+  const cambiati: { data: string; prima: number | null; dopo: number }[] = []
+  for (const d of mg.docs) {
+    const x = d.data()
+    if (!x.reale || !x.verificaTs || x.data < da || x.data >= oggi) continue
+    const p = presenzeDaDocs(perGiorno[x.data] || [], cfg, sedeId, x.data)
+    if (x.presenze && x.presenze.dipendenti === p.dipendenti && x.presenze.costo === p.costo) continue
+    cambiati.push({ data: x.data, prima: x.presenze?.dipendenti ?? null, dopo: p.dipendenti })
+    if (prova) continue
+    const incasso = Number(x.incasso) || 0
+    await d.ref.set({
+      presenze: p, autoPerDipendente: p.dipendenti ? Math.round((Number(x.auto) || 0) / p.dipendenti * 10) / 10 : null,
+      incassoPerDipendente: p.dipendenti ? Math.round(incasso / p.dipendenti * 100) / 100 : null,
+      margineLordo: Math.round((incasso - p.costo) * 100) / 100,
+      ...(x.consiglioEsito ? { consiglioEsito: { ...x.consiglioEsito, personaleReale: p.dipendenti } } : {}),
+      presenzeRiallineateTs: Date.now(),
+    }, { merge: true })
+  }
+  return cambiati
+}
+
 // 21:05 (dopo la chiusura contabile): com'è andata davvero? pioggia reale + incasso + presenze → taratura
 export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, region: REGION }, async () => {
   const db = getFirestore()
@@ -403,6 +448,10 @@ export const meteoVerifica = onSchedule({ schedule: '5 21 * * *', timeZone: TZ, 
       }, { merge: true })
       console.log(`verifica ${sedeId} ${data}: previsto ${prev?.livelloSera || '-'} reale ${lvReale.livello} auto ${auto} incasso €${inc.totale} dipendenti ${presenze.dipendenti} (costo €${presenze.costo})${prev?.consiglio ? ` consigliati ${prev.consiglio.personale}` : ''}`)
     } catch (e: any) { console.error(`meteo verifica ${sedeId}:`, e.message) }
+    try {
+      const cambiati = await riallineaPresenze(sedeId, cfg, cfg.personale.giorniOrganico)
+      if (cambiati.length) console.log(`presenze riallineate ${sedeId}: ${cambiati.map(c => `${c.data} ${c.prima}→${c.dopo}`).join(', ')}`)
+    } catch (e: any) { console.error(`riallineo presenze ${sedeId}:`, e.message) }
   }
 })
 
