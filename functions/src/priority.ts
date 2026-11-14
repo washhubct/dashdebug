@@ -51,6 +51,7 @@ async function getConfig() {
     soglia: Math.max(1, Number(c.soglia) || 3),
     maxPerOra: Math.max(0, Number.isFinite(Number(c.maxPerOra)) ? Number(c.maxPerOra) : 1),
     supplemento: Math.max(1, Number(c.supplemento) || 5),
+    anticipoMin: Math.max(0, Number.isFinite(Number(c.anticipoMin)) ? Number(c.anticipoMin) : 45),
   }
 }
 
@@ -61,6 +62,7 @@ function romeNow() {
 }
 const isDomenica = (d: string) => new Date(`${d}T12:00:00Z`).getUTCDay() === 0
 const ora = (slot: string) => slot.slice(0, 2)
+const minuti = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))
 
 // Calcolo disponibilità Priority per una data (stessa logica in checkout e finalizzazione)
 async function calcola(data: string) {
@@ -92,7 +94,9 @@ async function calcola(data: string) {
     // le prenotazioni Priority già finalizzate sono anche in `prenotazioni`: non contarle due volte nel carico
     const caldo = (carico[h] || 0) >= cfg.soglia
     if (!caldo) continue
-    if ((venduti[h] || 0) < cfg.maxPerOra) out.priority.push(slot)
+    // Troppo a ridosso: niente Priority (il piazzale non fa in tempo a tenere il posto), e l'orario resta chiuso
+    const vicino = data === oggi && minuti(slot) - minuti(hhmm) < cfg.anticipoMin
+    if (!vicino && (venduti[h] || 0) < cfg.maxPerOra) out.priority.push(slot)
     else out.bloccati.push(slot)
   }
   return out
