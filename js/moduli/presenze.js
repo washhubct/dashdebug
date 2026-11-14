@@ -47,6 +47,8 @@ let currentWeekStart = null;
 let riepMese = new Date().getMonth();
 let riepAnno = new Date().getFullYear();
 let presenzeLocali = []; // cache locale delle presenze caricate
+let cacheSede = null; // sede a cui appartiene la cache (presenze + acconti): finché è quella attiva non si rilegge
+let sync = null; // riallineamento col server in corso: le scritture lo aspettano prima di toccare i dati
 let accontiLocali = {}; // nome → importo residuo (anticipi su stipendio, collection `acconti`)
 let movimentiLocali = {}; // nome → [{data, importo, tipo, nota}] storico versamenti (campo movimenti in `acconti`)
 let stipendiLocali = {}; // nome → { 'YYYY-MM': {importo, data} } stipendi fissi pagati (campo stipendiPagati in `acconti`)
@@ -59,15 +61,15 @@ export function initPresenze() {
 
     document.getElementById('prezSetPrev')?.addEventListener('click', () => {
         currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-        renderPresenze();
+        disegna();
     });
     document.getElementById('prezSetNext')?.addEventListener('click', () => {
         currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-        renderPresenze();
+        disegna();
     });
     document.getElementById('prezOggi')?.addEventListener('click', () => {
         currentWeekStart = getMonday(new Date());
-        renderPresenze();
+        disegna();
     });
     document.getElementById('prezSaveBtn')?.addEventListener('click', salvaPresenza);
 
@@ -127,36 +129,40 @@ function renderInputFields() {
 }
 
 // ─── CARICA PRESENZE DA FIRESTORE ───
-async function caricaPresenze() {
-    try {
-        const snap = await fsGetDocs(query(fsCollection(db, 'presenzeDipendenti'), where('sedeId', '==', state.sedeAttiva)));
-        presenzeLocali = [];
-        snap.forEach(docSnap => {
-            const d = docSnap.data();
-            d._id = docSnap.id;
-            presenzeLocali.push(d);
-        });
-        // Aggiorna anche state per la dashboard
-        state.presenzeDB = [...presenzeLocali];
-    } catch (e) {
-        console.warn('Errore caricamento presenze:', e);
-    }
+// Si legge una volta all'apertura della pagina, mai a ogni cambio di settimana o di mese: lo
+// storico resta in memoria e le scritture lo aggiornano sul posto. Riaprendo la pagina si
+// disegna subito con quello che c'è e il server riallinea in background (giornate o pagamenti
+// inseriti da un altro dispositivo).
+function sincronizza() {
+    const sede = state.sedeAttiva;
+    const leggi = nome => fsGetDocs(query(fsCollection(db, nome), where('sedeId', '==', sede)))
+        .catch(e => { console.warn(`Errore caricamento ${nome}:`, e); return null; });
+    // Acconti letti a parte: se la collection non è leggibile le presenze restano ok
+    sync = Promise.all([leggi('presenzeDipendenti'), leggi('acconti')]).then(([pres, acc]) => {
+        if (sede !== state.sedeAttiva) return; // sede cambiata nel frattempo
+        if (pres) {
+            presenzeLocali = pres.docs.map(docSnap => ({ ...docSnap.data(), _id: docSnap.id }));
+            cacheSede = sede;
+            pubblica();
+        }
+        if (acc) {
+            accontiLocali = {};
+            stipendiLocali = {};
+            movimentiLocali = {};
+            acc.forEach(docSnap => {
+                const a = docSnap.data();
+                if (pNum(a.importo) > 0) accontiLocali[a.nome] = pNum(a.importo);
+                if (Array.isArray(a.movimenti)) movimentiLocali[a.nome] = a.movimenti;
+                if (a.stipendiPagati) stipendiLocali[a.nome] = a.stipendiPagati;
+            });
+        }
+    });
+    return sync;
+}
 
-    // Acconti: try separato — se la collection non è leggibile le presenze restano ok
-    try {
-        const snapA = await fsGetDocs(query(fsCollection(db, 'acconti'), where('sedeId', '==', state.sedeAttiva)));
-        accontiLocali = {};
-        stipendiLocali = {};
-        movimentiLocali = {};
-        snapA.forEach(docSnap => {
-            const a = docSnap.data();
-            if (pNum(a.importo) > 0) accontiLocali[a.nome] = pNum(a.importo);
-            if (Array.isArray(a.movimenti)) movimentiLocali[a.nome] = a.movimenti;
-            if (a.stipendiPagati) stipendiLocali[a.nome] = a.stipendiPagati;
-        });
-    } catch (e) {
-        console.warn('Errore caricamento acconti:', e);
-    }
+// Aggiorna anche state per dashboard e report
+function pubblica() {
+    state.presenzeDB = [...presenzeLocali];
 }
 
 // ─── TROVA PRESENZE PER DATA (formato YYYY-MM-DD) ───
@@ -171,8 +177,15 @@ export async function renderPresenze() {
     // Rigenera i campi input: i dipendenti dipendono dalla sede attiva
     renderInputFields();
 
-    await caricaPresenze();
+    const sede = state.sedeAttiva;
+    const inCache = cacheSede === sede;
+    if (!inCache) { presenzeLocali = []; accontiLocali = {}; movimentiLocali = {}; stipendiLocali = {}; }
+    const s = sincronizza().then(() => { if (sede === state.sedeAttiva) disegna(); });
+    if (inCache) disegna(); else await s;
+}
 
+// Disegna settimana, KPI e riepilogo dai dati in memoria (nessuna lettura)
+function disegna() {
     const days = getWeekDays(currentWeekStart);
     const endWeek = new Date(days[days.length - 1]);
 
@@ -452,6 +465,8 @@ function stipendiArretrati(f, pagatiMap, meseKey) {
 
 // Segna pagato lo stipendio fisso di un mese → acconti/{sede}_{nome}.stipendiPagati[YYYY-MM]
 async function pagaStipendio(nome, meseKey, importo) {
+    await sync;
+    if (stipendiLocali[nome]?.[meseKey]) { renderRiepilogoMensile(riepMese, riepAnno); return; } // già pagato da un altro dispositivo
     const [a, m] = meseKey.split('-');
     const mesiL = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
     const r = prompt(`Stipendio ${nome} — ${mesiL[+m - 1]} ${a}.\nImporto pagato (netto):`, String(importo));
@@ -532,6 +547,7 @@ async function applicaPagamento(nome, importo, { periodo = null, tipo = 'ACCONTO
 
 // 💶 Acconto: chiede la cifra versata e la scala subito dal da pagare.
 async function registraAcconto(nome) {
+    await sync;
     const aperte = giornateAperte(nome);
     const dovuto = aperte.reduce((s, p) => s + quotaGiornata(p, nome).resto, 0);
     const credito = accontiLocali[nome] || 0;
@@ -547,6 +563,7 @@ async function registraAcconto(nome) {
 
 // "Paga mese" / "tutto": versa esattamente il dovuto (del mese o di tutto lo storico).
 async function segnaPagatoDipendente(nome, periodo = null) {
+    await sync;
     const aperte = giornateAperte(nome, periodo);
     if (!aperte.length) return;
     const totale = aperte.reduce((s, p) => s + quotaGiornata(p, nome).resto, 0);
@@ -560,7 +577,6 @@ async function segnaPagatoDipendente(nome, periodo = null) {
 // Dopo il salvataggio di una giornata: se il dipendente ha credito (ha versato in più),
 // la giornata nuova viene coperta subito con quel credito.
 async function applicaCreditoAutomatico(dataISO) {
-    await caricaPresenze();
     const p = getPresenzaByDate(dataISO);
     if (!p || !p.dettaglio) return;
     for (const nome of Object.keys(p.dettaglio)) {
@@ -612,6 +628,7 @@ async function salvaPresenza() {
     }
 
     // Controlla se esiste già una presenza per questa data
+    await sync;
     const esistente = getPresenzaByDate(dataISO);
 
     try {
@@ -627,10 +644,12 @@ async function salvaPresenza() {
         if (esistente && esistente._id) {
             // Aggiorna
             await fsUpdateDoc(fsDoc(db, 'presenzeDipendenti', esistente._id), record);
+            Object.assign(esistente, record);
             if (msg) { msg.style.color = 'var(--grn)'; msg.textContent = `✅ Presenze ${dataIta} aggiornate!`; }
         } else {
             // Crea nuovo
-            await fsAddDoc(fsCollection(db, 'presenzeDipendenti'), record);
+            const ref = await fsAddDoc(fsCollection(db, 'presenzeDipendenti'), record);
+            presenzeLocali.push({ ...record, _id: ref.id });
             if (msg) { msg.style.color = 'var(--grn)'; msg.textContent = `✅ Presenze ${dataIta} salvate!`; }
         }
 
@@ -641,8 +660,9 @@ async function salvaPresenza() {
         });
 
         setTimeout(() => { if (msg) msg.textContent = ''; }, 2500);
+        pubblica();
         await applicaCreditoAutomatico(dataISO);
-        renderPresenze();
+        disegna();
     } catch (e) {
         console.error('Errore salvataggio presenze:', e);
         if (msg) { msg.style.color = 'var(--red)'; msg.textContent = '⚠️ Errore salvataggio!'; }
@@ -651,13 +671,16 @@ async function salvaPresenza() {
 
 // ─── ELIMINA PRESENZA ───
 async function eliminaPresenza(dataISO) {
+    await sync;
     const presenza = getPresenzaByDate(dataISO);
     if (!presenza || !presenza._id) return;
     if (!confirm(`Eliminare le presenze del ${dataISO.split('-').reverse().join('/')}?`)) return;
 
     try {
         await fsDeleteDoc(fsDoc(db, 'presenzeDipendenti', presenza._id));
-        renderPresenze();
+        presenzeLocali = presenzeLocali.filter(p => p !== presenza);
+        pubblica();
+        disegna();
     } catch (e) {
         console.error('Errore eliminazione presenze:', e);
         alert('Errore eliminazione!');
