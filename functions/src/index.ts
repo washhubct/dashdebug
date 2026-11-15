@@ -21,6 +21,7 @@ export * from './garanzia-stripe'
 export * from './referral-voucher'
 export * from './whatsapp-watchdog'
 export * from './magazzino'
+export * from './recensioni'
 // WhatsApp Cloud API in coming-soon: secrets Meta non ancora settati.
 // Riabilitare quando META_WHATSAPP_TOKEN/META_APP_SECRET/META_WEBHOOK_VERIFY_TOKEN/META_PHONE_NUMBER_ID sono configurati.
 // export * from './whatsapp'
