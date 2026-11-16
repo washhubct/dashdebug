@@ -9,6 +9,7 @@ import { showThankYouToast } from './clienti.js';
 import { richiediPagamento, avviaPagamento, healthBridge } from './cassa-automatica.js';
 import { apriConto, creaContoDaAbbonamento, saldoConto } from './conti.js';
 import { isAdmin } from './auth.js';
+import { isAbbonamentoPN } from './report.js';
 
 // Guardia anti doppio-submit: impedisce che un click ripetuto su Salva/Paga/Rinnova
 // registri lo stesso incasso più volte mentre l'operazione async è in corso.
@@ -83,10 +84,12 @@ export function initAbbonamenti() {
     const fDurata = document.getElementById('fDurata');
     const fInizio = document.getElementById('fInizio');
     if(fDurata) fDurata.addEventListener('change', calcScad);
+    if(fDurata) fDurata.addEventListener('change', aggiornaQuotaHint);
     if(fInizio) fInizio.addEventListener('change', calcScad);
 
     // Blocco incasso (solo nuovo): aggiorna importo sul radio e testo del bottone Salva
     document.getElementById('fImporto')?.addEventListener('input', aggiornaBtnIncasso);
+    document.getElementById('fImporto')?.addEventListener('input', aggiornaQuotaHint);
     document.querySelectorAll('input[name="abbIncasso"]').forEach(r => r.addEventListener('change', aggiornaBtnIncasso));
 }
 
@@ -102,6 +105,16 @@ function aggiornaBtnIncasso() {
     const imp = parseFloat(document.getElementById('fImporto')?.value) || 0;
     if(tot) tot.textContent = imp ? `€${imp}` : '';
     btn.textContent = incassoOraSelezionato() ? `💰 Salva e incassa${imp ? ' €' + imp : ''}` : 'Salva (da pagare)';
+}
+
+// Accanto a "Importo del periodo": quanto fa al mese, così chi inserisce un trimestrale
+// vede subito se ha scritto la quota mensile al posto del totale.
+function aggiornaQuotaHint() {
+    const el = document.getElementById('abbQuotaHint');
+    if(!el) return;
+    const imp = parseFloat(document.getElementById('fImporto')?.value) || 0;
+    const mesi = mesiDurata(document.getElementById('fDurata')?.value);
+    el.textContent = imp && mesi > 1 ? `= ${fQuota(imp / mesi)} al mese` : '';
 }
 
 export function renderAbb() {
@@ -135,21 +148,34 @@ export function renderAbb() {
     const cntEl = document.getElementById('abbCnt');
     if(cntEl) cntEl.textContent = state.localAbb.length + ' totali';
 
-    // KPI in alto: totale abbonati + fatturato abbonamenti (somma importi dei pagati)
-    const pagati = state.localAbb.filter(r => r.PAGAMENTO === 'SI' && !r.contoId);
-    const fatturatoAbb = pagati.reduce((s, r) => s + pNum(r.IMPORTO), 0);
+    // KPI in alto. Prima c'era "Fatturato Abbonamenti" = somma degli IMPORTO dei pagati: mischiava
+    // mensili, trimestrali e annuali e contava anche i disdetti, quindi non era né l'incasso né il
+    // mensile (16/11/2026). Ora: canone mensile (quota mensile di ogni attivo) e incasso reale del mese.
+    const nonDisd = state.localAbb.filter(r => !isDisd(r));
+    const pagati = attivi.filter(r => r.PAGAMENTO === 'SI');
+    const canoneMese = nonDisd.reduce((s, r) => s + quotaMensile(r), 0);
+    const canoneScaduti = scaduti.reduce((s, r) => s + quotaMensile(r), 0);
+    const ym = fmtDI(now).slice(0, 7);
+    const incMese = (state.rawData?.primaNota?.rows || [])
+        .filter(r => String(r.dataISO || '').slice(0, 7) === ym && isAbbonamentoPN(r))
+        .reduce((s, r) => s + pNum(r.ENTRATA || r.Entrata || 0), 0);
     const kpiEl = document.getElementById('abbKpis');
     if(kpiEl) {
         kpiEl.innerHTML = `
             <div class="kpi b">
-                <div class="kpi-label">Abbonati Totali</div>
-                <div class="kpi-val">${state.localAbb.length}</div>
-                <div class="kpi-sub">${pagati.length} pagati · ${state.localAbb.length - pagati.length} non pagati</div>
+                <div class="kpi-label">Abbonati Attivi</div>
+                <div class="kpi-val">${nonDisd.length}</div>
+                <div class="kpi-sub">${pagati.length} pagati · ${attivi.length - pagati.length} non pagati${nonDisd.length - attivi.length ? ' · ' + (nonDisd.length - attivi.length) + ' a conto' : ''}</div>
             </div>
             <div class="kpi g">
-                <div class="kpi-label">Fatturato Abbonamenti</div>
-                <div class="kpi-val">${fEur(fatturatoAbb)}</div>
-                <div class="kpi-sub">Somma importi degli abbonati pagati</div>
+                <div class="kpi-label">Canone Mensile</div>
+                <div class="kpi-val">${fEur(canoneMese)}</div>
+                <div class="kpi-sub">Quanto valgono al mese gli abbonati attivi${canoneScaduti ? ' · di cui ' + fEur(canoneScaduti) + ' scaduti' : ''}</div>
+            </div>
+            <div class="kpi a">
+                <div class="kpi-label">Incassato a ${now.toLocaleDateString('it-IT', { month: 'long' })}</div>
+                <div class="kpi-val">${fEur(incMese)}</div>
+                <div class="kpi-sub">Soldi entrati nel mese (Prima Nota), anche per più mesi</div>
             </div>`;
     }
 
@@ -187,6 +213,7 @@ export function renderAbb() {
         const cell = r['NUMERO CELL.'] || '';
         const sca = r['SCADENZA ABBONAMENTO'] || '-';
         const imp = pNum(r.IMPORTO);
+        const mesi = mesiDurata(r['DURATA ABB.']);
         const pag = r.PAGAMENTO || '';
         const modal = r["MODALITA'"] || '';
         const note = r.NOTE || '';
@@ -238,7 +265,7 @@ export function renderAbb() {
             </td>
             <td style="font:500 11px var(--mono)">${esc(targa)}</td>
             <td><span class="badge ${bc}">${bl}</span></td>
-            <td style="font-weight:600">€${imp}${ficDisp}</td>
+            <td style="font-weight:600">€${imp}<br><span style="font:400 10px var(--f);color:var(--tx3)">${mesi > 1 ? `${etichettaPeriodo(mesi)} · ${fQuota(imp / mesi)}/mese` : 'al mese'}</span>${ficDisp}</td>
             <td style="white-space:nowrap">
                 <button class="act-btn edit-abb" data-id="${id}" title="Modifica">✎</button>
                 ${disdetto ? '' : `<button class="act-btn renew-abb" data-id="${id}" title="Rinnova (sposta le date al periodo successivo + incasso)">↻</button>`}
@@ -302,6 +329,7 @@ function showAbbF(data) {
         calcScad();
     }
     aggiornaBtnIncasso();
+    aggiornaQuotaHint();
     document.getElementById('abbForm').scrollIntoView({behavior:'smooth'});
 }
 
@@ -505,6 +533,12 @@ function mesiDurata(dur) {
     const n = parseInt(t, 10) || 1;
     return t.includes('ANNO') ? 12 * n : n;
 }
+// IMPORTO = quanto si incassa a ogni rinnovo, per TUTTA la durata (3 MESI a €300 = €100 al mese).
+// La quota mensile si calcola qui, non si salva: il campo ha un solo significato (16/11/2026).
+function quotaMensile(r) { return pNum(r.IMPORTO) / mesiDurata(r['DURATA ABB.']); }
+function etichettaPeriodo(mesi) { return mesi === 12 ? "l'anno" : `ogni ${mesi} mesi`; }
+// €100 · €83,33: decimali solo se servono
+function fQuota(n) { return '€' + n.toLocaleString('it-IT', { maximumFractionDigits: 2 }); }
 function _prossimaScadenza(dur, old) {
     const ns = new Date(old);
     ns.setMonth(ns.getMonth() + mesiDurata(dur));
@@ -660,7 +694,7 @@ function _mostraModalRinnovo(r, oldDate, newDate) {
                     </div>
                     <div style="display:flex;justify-content:space-between;font:400 12px var(--f)">
                         <span style="color:var(--tx3)">Importo</span>
-                        <span style="font:700 15px var(--mono)">€${imp}</span>
+                        <span style="font:700 15px var(--mono)">€${imp}${mesiDurata(dur) > 1 ? ` <span style="font:400 11px var(--f);color:var(--tx3)">(${fQuota(imp / mesiDurata(dur))}/mese)</span>` : ''}</span>
                     </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px">

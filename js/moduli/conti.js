@@ -49,7 +49,10 @@ export async function creaContoDaAbbonamento(abbId) {
     const r = (state.localAbb || []).find(x => x._id === abbId);
     if (!r || r.contoId) return;
     const nome = r['NOME E COGNOME'] || '';
-    const canone = pNum(r.IMPORTO);
+    // IMPORTO è l'importo di tutto il periodo: il canone del conto è la quota mensile
+    const durT = String(r['DURATA ABB.'] || '').toUpperCase();
+    const mesi = (parseInt(durT, 10) || 1) * (durT.includes('ANNO') ? 12 : 1);
+    const canone = Math.round(pNum(r.IMPORTO) / mesi * 100) / 100;
     const prezzoKwh = prompt(`Conto a canone per ${nome}
 Canone mensile: €${canone} (dall'abbonamento)
 
