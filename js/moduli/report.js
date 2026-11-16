@@ -69,14 +69,15 @@ export function isAbbonamentoPN(r) {
 // Rate di competenza di un incasso abbonamento. Un pagamento che copre più mesi (`mesiCoperti` > 1:
 // trimestrale, annuale…) pesa sul fatturato in rate uguali, una al mese, invece che tutto nel mese
 // in cui entra (16/11/2026: €1000 annuali finivano tutti a giugno). Le rate partono dal giorno
-// dell'incasso, o da `periodoDa` se l'abbonamento comincia dopo (pagato in anticipo): così un mese
-// già chiuso non cambia mai. La cassa NON usa le rate: lì conta il giorno in cui entrano i soldi.
+// dell'incasso, o da `periodoDa` se il periodo pagato comincia dopo (pagato in anticipo, anche un
+// solo mese: rinnovo fatto a ottobre per il periodo che parte a novembre → conta a novembre): così
+// un mese già chiuso non cambia mai. La cassa NON usa le rate: lì conta il giorno in cui entrano i soldi.
 export function rateAbbonamentoPN(r) {
     const imp = getEntrata(r);
     const dt = getDataRecord(r);
-    const n = parseInt(r.mesiCoperti, 10) || 1;
-    if (n <= 1 || !dt || isNaN(dt.getTime())) return [{ data: dt, importo: imp }];
-    const pd = r.periodoDa ? new Date(r.periodoDa) : null;
+    if (!dt || isNaN(dt.getTime())) return [{ data: dt, importo: imp }];
+    const n = Math.max(parseInt(r.mesiCoperti, 10) || 1, 1);
+    const pd = r.periodoDa ? new Date(r.periodoDa + 'T12:00') : null;
     const start = pd && !isNaN(pd.getTime()) && pd > dt ? pd : dt;
     const rata = Math.round(imp / n * 100) / 100;
     return Array.from({ length: n }, (_, i) => {
