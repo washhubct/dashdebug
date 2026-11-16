@@ -66,6 +66,27 @@ export function isAbbonamentoPN(r) {
     return getEntrata(r) > 0;
 }
 
+// Rate di competenza di un incasso abbonamento. Un pagamento che copre più mesi (`mesiCoperti` > 1:
+// trimestrale, annuale…) pesa sul fatturato in rate uguali, una al mese, invece che tutto nel mese
+// in cui entra (16/11/2026: €1000 annuali finivano tutti a giugno). Le rate partono dal giorno
+// dell'incasso, o da `periodoDa` se l'abbonamento comincia dopo (pagato in anticipo): così un mese
+// già chiuso non cambia mai. La cassa NON usa le rate: lì conta il giorno in cui entrano i soldi.
+export function rateAbbonamentoPN(r) {
+    const imp = getEntrata(r);
+    const dt = getDataRecord(r);
+    const n = parseInt(r.mesiCoperti, 10) || 1;
+    if (n <= 1 || !dt || isNaN(dt.getTime())) return [{ data: dt, importo: imp }];
+    const pd = r.periodoDa ? new Date(r.periodoDa) : null;
+    const start = pd && !isNaN(pd.getTime()) && pd > dt ? pd : dt;
+    const rata = Math.round(imp / n * 100) / 100;
+    return Array.from({ length: n }, (_, i) => {
+        const fineMese = new Date(start.getFullYear(), start.getMonth() + i + 1, 0).getDate();
+        const data = new Date(start.getFullYear(), start.getMonth() + i, Math.min(start.getDate(), fineMese), 12);
+        // l'ultima rata assorbe l'arrotondamento: la somma delle rate è l'incasso
+        return { data, importo: i === n - 1 ? Math.round((imp - rata * (n - 1)) * 100) / 100 : rata };
+    });
+}
+
 // ─── RICONCILIAZIONE CASSA VNE ───
 // Il report conta i lavaggi nel giorno del lavaggio; la macchina conta l'ora in cui entrano i soldi.
 // Un sospeso di settembre saldato in contanti il 30/09 per la macchina è del 30/09. Qui ogni incasso
@@ -154,9 +175,12 @@ function calcolaDatiOperativi(fromStr, toStr) {
     // Letto dalla PRIMA NOTA (registro immutabile), NON da localAbb: così l'incasso resta
     // nel report anche se l'abbonamento viene poi cancellato o rinnovato (ogni pagamento
     // è una riga separata in primaNota e non viene mai riscritto).
-    let abbContanti = 0, abbPos = 0, abbBonifico = 0, numAbb = 0;
+    // Due letture dello stesso incasso: abbCompetenza = rate che cadono nel periodo (fatturato,
+    // vedi rateAbbonamentoPN); contanti/POS/bonifico = soldi entrati nel periodo (cassa).
+    let abbContanti = 0, abbPos = 0, abbBonifico = 0, numAbb = 0, abbCompetenza = 0;
     (state.rawData?.primaNota?.rows || []).forEach(r => {
         if (!isAbbonamentoPN(r)) return;
+        rateAbbonamentoPN(r).forEach(q => { if (q.data && q.data >= from && q.data <= to) abbCompetenza += q.importo; });
         const dt = getDataRecord(r);
         if (!dt || dt < from || dt > to) return;
         numAbb++;
@@ -273,7 +297,8 @@ function calcolaDatiOperativi(fromStr, toStr) {
     // --- TOTALI ---
     const fatLavaggio = lavContanti + lavPos + lavBonifico;
     const fatTappezzeria = tapContanti + tapPos + tapBonifico;
-    const fatParchAbb = abbContanti + abbPos + abbBonifico;
+    const incAbbCassa = abbContanti + abbPos + abbBonifico;
+    const fatParchAbb = Math.round(abbCompetenza * 100) / 100;
     const fatParchOre = parContanti + parPos;
     const fatParchTot = fatParchAbb + fatParchOre;
     const fatturato = fatLavaggio + fatTappezzeria + fatParchTot;
@@ -295,7 +320,7 @@ function calcolaDatiOperativi(fromStr, toStr) {
         // Tappezzeria
         tapContanti, tapPos, tapBonifico, tapSospesi, fatTappezzeria, numTap,
         // Parcheggio
-        abbContanti, abbPos, abbBonifico, fatParchAbb, numAbb,
+        abbContanti, abbPos, abbBonifico, fatParchAbb, incAbbCassa, numAbb,
         parContanti, parPos, fatParchOre, numPar,
         fatParchTot,
         // Incassi manuali (Paesi Etnei)
@@ -373,7 +398,7 @@ export function renderDash() {
             <div class="kpi" style="border-color:var(--yel)">
                 <div class="kpi-label">🅿️ Parcheggio Abb.</div>
                 <div class="kpi-val" style="color:#9a7800">${fEur(d.fatParchAbb)}</div>
-                <div class="kpi-sub">${d.numAbb} abbonamenti pagati</div>
+                <div class="kpi-sub" title="Fatturato per competenza: trimestrali e annuali contano una rata al mese. Incassati = soldi entrati nel periodo.">${d.numAbb} pagamenti${Math.abs(d.incAbbCassa - d.fatParchAbb) >= 0.01 ? ' · incassati ' + fEur(d.incAbbCassa) : ''}</div>
             </div>
             <div class="kpi" style="border-color:var(--grn)">
                 <div class="kpi-label">🎟️ Parcheggio Ore</div>
@@ -614,14 +639,15 @@ function renderCharts(data) {
         if (mod !== 'SOSPESO' && mod !== 'FATTURATO') byM[mk].tap += pNum(t.prezzo);
     });
 
-    // Abbonamenti per mese — da Prima Nota (coerente col calcolo dei KPI, immune a cancellazioni/rinnovi)
+    // Abbonamenti per mese — da Prima Nota (coerente col calcolo dei KPI, immune a cancellazioni/rinnovi),
+    // per competenza: un trimestrale conta una rata in ciascuno dei tre mesi
     (state.rawData?.primaNota?.rows || []).forEach(r => {
         if (!isAbbonamentoPN(r)) return;
-        const dt = getDataRecord(r);
-        if (!dt || isNaN(dt.getTime())) return;
-        const mk = gMK(dt);
-        if (!byM[mk]) return;
-        byM[mk].abb += getEntrata(r);
+        rateAbbonamentoPN(r).forEach(q => {
+            if (!q.data || isNaN(q.data.getTime())) return;
+            const mk = gMK(q.data);
+            if (byM[mk]) byM[mk].abb += q.importo;
+        });
     });
 
     // Parcheggio ore per mese

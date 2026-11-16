@@ -453,6 +453,8 @@ async function saveAbb() {
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva,
+                // Mesi coperti dall'incasso e inizio periodo: il report spalma i plurimensili (rateAbbonamentoPN)
+                mesiCoperti: mesiDurata(rec['DURATA ABB.']), periodoDa: ini,
                 ...(vneMeta || {})
             };
             await scriviRigaAbbPrimaNota(pnRow);
@@ -602,6 +604,7 @@ async function renewAbb(id) {
                 USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
                 "MODALITA'": modalita, timestamp: Date.now(),
                 sedeId: state.sedeAttiva,
+                mesiCoperti: mesiDurata(dur), periodoDa: fmtDI(old),
                 ...(vneMeta || {})
             };
             await scriviRigaAbbPrimaNota(pnRow, { unico: true });
@@ -662,6 +665,7 @@ async function pagaAbb(id) {
             USCITE: 0, Uscite: 0, SOSPESO: 0, Sospeso: 0,
             "MODALITA'": pag.mod, timestamp: Date.now(),
             sedeId: state.sedeAttiva,
+            mesiCoperti: mesiDurata(r['DURATA ABB.']), periodoDa: fmtDI(pDate(r['INIZIO ABBONAMENTO']) || new Date()),
             ...(pag.meta?.pagamentoVia ? pag.meta : {})
         };
         await scriviRigaAbbPrimaNota(pnRow, { unico: true });
