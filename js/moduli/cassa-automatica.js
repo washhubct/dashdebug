@@ -140,6 +140,9 @@ export async function avviaPagamento(importoCent, idPrenotazione, cb) {
         }
         idVNE = res.id;
         modal.setIdVNE(idVNE);
+        if (modal.annullaAppenaPronto) {
+            try { await annullaPagamento(idVNE, 2); } catch (e) { console.warn(LOG, 'annulla fallito', e); }
+        }
 
         const t0 = Date.now();
         let lastStatus = 'pending';
@@ -186,9 +189,22 @@ export async function avviaPagamento(importoCent, idPrenotazione, cb) {
         console.warn(LOG, 'timeout polling, lastStatus=', lastStatus);
         modal.showError('Timeout pagamento. Annullo e restituisco.');
         try { await annullaPagamento(idVNE, 2); } catch (_) { /* best effort */ }
-        await sleep(1200);
+        // Se la cassa è bloccata l'annullo non arriva e il cliente può pagare lo stesso
+        // (Bartolini 17/11/2026: €15 incassati, prenotazione rimasta aperta).
+        // Si chiude solo con un esito confermato dalla cassa.
+        const det = await attendiEsitoFinale(idVNE, modal);
+        const fin = { importo: importoCent / 100, inserito: (det?.inserted ?? inserito) / 100, resto: (det?.rest ?? resto) / 100, idVNE };
+        if (det?.status === 'completed') {
+            modal.showSuccess();
+            await sleep(900);
+            modal.close();
+            cb({ status: 'completed', ...fin });
+            return;
+        }
         modal.close();
-        cb({ status: 'timeout', importo: importoCent / 100, inserito: inserito / 100, resto: resto / 100, idVNE });
+        if (det?.status === 'partial') { cb({ status: 'partial', ...fin }); return; }
+        if (!det) alert(`Esito non confermato dalla cassa (operazione ${idVNE}).\nControlla sul portale VNE se il cliente ha pagato prima di registrare.`);
+        cb({ status: 'timeout', ...fin });
 
     } catch (e) {
         console.error(LOG, 'errore pagamento', e);
@@ -318,6 +334,7 @@ function openCassaModal(importoCent, idPrenotazione) {
 
     const ctrl = {
         aborted: false,
+        annullaAppenaPronto: false,
         idVNE: null,
         setIdVNE(id) { ctrl.idVNE = id; },
         update({ inserito, resto, status }) {
@@ -353,8 +370,9 @@ function openCassaModal(importoCent, idPrenotazione) {
     };
 
     annBtn.addEventListener('click', async () => {
-        if (!ctrl.idVNE) { ctrl.close(); return; }
         annBtn.disabled = true;
+        // Id non ancora arrivato: chiudere qui lascerebbe il pagamento attivo sulla cassa
+        if (!ctrl.idVNE) { ctrl.annullaAppenaPronto = true; annBtn.textContent = 'Annullamento…'; return; }
         annBtn.textContent = 'Annullamento…';
         // Il bridge riprova e verifica; se la cassa resta muta il pulsante torna attivo:
         // mai chiudere la finestra finché la cassa non conferma (23/10/2026).
@@ -379,6 +397,34 @@ function openCassaModal(importoCent, idPrenotazione) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/** Interroga la cassa finché dà un esito finale; null solo se l'operatore chiude a mano. */
+async function attendiEsitoFinale(idVNE, modal) {
+    const box = document.querySelector('#cassaAutoBox');
+    const btn = document.createElement('button');
+    btn.textContent = 'Chiudi: controllo io sul portale VNE';
+    btn.style.cssText = 'margin-top:8px;width:100%;padding:11px;border:1px solid #999;color:#555;background:#fff;border-radius:10px;cursor:pointer;font:600 12px var(--f)';
+    let lasciato = false;
+    btn.addEventListener('click', () => {
+        if (confirm('La cassa potrebbe incassare lo stesso. Chiudo senza registrare?')) lasciato = true;
+    });
+    let tentativi = 0;
+    while (!lasciato) {
+        try {
+            const p = await bridge('/polling/' + encodeURIComponent(idVNE));
+            const det = p.payment_details || p;
+            if (['completed', 'partial', 'deleted', 'returned'].includes(det.status)) { btn.remove(); return det; }
+        } catch (e) {
+            console.warn(LOG, 'esito non leggibile', e.message);
+        }
+        if (++tentativi === 2) {
+            modal.showError('La cassa non conferma l\'esito: non chiudere, ricontrollo…');
+            box?.appendChild(btn);
+        }
+        await sleep(3000);
+    }
+    return null;
+}
 
 // ─── MODAL PAGAMENTO UNIVERSALE ──────────────────────────────────
 /**
